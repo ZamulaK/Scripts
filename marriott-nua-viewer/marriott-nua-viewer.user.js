@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Marriott NUA Selections Viewer
 // @namespace    danbrum.marriott.nua
-// @version      3.6.0
+// @version      3.9.2
 // @description  Shows the Nightly Upgrade Award room choices attached to reservations, on the upgrade page and on the reservation list.
 // @match        https://www.marriott.com/loyalty/requestNightlyUpgradeAwards.mi*
 // @match        https://www.marriott.com/loyalty/findReservationList.mi*
@@ -15,6 +15,8 @@
 
   const IMAGE_BASE = 'https://cache.marriott.com';
   const ACCENT = '#BF360C'; // Accent color for status, choice pills, count badge, and link hover
+  // Header summary style: 'pill' = one labeled pill ("7 Awards | 3 Stays"); 'subtitle' = awards circle plus a grey line under the title.
+  const HEADER_STYLE = 'pill';
   const PANEL_ID = 'nua-viewer-panel';
   const TEMPLATE_KEY = 'nuaViewer.requestTemplate';
   const IS_LIST_PAGE = location.pathname.indexOf('findReservationList') !== -1;
@@ -390,16 +392,20 @@
     // Styled to sit alongside Marriott's own cards: white rounded card, near-black text, black pill controls,
     // Bonvoy orange as the single accent, and the page's own typeface (Swiss 721) inherited from the body.
     style.textContent = `
-      #${PANEL_ID} { position: fixed; right: 24px; bottom: 24px; z-index: 2147483647; width: 480px; max-width: calc(100vw - 32px);
-        max-height: 72vh; overflow: auto; background: #fff; color: #1c1c1c; border: 1px solid #e6e6e6; border-radius: 20px;
+      #${PANEL_ID} { position: fixed; right: 24px; bottom: 24px; z-index: 2147483647; width: 500px; max-width: calc(100vw - 32px);
+        max-height: 72vh; overflow: auto; background: #fff; color: #1c1c1c; border: 1px solid #e6e6e6; border-radius: 20px; scrollbar-width: thin;
         box-shadow: 0 6px 24px rgba(0,0,0,.12); font-family: inherit; font-size: 16px; line-height: 1.45; }
       #${PANEL_ID} * { box-sizing: border-box; }
       #${PANEL_ID} header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; background: #fff;
         border-bottom: 1px solid #e6e6e6; cursor: pointer; position: sticky; top: 0; user-select: none; }
-      #${PANEL_ID} .nua-heading { flex: 1; font-weight: 700; font-size: 18px; letter-spacing: .01em; color: #1c1c1c; }
+      #${PANEL_ID} .nua-headtext { flex: 1; min-width: 0; }
+      #${PANEL_ID} .nua-heading { display: block; white-space: nowrap; font-weight: 700; font-size: 18px; letter-spacing: .01em; color: #1c1c1c; }
+      #${PANEL_ID} .nua-sub { display: none; font-size: 16px; color: #707070; font-weight: 400; margin-top: 2px; }
+      #${PANEL_ID} .nua-sub.nua-show { display: block; }
       #${PANEL_ID} .nua-count { display: none; min-width: 30px; height: 30px; padding: 0 9px; border-radius: 15px; background: ${ACCENT};
         color: #fff; font-weight: 700; font-size: 16px; line-height: 30px; text-align: center; }
       #${PANEL_ID} .nua-count.nua-show { display: inline-block; }
+      #${PANEL_ID} .nua-count.nua-pill { padding: 0 14px; white-space: nowrap; font-weight: 600; }
       #${PANEL_ID} header button { width: 34px; height: 34px; border-radius: 17px; border: 0; background: #1c1c1c; color: #fff;
         font-size: 22px; line-height: 34px; padding: 0; cursor: pointer; flex: none; }
       #${PANEL_ID} header button:hover { background: #3a3a3a; }
@@ -427,13 +433,13 @@
       #${PANEL_ID}.nua-collapsed .nua-body { display: none; }
       #${PANEL_ID}.nua-collapsed { width: auto; border-radius: 30px; }
       #${PANEL_ID}.nua-collapsed header { border-bottom: 0; padding: 12px 12px 12px 20px; }
-      #${PANEL_ID}.nua-collapsed .nua-heading { padding-right: 4px; }
+      #${PANEL_ID}.nua-collapsed .nua-headtext { padding-right: 4px; }
     `;
     document.head.appendChild(style);
 
     panel = document.createElement('div');
     panel.id = PANEL_ID;
-    panel.innerHTML = '<header><span class="nua-heading">Nightly Upgrade Award Selections</span><span class="nua-count"></span><button title="Collapse / Expand" aria-label="Collapse or expand">&minus;</button></header><div class="nua-body"></div>';
+    panel.innerHTML = '<header><span class="nua-headtext"><span class="nua-heading">Nightly Upgrade Awards</span><span class="nua-sub"></span></span><span class="nua-count" title="Total Awards Attached"></span><button title="Collapse / Expand" aria-label="Collapse or expand">&minus;</button></header><div class="nua-body"></div>';
     panel.querySelector('header').addEventListener('click', () => {
       panel.classList.toggle('nua-collapsed');
       panel.querySelector('header button').textContent = panel.classList.contains('nua-collapsed') ? '+' : '−';
@@ -466,9 +472,25 @@
     if (IS_SUMMARY_PAGE) {
       recs = recs.filter(hasNua).sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
       panel.style.display = recs.length ? '' : 'none';
+    }
+    {
+      // Header summary (all pages): total awards in use and the number of stays they are attached to.
+      const nuaRecs = recs.filter(hasNua);
+      const totalAwards = nuaRecs.reduce((sum, r) => sum + (Number(r.tokens) || 0), 0);
       const count = panel.querySelector('.nua-count');
-      count.textContent = String(recs.length);
-      count.classList.toggle('nua-show', recs.length > 0);
+      const sub = panel.querySelector('.nua-sub');
+      const awardsLabel = `${totalAwards} Award${totalAwards === 1 ? '' : 's'}`;
+      if (HEADER_STYLE === 'pill') {
+        count.textContent = `${awardsLabel} | ${nuaRecs.length} Stay${nuaRecs.length === 1 ? '' : 's'}`;
+        count.classList.add('nua-pill');
+        count.classList.toggle('nua-show', nuaRecs.length > 0);
+        sub.classList.toggle('nua-show', false);
+      } else {
+        count.textContent = String(totalAwards);
+        count.classList.toggle('nua-show', totalAwards > 0);
+        sub.textContent = `${awardsLabel} Across ${nuaRecs.length} Reservation${nuaRecs.length === 1 ? '' : 's'}`;
+        sub.classList.toggle('nua-show', nuaRecs.length > 0);
+      }
     }
 
     let html = statusText ? `<div class="nua-status">${esc(statusText)}</div>` : '';
