@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Marriott NUA Selections Viewer
 // @namespace    danbrum.marriott.nua
-// @version      3.9.3
+// @version      3.10.0
 // @description  Shows the Nightly Upgrade Award room choices attached to reservations, on the upgrade page and on the reservation list.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/marriott-nua-viewer
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/marriott-nua-viewer/marriott-nua-viewer.user.js
@@ -408,7 +408,18 @@
       #${PANEL_ID} .nua-count { display: none; min-width: 30px; height: 30px; padding: 0 9px; border-radius: 15px; background: ${ACCENT};
         color: #fff; font-weight: 700; font-size: 16px; line-height: 30px; text-align: center; }
       #${PANEL_ID} .nua-count.nua-show { display: inline-block; }
-      #${PANEL_ID} .nua-count.nua-pill { padding: 0 14px; white-space: nowrap; font-weight: 600; }
+      #${PANEL_ID} .nua-count.nua-pill { padding: 0 14px; white-space: nowrap; font-weight: 600; flex: none; }
+      #${PANEL_ID} .nua-pill-compact, #${PANEL_ID} .nua-pill-mini { display: none; }
+      #${PANEL_ID}[data-pill="compact"] .nua-pill-full, #${PANEL_ID}[data-pill="mini"] .nua-pill-full { display: none; }
+      #${PANEL_ID}[data-pill="compact"] .nua-pill-compact { display: inline; }
+      #${PANEL_ID}[data-pill="mini"] .nua-pill-mini, #${PANEL_ID}[data-pill="tiny"] .nua-pill-mini { display: inline; }
+      #${PANEL_ID}[data-pill="tiny"] .nua-pill-full { display: none; }
+      #${PANEL_ID} .nua-title-short { display: none; }
+      #${PANEL_ID}[data-pill="tiny"] .nua-title-long { display: none; }
+      #${PANEL_ID}[data-pill="tiny"] .nua-title-short { display: inline; }
+      #${PANEL_ID} .nua-heading { overflow: hidden; text-overflow: ellipsis; }
+      #${PANEL_ID} .nua-headtext { overflow: hidden; }
+      @media (max-width: 600px) { #${PANEL_ID} { right: 12px; bottom: 12px; max-width: calc(100vw - 24px); } }
       #${PANEL_ID} header button { width: 34px; height: 34px; border-radius: 17px; border: 0; background: #1c1c1c; color: #fff;
         font-size: 22px; line-height: 34px; padding: 0; cursor: pointer; flex: none; }
       #${PANEL_ID} header button:hover { background: #3a3a3a; }
@@ -442,10 +453,11 @@
 
     panel = document.createElement('div');
     panel.id = PANEL_ID;
-    panel.innerHTML = '<header><span class="nua-headtext"><span class="nua-heading">Nightly Upgrade Awards</span><span class="nua-sub"></span></span><span class="nua-count" title="Total Awards Attached"></span><button title="Collapse / Expand" aria-label="Collapse or expand">&minus;</button></header><div class="nua-body"></div>';
+    panel.innerHTML = '<header><span class="nua-headtext"><span class="nua-heading"><span class="nua-title-long">Nightly Upgrade Awards</span><span class="nua-title-short">Upgrade Awards</span></span><span class="nua-sub"></span></span><span class="nua-count" title="Total Awards Attached"></span><button title="Collapse / Expand" aria-label="Collapse or expand">&minus;</button></header><div class="nua-body"></div>';
     panel.querySelector('header').addEventListener('click', () => {
       panel.classList.toggle('nua-collapsed');
       panel.querySelector('header button').textContent = panel.classList.contains('nua-collapsed') ? '+' : '−';
+      queueFitPill();
     });
     if (IS_SUMMARY_PAGE) {
       // On the reservation list and detail pages, start collapsed and stay hidden until there is something to show.
@@ -456,6 +468,27 @@
     document.body.appendChild(panel);
     return panel;
   }
+
+  // Pick the widest header that fits without clipping the title: "8 Awards | 4 Stays", then "8 | 4", then "8",
+  // and finally "8" with the title shortened to "Upgrade Awards".
+  function fitPill() {
+    const panel = document.getElementById(PANEL_ID);
+    if (!panel || panel.style.display === 'none') return;
+    const headtext = panel.querySelector('.nua-headtext');
+    const heading = panel.querySelector('.nua-heading');
+    if (!headtext || !heading) return;
+    for (const mode of ['full', 'compact', 'mini', 'tiny']) {
+      panel.setAttribute('data-pill', mode);
+      if (heading.scrollWidth <= headtext.clientWidth + 1) break;
+    }
+  }
+  let fitQueued = false;
+  function queueFitPill() {
+    if (fitQueued) return;
+    fitQueued = true;
+    requestAnimationFrame(() => { fitQueued = false; fitPill(); });
+  }
+  window.addEventListener('resize', queueFitPill);
 
   function nuaPageLink(r) {
     if (!r.confirmationNumber) return null;
@@ -484,7 +517,9 @@
       const sub = panel.querySelector('.nua-sub');
       const awardsLabel = `${totalAwards} Award${totalAwards === 1 ? '' : 's'}`;
       if (HEADER_STYLE === 'pill') {
-        count.textContent = `${awardsLabel} | ${nuaRecs.length} Stay${nuaRecs.length === 1 ? '' : 's'}`;
+        const fullText = `${awardsLabel} | ${nuaRecs.length} Stay${nuaRecs.length === 1 ? '' : 's'}`;
+        count.innerHTML = `<span class="nua-pill-full">${esc(fullText)}</span><span class="nua-pill-compact">${totalAwards} | ${nuaRecs.length}</span><span class="nua-pill-mini">${totalAwards}</span>`;
+        count.title = fullText;
         count.classList.add('nua-pill');
         count.classList.toggle('nua-show', nuaRecs.length > 0);
         sub.classList.toggle('nua-show', false);
@@ -537,5 +572,6 @@
     }).join('');
 
     body.innerHTML = html;
+    queueFitPill();
   }
 })();
