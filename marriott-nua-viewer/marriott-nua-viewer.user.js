@@ -1,8 +1,11 @@
 // ==UserScript==
 // @name         Marriott NUA Selections Viewer
 // @namespace    danbrum.marriott.nua
-// @version      3.9.2
+// @version      3.9.3
 // @description  Shows the Nightly Upgrade Award room choices attached to reservations, on the upgrade page and on the reservation list.
+// @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/marriott-nua-viewer
+// @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/marriott-nua-viewer/marriott-nua-viewer.user.js
+// @downloadURL  https://raw.githubusercontent.com/ZamulaK/Scripts/main/marriott-nua-viewer/marriott-nua-viewer.user.js
 // @match        https://www.marriott.com/loyalty/requestNightlyUpgradeAwards.mi*
 // @match        https://www.marriott.com/loyalty/findReservationList.mi*
 // @match        https://www.marriott.com/reservation/upcomingReservation.mi*
