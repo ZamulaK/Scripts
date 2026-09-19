@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Marriott NUA Selections Viewer
 // @namespace    danbrum.marriott.nua
-// @version      3.10.0
+// @version      3.10.1
 // @description  Shows the Nightly Upgrade Award room choices attached to reservations, on the upgrade page and on the reservation list.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/marriott-nua-viewer
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/marriott-nua-viewer/marriott-nua-viewer.user.js
@@ -409,14 +409,6 @@
         color: #fff; font-weight: 700; font-size: 16px; line-height: 30px; text-align: center; }
       #${PANEL_ID} .nua-count.nua-show { display: inline-block; }
       #${PANEL_ID} .nua-count.nua-pill { padding: 0 14px; white-space: nowrap; font-weight: 600; flex: none; }
-      #${PANEL_ID} .nua-pill-compact, #${PANEL_ID} .nua-pill-mini { display: none; }
-      #${PANEL_ID}[data-pill="compact"] .nua-pill-full, #${PANEL_ID}[data-pill="mini"] .nua-pill-full { display: none; }
-      #${PANEL_ID}[data-pill="compact"] .nua-pill-compact { display: inline; }
-      #${PANEL_ID}[data-pill="mini"] .nua-pill-mini, #${PANEL_ID}[data-pill="tiny"] .nua-pill-mini { display: inline; }
-      #${PANEL_ID}[data-pill="tiny"] .nua-pill-full { display: none; }
-      #${PANEL_ID} .nua-title-short { display: none; }
-      #${PANEL_ID}[data-pill="tiny"] .nua-title-long { display: none; }
-      #${PANEL_ID}[data-pill="tiny"] .nua-title-short { display: inline; }
       #${PANEL_ID} .nua-heading { overflow: hidden; text-overflow: ellipsis; }
       #${PANEL_ID} .nua-headtext { overflow: hidden; }
       @media (max-width: 600px) { #${PANEL_ID} { right: 12px; bottom: 12px; max-width: calc(100vw - 24px); } }
@@ -478,9 +470,23 @@
     const heading = panel.querySelector('.nua-heading');
     if (!headtext || !heading) return;
     for (const mode of ['full', 'compact', 'mini', 'tiny']) {
-      panel.setAttribute('data-pill', mode);
+      applyPillMode(panel, mode);
       if (heading.scrollWidth <= headtext.clientWidth + 1) break;
     }
+  }
+  // Show exactly one pill variant and one title variant. Inline !important styles win over any site CSS.
+  const PILL_MODES = {
+    full:    { '.nua-pill-full': true,  '.nua-pill-compact': false, '.nua-pill-mini': false, '.nua-title-long': true,  '.nua-title-short': false },
+    compact: { '.nua-pill-full': false, '.nua-pill-compact': true,  '.nua-pill-mini': false, '.nua-title-long': true,  '.nua-title-short': false },
+    mini:    { '.nua-pill-full': false, '.nua-pill-compact': false, '.nua-pill-mini': true,  '.nua-title-long': true,  '.nua-title-short': false },
+    tiny:    { '.nua-pill-full': false, '.nua-pill-compact': false, '.nua-pill-mini': true,  '.nua-title-long': false, '.nua-title-short': true },
+  };
+  function applyPillMode(panel, mode) {
+    const vis = PILL_MODES[mode] || PILL_MODES.full;
+    for (const sel in vis) {
+      for (const el of panel.querySelectorAll(sel)) el.style.setProperty('display', vis[sel] ? 'inline' : 'none', 'important');
+    }
+    panel.setAttribute('data-pill', mode);
   }
   let fitQueued = false;
   function queueFitPill() {
@@ -520,6 +526,7 @@
         const fullText = `${awardsLabel} | ${nuaRecs.length} Stay${nuaRecs.length === 1 ? '' : 's'}`;
         count.innerHTML = `<span class="nua-pill-full">${esc(fullText)}</span><span class="nua-pill-compact">${totalAwards} | ${nuaRecs.length}</span><span class="nua-pill-mini">${totalAwards}</span>`;
         count.title = fullText;
+        applyPillMode(panel, 'full');
         count.classList.add('nua-pill');
         count.classList.toggle('nua-show', nuaRecs.length > 0);
         sub.classList.toggle('nua-show', false);
