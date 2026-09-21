@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Marriott NUA Selections Viewer
 // @namespace    danbrum.marriott.nua
-// @version      3.10.1
+// @version      3.10.4
 // @description  Shows the Nightly Upgrade Award room choices attached to reservations, on the upgrade page and on the reservation list.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/marriott-nua-viewer
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/marriott-nua-viewer/marriott-nua-viewer.user.js
@@ -17,7 +17,7 @@
   'use strict';
 
   const IMAGE_BASE = 'https://cache.marriott.com';
-  const ACCENT = '#BF360C'; // Accent color for status, choice pills, count badge, and link hover
+  const ACCENT = '#AF4D1F'; // Accent color for status, choice pills, count badge, and link hover
   // Header summary style: 'pill' = one labeled pill ("7 Awards | 3 Stays"); 'subtitle' = awards circle plus a grey line under the title.
   const HEADER_STYLE = 'pill';
   const PANEL_ID = 'nua-viewer-panel';
