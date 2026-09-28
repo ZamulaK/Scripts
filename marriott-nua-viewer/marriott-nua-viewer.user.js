@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Marriott NUA Selections Viewer
 // @namespace    danbrum.marriott.nua
-// @version      3.10.4
+// @version      3.11.2
 // @description  Shows the Nightly Upgrade Award room choices attached to reservations, on the upgrade page and on the reservation list.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/marriott-nua-viewer
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/marriott-nua-viewer/marriott-nua-viewer.user.js
@@ -18,6 +18,13 @@
 
   const IMAGE_BASE = 'https://cache.marriott.com';
   const ACCENT = '#AF4D1F'; // Accent color for status, choice pills, count badge, and link hover
+  // NUA request statuses that mean the awards are no longer tied up in the stay. These stays are left out of the
+  // header counts and shown greyed at the bottom of the list. Compared case-insensitively; add others as they turn up.
+  // TESTING ONLY: pretend Marriott reported a status for a reservation, without changing anything on Marriott's side.
+  // Example: const TEST_STATUS_OVERRIDES = { '89019033': 'Withdrawn' };  Set back to {} when done.
+  // Overridden stays show "(Test)" after the status so it is obvious the value is not real.
+  const TEST_STATUS_OVERRIDES = {};
+  const INACTIVE_STATUSES = ['withdrawn', 'cancelled', 'canceled', 'declined', 'denied', 'rejected', 'expired', 'returned', 'released'];
   // Header summary style: 'pill' = one labeled pill ("7 Awards | 3 Stays"); 'subtitle' = awards circle plus a grey line under the title.
   const HEADER_STYLE = 'pill';
   const PANEL_ID = 'nua-viewer-panel';
@@ -204,7 +211,10 @@
     return items.length > 0;
   }
 
-  function hasNua(r) { return Number(r.tokens) > 0 || (r.rooms && r.rooms.length > 0) || !isEmpty(r.status); }
+  function isTestStatus(r) { return !!(r.confirmationNumber && Object.prototype.hasOwnProperty.call(TEST_STATUS_OVERRIDES, r.confirmationNumber)); }
+  function statusOf(r) { return isTestStatus(r) ? TEST_STATUS_OVERRIDES[r.confirmationNumber] : r.status; }
+  function isInactive(r) { const st = statusOf(r); return !isEmpty(st) && INACTIVE_STATUSES.includes(String(st).trim().toLowerCase()); }
+  function hasNua(r) { return Number(r.tokens) > 0 || (r.rooms && r.rooms.length > 0) || !isEmpty(statusOf(r)); }
 
   // ---------- Request template ----------
 
@@ -426,6 +436,9 @@
       #${PANEL_ID} .nua-label { color: #707070; }
       #${PANEL_ID} .nua-value { color: #1c1c1c; font-weight: 600; }
       #${PANEL_ID} .nua-requested { color: ${ACCENT}; }
+      #${PANEL_ID} .nua-inactive-status { color: #707070; font-weight: 600; }
+      #${PANEL_ID} .nua-inactive { opacity: .55; }
+      #${PANEL_ID} .nua-inactive:hover { opacity: 1; }
       #${PANEL_ID} .nua-note { font-size: 16px; color: #707070; padding: 8px 0 0; }
       #${PANEL_ID} .nua-room { display: flex; gap: 14px; align-items: center; padding: 10px 0; }
       #${PANEL_ID} .nua-photo { flex: none; display: block; border-radius: 12px; overflow: hidden; }
@@ -512,12 +525,14 @@
     const body = panel.querySelector('.nua-body');
     let recs = [...found.values()];
     if (IS_SUMMARY_PAGE) {
-      recs = recs.filter(hasNua).sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
-      panel.style.display = recs.length ? '' : 'none';
+      recs = recs.filter(hasNua).sort((a, b) => (isInactive(a) - isInactive(b)) || String(a.startDate).localeCompare(String(b.startDate)));
+      // The list hides the panel when nothing is active; the detail page shows its one stay whatever the status.
+      const visible = IS_DETAIL_PAGE ? recs.length > 0 : recs.some(r => !isInactive(r));
+      panel.style.display = visible ? '' : 'none';
     }
     {
       // Header summary (all pages): total awards in use and the number of stays they are attached to.
-      const nuaRecs = recs.filter(hasNua);
+      const nuaRecs = recs.filter(r => hasNua(r) && !isInactive(r));
       const totalAwards = nuaRecs.reduce((sum, r) => sum + (Number(r.tokens) || 0), 0);
       const count = panel.querySelector('.nua-count');
       const sub = panel.querySelector('.nua-sub');
@@ -566,9 +581,10 @@
       const title = IS_SUMMARY_PAGE
         ? `<div class="nua-title">${link ? `<a href="${esc(link)}">` : ''}${hotelLabel}${link ? '</a>' : ''}<div class="nua-conf">Confirmation ${esc(r.confirmationNumber)}</div></div>`
         : (name ? `<div class="nua-title">${hotelLabel}</div>` : '');
-      const statusInline = isEmpty(r.status) ? '' : ` <span class="nua-code">&middot;</span> <span class="nua-label">Status:</span> <span class="nua-requested">${esc(r.status)}</span>`;
+      const st = statusOf(r);
+      const statusInline = isEmpty(st) ? '' : ` <span class="nua-code">&middot;</span> <span class="nua-label">Status:</span> <span class="${isInactive(r) ? 'nua-inactive-status' : 'nua-requested'}">${esc(st)}</span>${isTestStatus(r) ? ' <span class="nua-code">(Test)</span>' : ''}`;
       return `
-        <div class="nua-stay">
+        <div class="nua-stay${isInactive(r) ? ' nua-inactive' : ''}">
           ${title}
           <div class="nua-meta">
             <div class="nua-label">Stay</div><div class="nua-value">${esc(fmtDate(r.startDate))} &ndash; ${esc(fmtDate(r.endDate))}</div>
