@@ -526,6 +526,134 @@ function backupChecks() {
 }
 
 
+// Shuffling the real playlist, against a fake YouTube Data API that applies moves the way YouTube does
+async function shuffleChecks() {
+  let fail = 0;
+  const res = [];
+  const check = (label, ok) => { res.push([label, ok]); if (!ok) fail++; };
+  const S = M.Shuffle;
+  let seed = 11;
+  const rand = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const range = n => { const a = []; for (let i = 0; i < n; i++) a.push('item' + i); return a; };
+  const equal = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+
+  const ids = range(116);
+  const o = S.order(ids, rand);
+  check('shuffle is a reordering of the same songs', S.sameSongs(ids, o) && !equal(ids, o));
+
+  // Every plan, applied move by move, gives exactly the target, using only the moves it has to
+  let planOk = true, fewest = true, total = 0, trials = 0;
+  for (const n of [1, 2, 3, 5, 10, 50, 116, 240]) {
+    for (let t = 0; t < 20; t++) {
+      const cur = S.order(range(n), rand), target = S.order(cur, rand);
+      const moves = S.plan(cur, target);
+      let list = cur;
+      for (let k = 0; k < moves.length; k++) list = S.applyMove(list, moves[k].id, moves[k].position);
+      if (!equal(list, target)) planOk = false;
+      const at = new Map(); for (let i = 0; i < cur.length; i++) at.set(cur[i], i);
+      const ranks = []; for (let i = 0; i < target.length; i++) ranks.push(at.get(target[i]));
+      if (moves.length !== n - S.longestRun(ranks).size) fewest = false;
+      if (n === 116) { total += moves.length; trials++; }
+    }
+  }
+  check('every plan, applied move by move, ends in exactly the new order (1 to 240 songs)', planOk);
+  check('only songs outside the largest already-in-order group are moved', fewest);
+  check('116 songs: about 95 moves on average, not 116', total / trials < 105 && total / trials > 85);
+  check('already in order: no moves', S.plan(ids, ids).length === 0);
+  check('one song moved to the front: one move', S.plan(['a', 'b', 'c', 'd'], ['d', 'a', 'b', 'c']).length === 1);
+  check('longest run: 3,1,2,5,4 keeps three', S.longestRun([3, 1, 2, 5, 4]).size === 3);
+  let threw = '';
+  try { S.plan(['a', 'b'], ['a', 'c']); } catch (e) { threw = e.message; }
+  check('a plan refuses when songs were added or removed', /changed/.test(threw));
+  check('quota: 95 moves is 4,750 units', S.units(95) === 4750);
+  check('quota day is the Pacific date', S.quotaDay(Date.UTC(2026, 9, 27, 5, 0)) === '10/26/2026' && S.quotaDay(Date.UTC(2026, 9, 27, 8, 0)) === '10/27/2026');
+
+  // Fake YouTube: 116 songs, pages of 50, owner check, moves, and a quota that can run out
+  function fakeYT(n, opts) {
+    opts = opts || {};
+    const yt = { order: range(n), calls: 0, puts: 0, quotaAfter: opts.quotaAfter == null ? Infinity : opts.quotaAfter, owner: opts.owner || 'UCme' };
+    yt.call = async (method, resource, params, body) => {
+      yt.calls++;
+      if (method === 'GET' && resource === 'channels') return { items: [{ id: 'UCme', snippet: { title: 'Dan' } }] };
+      if (method === 'GET' && resource === 'playlists') return { items: params.id === 'PL1' ? [{ snippet: { channelId: yt.owner, title: 'Xmas Mixed' } }] : [] };
+      if (method === 'GET' && resource === 'playlistItems') {
+        const start = Number(params.pageToken || 0), out = [];
+        for (let i = start; i < Math.min(start + params.maxResults, yt.order.length); i++) {
+          const id = yt.order[i];
+          out.push({ id, snippet: { position: i, title: 'Song ' + id, resourceId: { kind: 'youtube#video', videoId: 'v' + id } } });
+        }
+        return start + params.maxResults < yt.order.length ? { items: out, nextPageToken: String(start + params.maxResults) } : { items: out };
+      }
+      if (method === 'PUT' && resource === 'playlistItems') {
+        if (yt.puts >= yt.quotaAfter) throw Object.assign(new Error('The request cannot be completed because you have exceeded your quota.'), { status: 403, reason: 'quotaExceeded' });
+        if (body.snippet.playlistId !== 'PL1' || body.snippet.resourceId.videoId !== 'v' + body.id) throw Object.assign(new Error('bad request'), { status: 400, reason: 'badRequest' });
+        yt.puts++;
+        yt.order = S.applyMove(yt.order, body.id, body.snippet.position);
+        return {};
+      }
+      throw new Error('unexpected call ' + method + ' ' + resource);
+    };
+    return yt;
+  }
+
+  const yt = fakeYT(116);
+  const who = await S.checkOwner(yt.call, 'PL1');
+  check('owner check passes for the channel that owns the playlist', who.channel === 'Dan' && who.title === 'Xmas Mixed');
+  const list = await S.readItems(yt.call, 'PL1');
+  check('reads all 116 songs over three pages, in order, with video ids', list.length === 116 && list[0].id === 'item0' && list[115].id === 'item115' && list[7].videoId === 'vitem7' && yt.calls === 5);
+  const target = S.order(S.idsOf(list), rand), moves = S.plan(S.idsOf(list), target);
+  let steps = 0;
+  const r = await S.run(yt.call, 'PL1', list, moves, () => steps++, null);
+  const back = S.idsOf(await S.readItems(yt.call, 'PL1'));
+  check('run makes every move, and the playlist reads back in the new order', r.done === moves.length && steps === moves.length && S.matches(back, target));
+
+  // The quota runs out partway: nothing is lost, and a fresh plan from the playlist as it now stands finishes the job
+  const yt2 = fakeYT(116, { quotaAfter: 40 });
+  const list2 = await S.readItems(yt2.call, 'PL1');
+  const target2 = S.order(S.idsOf(list2), rand);
+  let err = null;
+  try { await S.run(yt2.call, 'PL1', list2, S.plan(S.idsOf(list2), target2), null, null); } catch (e) { err = e; }
+  check('quota running out stops the run and says how many moves were made', err && err.reason === 'quotaExceeded' && err.done === 40);
+  const mid = S.idsOf(await S.readItems(yt2.call, 'PL1'));
+  check('a stopped run loses no songs', S.sameSongs(mid, target2));
+  yt2.quotaAfter = Infinity;
+  const rest = S.plan(mid, target2);
+  const list2b = await S.readItems(yt2.call, 'PL1');
+  await S.run(yt2.call, 'PL1', list2b, rest, null, null);
+  check('finishing next time completes the same new order', S.matches(S.idsOf(await S.readItems(yt2.call, 'PL1')), target2));
+
+  // Stop between moves
+  const yt3 = fakeYT(20);
+  const list3 = await S.readItems(yt3.call, 'PL1');
+  const target3 = S.order(S.idsOf(list3), rand), moves3 = S.plan(S.idsOf(list3), target3);
+  let k3 = 0;
+  const r3 = await S.run(yt3.call, 'PL1', list3, moves3, () => k3++, () => k3 >= 3);
+  check('Stop takes effect between moves', r3.stopped && r3.done === 3 && yt3.puts === 3);
+
+  // Putting back the earlier order is just another plan
+  const yt4 = fakeYT(30);
+  const before = S.idsOf(await S.readItems(yt4.call, 'PL1'));
+  const l4 = await S.readItems(yt4.call, 'PL1');
+  await S.run(yt4.call, 'PL1', l4, S.plan(before, S.order(before, rand)), null, null);
+  const l4b = await S.readItems(yt4.call, 'PL1');
+  await S.run(yt4.call, 'PL1', l4b, S.plan(S.idsOf(l4b), before), null, null);
+  check('putting back the earlier order restores it exactly', S.matches(S.idsOf(await S.readItems(yt4.call, 'PL1')), before));
+
+  // Refuse when the signed-in channel isn't the owner
+  let refused = '';
+  try { await S.checkOwner(fakeYT(5, { owner: 'UCsomeoneElse' }).call, 'PL1'); } catch (e) { refused = e.message; }
+  check("refuses when signed in as a channel that doesn't own the playlist", /doesn't own the playlist/.test(refused));
+  refused = '';
+  try { await S.checkOwner(fakeYT(5).call, 'PLnope'); } catch (e) { refused = e.message; }
+  check('refuses when the playlist is not found', /couldn't be found/.test(refused));
+
+  console.log('--- shuffling the playlist ---');
+  for (const [label, ok] of res) console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  console.log('');
+  return fail;
+}
+
+
 // Source check: actions wrapped in runBusy run after a frame, when an event's target inside the
 // shadow root has been cleared. Reading e.target in one broke Per page and file import (fixed in 3.11).
 function sourceChecks() {
@@ -589,10 +717,11 @@ finally {
 
 (async () => {
   failures += await readerChecks();
+  failures += await shuffleChecks();
   // and again with the built-ins sabotaged like prototype.js
   Array.from = () => [null, null, null];
   for (const m of methods) Array.prototype[m] = function () { throw new Error('Array.prototype.' + m + ' was called'); };
-  try { console.log('(sabotaged)'); failures += await readerChecks(); }
+  try { console.log('(sabotaged)'); failures += await readerChecks(); failures += await shuffleChecks(); }
   finally { Array.from = saved.from; for (const m of methods) Array.prototype[m] = saved[m]; }
   process.exit(failures ? 1 : 0);
 })();

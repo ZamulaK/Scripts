@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.11.2
-// @description  Marks each song on SomaFM's song history as in / not in your YouTube playlist, with a YouTube search link for the ones you don't have.
+// @version      3.12.0
+// @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
 // @downloadURL  https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -27,6 +27,9 @@ const CACHE_SCHEMA = 3;            // bump when the saved playlist's meaning cha
 const LIVE_SECONDS = 60;           // when live updates are on, re-check the song history this often
 const HISTORY_MAX = 10000;         // plays kept on this device (about 3½ weeks of round-the-clock listening, ~1 MB)
 const PAGE_SIZES = [25, 50, 100, 200];
+// Shuffling the real playlist: Google sends sign-ins back here. It must match the OAuth client's redirect URI exactly.
+const SIGNIN_RETURN = 'https://somafm.com/christmas/songhistory.html';
+const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';   // manage your YouTube playlists
 
 /* ---------- Matching (pure; tested by soma-xmas-checker.test.js) ---------- */
 const Matcher = (() => {
@@ -794,10 +797,165 @@ const Reader = (() => {
   return { read, readInitialData, entryFrom, collect, mergeByIndex, counts, parseLength };
 })();
 
+/* ---------- Shuffling the real playlist (tested by soma-xmas-checker.test.js) ---------- */
+// YouTube has no "reorder the playlist" request: each song is moved on its own (playlistItems.update
+// with a new position, 50 of the 10,000 daily quota units). So the plan keeps the largest group of
+// songs that are already in the right order relative to each other and moves only the rest, each one
+// straight after the song that should come before it. The playlist is read back afterwards to confirm.
+// call(method, resource, params, body) -> parsed JSON; it throws an Error with .status and .reason.
+const Shuffle = (() => {
+  const UNITS_PER_MOVE = 50, UNITS_PER_READ = 1, DAILY_UNITS = 10000, PAGE = 50;
+
+  // Fisher-Yates; rand(n) -> a whole number from 0 to n-1
+  function order(ids, rand) {
+    const a = ids.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+
+  // Indexes of one longest increasing run (not necessarily adjacent) in a list of numbers
+  function longestRun(nums) {
+    const tails = [], prev = [];
+    for (let i = 0; i < nums.length; i++) {
+      let lo = 0, hi = tails.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (nums[tails[mid]] < nums[i]) lo = mid + 1; else hi = mid; }
+      prev[i] = lo > 0 ? tails[lo - 1] : -1;
+      tails[lo] = i;
+    }
+    const keepIdx = new Set();
+    for (let k = tails.length ? tails[tails.length - 1] : -1; k >= 0; k = prev[k]) keepIdx.add(k);
+    return keepIdx;
+  }
+
+  const sameSongs = (a, b) => {
+    if (a.length !== b.length) return false;
+    const s = new Set(a);
+    if (s.size !== a.length) return false;
+    for (let i = 0; i < b.length; i++) if (!s.has(b[i])) return false;
+    return true;
+  };
+
+  // Moves that turn current (playlist item ids in order) into target: [{ id, position }], where position
+  // is 0-based in the list as it stands after the move, which is how YouTube applies it
+  function plan(current, target) {
+    if (!sameSongs(current, target)) throw new Error('the playlist changed (songs added or removed)');
+    const at = new Map();
+    for (let i = 0; i < current.length; i++) at.set(current[i], i);
+    const ranks = [];
+    for (let i = 0; i < target.length; i++) ranks.push(at.get(target[i]));
+    const stay = longestRun(ranks);
+    const list = current.slice(), moves = [];
+    for (let i = 0; i < target.length; i++) {
+      if (stay.has(i)) continue;
+      const id = target[i];
+      list.splice(list.indexOf(id), 1);
+      const position = i === 0 ? 0 : list.indexOf(target[i - 1]) + 1;
+      list.splice(position, 0, id);
+      moves.push({ id, position });
+    }
+    return moves;
+  }
+  // The same move applied to a local copy (used by the tests' fake YouTube)
+  function applyMove(list, id, position) {
+    const out = list.slice();
+    out.splice(out.indexOf(id), 1);
+    out.splice(position, 0, id);
+    return out;
+  }
+  const units = moves => moves * UNITS_PER_MOVE;
+
+  // Every song in the playlist, in playlist order: { id (playlist item), videoId, title }
+  async function readItems(call, playlistId) {
+    const out = [];
+    let pageToken = '';
+    for (let guard = 0; guard < 200; guard++) {
+      const d = await call('GET', 'playlistItems', { part: 'snippet', playlistId, maxResults: PAGE, pageToken });
+      const list = (d && d.items) || [];
+      for (let i = 0; i < list.length; i++) {
+        const s = list[i].snippet || {};
+        out.push({ id: list[i].id, videoId: (s.resourceId && s.resourceId.videoId) || '', title: s.title || '', position: Number(s.position) || 0 });
+      }
+      pageToken = (d && d.nextPageToken) || '';
+      if (!pageToken) break;
+    }
+    out.sort((a, b) => a.position - b.position);
+    return out;
+  }
+  const idsOf = list => { const out = []; for (let i = 0; i < list.length; i++) out.push(list[i].id); return out; };
+  const readUnits = n => Math.max(1, Math.ceil(n / PAGE)) * UNITS_PER_READ;
+
+  // Refuse unless the signed-in channel owns the playlist. Returns { channel, title }.
+  async function checkOwner(call, playlistId) {
+    const me = await call('GET', 'channels', { part: 'snippet', mine: 'true' });
+    const pl = await call('GET', 'playlists', { part: 'snippet', id: playlistId });
+    const mine = me && me.items && me.items[0];
+    const p = pl && pl.items && pl.items[0];
+    if (!mine) throw new Error('this Google account has no YouTube channel');
+    if (!p) throw new Error("the playlist couldn't be found");
+    const channel = (mine.snippet && mine.snippet.title) || 'that channel';
+    if (p.snippet.channelId !== mine.id) throw new Error(`you're signed in as ${channel}, which doesn't own the playlist. Sign in again and choose the channel that owns it`);
+    return { channel, title: p.snippet.title };
+  }
+
+  // Makes the moves one at a time. onStep(done, total) after each; stop() is checked before each.
+  // An error is passed on with .done (moves made so far) added.
+  async function run(call, playlistId, items, moves, onStep, stop) {
+    const videoOf = new Map();
+    for (let i = 0; i < items.length; i++) videoOf.set(items[i].id, items[i].videoId);
+    for (let k = 0; k < moves.length; k++) {
+      if (stop && stop()) return { done: k, stopped: true };
+      const m = moves[k];
+      try {
+        await call('PUT', 'playlistItems', { part: 'snippet' },
+          { id: m.id, snippet: { playlistId, resourceId: { kind: 'youtube#video', videoId: videoOf.get(m.id) }, position: m.position } });
+      } catch (e) { e.done = k; throw e; }
+      if (onStep) onStep(k + 1, moves.length);
+    }
+    return { done: moves.length, stopped: false };
+  }
+
+  // Same order? (after reading the playlist back)
+  function matches(list, target) {
+    if (list.length !== target.length) return false;
+    for (let i = 0; i < list.length; i++) if (list[i] !== target[i]) return false;
+    return true;
+  }
+
+  // The quota day runs midnight to midnight Pacific time
+  const quotaDay = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });
+
+  return { order, longestRun, plan, applyMove, units, readItems, idsOf, readUnits, checkOwner, run, matches, sameSongs, quotaDay,
+    UNITS_PER_MOVE, DAILY_UNITS };
+})();
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = Object.assign({ History, Archive, Reader, Stats, Backup }, Matcher);
-} else {
+  module.exports = Object.assign({ History, Archive, Reader, Stats, Backup, Shuffle }, Matcher);
+} else if (!catchSignIn()) {
   main();
+}
+
+/* ---------- Google sign-in return (Tampermonkey only) ---------- */
+// Google sends the sign-in back to SIGNIN_RETURN with a one-hour access key in the address's #fragment.
+// If this page is that return, and for the sign-in this script started, the key is saved for the page
+// that asked for it and this window closes. Returns true when the page should go no further.
+function catchSignIn() {
+  if (!/[#&]state=/.test(location.hash)) return false;
+  const p = new URLSearchParams(location.hash.slice(1));
+  const asked = GM_getValue('signin:pending', null);
+  if (!asked || p.get('state') !== asked.state) return false;
+  window.history.replaceState(null, '', location.pathname + location.search);   // keep the key out of the address bar
+  GM_setValue('signin:pending', null);
+  const token = p.get('access_token');
+  GM_setValue('signin:token', token
+    ? { token, at: Date.now(), exp: Date.now() + ((Number(p.get('expires_in')) || 3600) - 120) * 1000 }
+    : { error: p.get('error') || 'no access key came back', at: Date.now() });
+  if (!asked.popup) { GM_setValue('signin:reopen', Date.now()); return false; }   // signed in in this tab: carry on and reopen Shuffle
+  window.close();
+  const note = document.createElement('div');                                    // if the browser keeps the window open
+  note.textContent = token ? 'Signed in. You can close this window and go back to the Shuffle panel.' : "Sign-in didn't complete. Close this window and try again.";
+  note.style.cssText = 'position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:2rem;font:600 20px system-ui,sans-serif;background:#0f1714;color:#e8efe9;text-align:center';
+  document.body.appendChild(note);
+  return true;
 }
 
 /* ---------- Page behavior (Tampermonkey only) ---------- */
@@ -943,11 +1101,14 @@ function main() {
     .spin{width:.9em;height:.9em;border-radius:50%;border:2px solid currentColor;border-right-color:transparent}
     @media (prefers-reduced-motion:no-preference){.spin{animation:xmspin .7s linear infinite}@keyframes xmspin{to{transform:rotate(360deg)}}}
     [aria-busy="true"]{cursor:progress}
-    dialog#statsbox,dialog#backupbox{width:min(46rem,calc(100% - 32px));margin:auto;max-height:min(88vh,60rem);padding:0;border:1px solid var(--line);border-radius:16px;
+    dialog#statsbox,dialog#backupbox,dialog#shufbox{width:min(46rem,calc(100% - 32px));margin:auto;max-height:min(88vh,60rem);padding:0;border:1px solid var(--line);border-radius:16px;
       background:var(--bg);color:var(--fg);font:inherit;box-shadow:0 18px 50px rgba(0,0,0,.25)}
     dialog#statsbox{width:min(72rem,calc(100% - 32px))}
-    dialog#statsbox::backdrop,dialog#backupbox::backdrop{background:rgba(10,20,15,.45)}
-    #backupbody{padding:1rem;display:grid;gap:1.1rem}
+    dialog#statsbox::backdrop,dialog#backupbox::backdrop,dialog#shufbox::backdrop{background:rgba(10,20,15,.45)}
+    #backupbody,#shufbody{padding:1rem;display:grid;gap:1.1rem}
+    .shinput{font:inherit;font-size:.85em;width:100%;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.5rem}
+    .shlist{margin:0;padding-left:1.6rem;font-size:.88em;display:grid;gap:.1rem}
+    .shlist li{display:list-item;background:none;border:0;border-radius:0;padding:0;grid-template-columns:none;overflow-wrap:anywhere}
     .brow{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
     #bkpaste{font:inherit;font-size:.82em;width:100%;min-height:6rem;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.5rem}
     .bmsg{font-size:.88em}
@@ -1070,6 +1231,7 @@ function main() {
         <button type="button" class="ctl" id="csv">Export CSV</button>
         <button type="button" class="ctl" id="copy">Copy CSV</button>
         <button type="button" class="ctl" id="backup" aria-haspopup="dialog">Backup / Restore</button>
+        <button type="button" class="ctl" id="shuffle" aria-haspopup="dialog">🔀 Shuffle playlist</button>
       </div>
       <div class="rec" id="rec" role="status"></div>
     </footer>
@@ -1101,6 +1263,10 @@ function main() {
         <div class="brow"><span class="bmsg" id="bkundotext"></span><button type="button" class="ctl" id="bkundobtn">Undo last import</button></div>
       </div>
     </div>
+  </dialog>
+  <dialog id="shufbox" aria-labelledby="shtitle">
+    <div class="shead"><h2 id="shtitle">Shuffle ${PLAYLIST_NAME}</h2><button type="button" class="ctl" id="shclose">Close</button></div>
+    <div id="shufbody"></div>
   </dialog>
   <dialog id="statsbox" aria-labelledby="statstitle">
     <div class="shead"><h2 id="statstitle">Stats</h2><button type="button" class="ctl" id="statsclose">Close</button></div>
@@ -1363,7 +1529,7 @@ function main() {
   // Background refreshes wait while the song picker or the Stats panel is open
   let renderPending = false;
   function quietRender() {
-    const statsOpen = $('#statsbox').open || $('#backupbox').open;
+    const statsOpen = $('#statsbox').open || $('#backupbox').open || $('#shufbox').open;
     if (pickerKey || statsOpen) { renderPending = true; return; }
     render();
   }
@@ -1847,6 +2013,210 @@ function main() {
     renderPending = true;
   }, e);
 
+  /* ----- Shuffle the real playlist (YouTube Data API; you sign in with Google) ----- */
+  // The plan and the moves are in Shuffle. The job is saved before the first move, so a shuffle cut short
+  // (quota, sign-in running out, closing the page) is finished the next time Shuffle opens. The order from
+  // before the last shuffle is kept so it can be put back.
+  const JOBKEY = 'shuffle:job:' + PLAYLIST_ID, LASTKEY = 'shuffle:last:' + PLAYLIST_ID, USEDKEY = 'shuffle:units';
+  const rand = n => { const lim = Math.floor(0x100000000 / n) * n, b = new Uint32Array(1); do { crypto.getRandomValues(b); } while (b[0] >= lim); return b[0] % n; };
+  const plain = (text, cls, fn) => { const b = el('button', cls, text); b.type = 'button'; b.onclick = fn; return b; };   // no "Working…": these show their own progress
+  let shufToken = null, shufRunning = false, shufStop = false, waitTimer = null, sh = {};
+  const validToken = () => { const t = GM_getValue('signin:token', null); return t && t.token && t.exp > Date.now() ? t.token : null; };
+  const usedToday = () => { const u = GM_getValue(USEDKEY, null); return u && u.day === Shuffle.quotaDay(Date.now()) ? u.units : 0; };
+  const addUsed = n => GM_setValue(USEDKEY, { day: Shuffle.quotaDay(Date.now()), units: usedToday() + n });
+  async function ytCall(method, resource, params, body) {
+    const q = new URLSearchParams();
+    for (const k in params) if (params[k] !== '' && params[k] != null) q.set(k, String(params[k]));
+    const headers = { Authorization: 'Bearer ' + shufToken };
+    if (body) headers['Content-Type'] = 'application/json';
+    let r;
+    try { r = await fetch(`https://www.googleapis.com/youtube/v3/${resource}?${q}`, { method, headers, body: body ? JSON.stringify(body) : undefined }); }
+    catch (e) { throw Object.assign(new Error('network error'), { status: 0, reason: 'network' }); }
+    addUsed(method === 'GET' ? 1 : Shuffle.UNITS_PER_MOVE);
+    if (r.ok) return r.json();
+    let msg = '', reason = '';
+    try { const j = await r.json(); msg = j.error.message || ''; reason = (j.error.errors && j.error.errors[0] && j.error.errors[0].reason) || ''; } catch (e) {}
+    throw Object.assign(new Error(msg || 'YouTube returned ' + r.status), { status: r.status, reason });
+  }
+  // Local time of the next midnight Pacific, when the quota resets
+  function quotaReset() {
+    let h = 0, m = 0;
+    for (const p of new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date())) {
+      if (p.type === 'hour') h = Number(p.value);
+      if (p.type === 'minute') m = Number(p.value);
+    }
+    return new Date(Date.now() + (1440 - h * 60 - m) * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  function trouble(e) {
+    if (e.status === 401) { GM_setValue('signin:token', null); return 'Your Google sign-in has run out (it lasts an hour).'; }
+    if (/quota/i.test(e.reason || '')) return `Today's YouTube quota is used up. It resets at midnight Pacific time (${quotaReset()} your time).`;
+    if (e.status === 403) return `YouTube refused: ${e.message}`;
+    return `Couldn't talk to YouTube: ${e.message}`;
+  }
+
+  function signIn() {
+    const b = new Uint8Array(16); crypto.getRandomValues(b);
+    let state = '';
+    for (let i = 0; i < b.length; i++) state += b[i].toString(16).padStart(2, '0');
+    const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+      client_id: GM_getValue('signin:clientId', ''), redirect_uri: SIGNIN_RETURN, response_type: 'token', scope: YT_SCOPE, state });
+    const startedAt = Date.now();
+    GM_setValue('signin:pending', { state, popup: true, at: startedAt });
+    const w = window.open(url, 'xmsignin', 'popup,width=520,height=700');
+    if (!w) { GM_setValue('signin:pending', { state, popup: false, at: startedAt }); location.href = url; return; }   // popups blocked: sign in in this tab
+    shufShow('waiting');
+    clearInterval(waitTimer);
+    waitTimer = setInterval(() => {
+      const t = GM_getValue('signin:token', null);
+      if (t && t.at >= startedAt) { clearInterval(waitTimer); waitTimer = null; if (t.token) shufStart(); else shufShow('signin', `Google sign-in didn't complete (${t.error}).`); }
+      else if (Date.now() - startedAt > 10 * 60000) { clearInterval(waitTimer); waitTimer = null; shufShow('signin', 'Sign-in timed out.'); }
+    }, 700);
+  }
+
+  async function shufStart() {
+    if (!GM_getValue('signin:clientId', '')) return shufShow('setup');
+    shufToken = validToken();
+    if (!shufToken) return shufShow('signin');
+    shufShow('loading', 'Reading your playlist…');
+    try {
+      const who = await Shuffle.checkOwner(ytCall, PLAYLIST_ID);
+      const list = await Shuffle.readItems(ytCall, PLAYLIST_ID);
+      sh = { channel: who.channel, items: list, current: Shuffle.idsOf(list), titles: new Map(), note: '' };
+      for (const it of list) sh.titles.set(it.id, it.title);
+      const job = GM_getValue(JOBKEY, null);
+      if (job && job.target) {
+        if (!Shuffle.sameSongs(sh.current, job.target)) { GM_setValue(JOBKEY, null); sh.note = "An earlier shuffle didn't finish, but songs have been added or removed since, so it was set aside."; }
+        else if (Shuffle.matches(sh.current, job.target)) finished(job);
+        else return prepare(job.target, job.kind, job.before, job.at);
+      }
+      prepare(Shuffle.order(sh.current, rand), 'shuffle', sh.current, 0);
+    } catch (e) { shufShow('error', e.status !== undefined ? trouble(e) : `Can't shuffle: ${e.message}.`); }
+  }
+  function prepare(target, kind, before, resumeOf) {
+    Object.assign(sh, { target, kind, before, resumeOf, moves: Shuffle.plan(sh.current, target) });
+    shufShow('ready');
+  }
+  function finished(job) {
+    GM_setValue(JOBKEY, null);
+    GM_setValue(LASTKEY, job.kind === 'undo' ? null : { before: job.before, at: Date.now() });
+  }
+  async function go() {
+    const job = { target: sh.target, before: sh.before, kind: sh.kind, at: sh.resumeOf || Date.now() };
+    GM_setValue(JOBKEY, job);
+    shufRunning = true; shufStop = false;
+    shufShow('running');
+    let res = null, err = null;
+    try { res = await Shuffle.run(ytCall, PLAYLIST_ID, sh.items, sh.moves, progress, () => shufStop); }
+    catch (e) { err = e; }
+    shufRunning = false;
+    const n = sh.moves.length;
+    const after = ' Nothing was lost: every song is still there, partly in the new order. Open Shuffle again to finish.';
+    if (err) return shufShow('error', `${trouble(err)} ${fmt(err.done || 0)} of ${fmt(n)} moves were made.` + after);
+    if (res.stopped) return shufShow('error', `Stopped after ${fmt(res.done)} of ${fmt(n)} moves.` + after);
+    shufShow('loading', 'Checking the new order…');
+    try {
+      const list = await Shuffle.readItems(ytCall, PLAYLIST_ID);
+      if (!Shuffle.matches(Shuffle.idsOf(list), sh.target)) return shufShow('error', 'All the moves were made, but the playlist read back in a different order than planned. Nothing was lost. Open Shuffle again and it will plan the remaining moves.');
+      finished(job);
+      shufShow('done');
+    } catch (e) { shufShow('error', `${trouble(e)} The moves were all made, but the new order couldn't be checked. Open Shuffle again to check it.`); }
+  }
+  function progress(k, n) {
+    const bar = $('#shbar'), t = $('#shprog');
+    if (bar) { bar.firstChild.style.width = (k / n * 100) + '%'; bar.setAttribute('aria-valuenow', String(k)); }
+    if (t) t.textContent = `Moved ${fmt(k)} of ${fmt(n)}`;
+  }
+  const newShuffle = () => prepare(Shuffle.order(sh.current, rand), 'shuffle', sh.current, 0);
+
+  function shufShow(view, msg) {
+    const body = $('#shufbody');
+    body.textContent = '';
+    const sec = el('div', 'ssec');
+    body.append(sec);
+    const say1 = (text, cls) => sec.append(el('div', 'bmsg' + (cls ? ' ' + cls : ''), text));
+    const row = (...b) => { const r = el('div', 'brow'); r.append(...b); sec.append(r); };
+    if (view === 'setup') {
+      sec.append(el('div', 'sline', 'Paste the Client ID of your Google OAuth client (it ends in .apps.googleusercontent.com). It stays on this device.'));
+      const inp = el('input', 'shinput'); inp.id = 'shclient'; inp.type = 'text'; inp.spellcheck = false; inp.placeholder = '….apps.googleusercontent.com';
+      inp.value = GM_getValue('signin:clientId', '');
+      sec.append(inp);
+      if (msg) say1(msg, 'err');
+      row(plain('Save', 'ctl primary', () => {
+        const v = $('#shclient').value.trim();
+        if (!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(v)) return shufShow('setup', "That doesn't look like a Client ID.");
+        GM_setValue('signin:clientId', v); GM_setValue('signin:token', null); shufStart();
+      }));
+    } else if (view === 'signin') {
+      if (msg) say1(msg, 'err');
+      sec.append(el('div', 'sline', `Sign in with the Google account that owns ${PLAYLIST_NAME}. If Google asks for a channel, choose the one that owns the playlist.`),
+        el('div', 'snote', "Google will say the app hasn't been verified: it's your own app, so choose Continue. The sign-in lasts an hour."));
+      row(plain('Sign in with Google', 'ctl primary', signIn), plain('Change Client ID', 'ctl', () => shufShow('setup')));
+    } else if (view === 'waiting') {
+      sec.append(el('div', 'sline', 'Finish signing in in the Google window…'));
+      row(plain('Cancel', 'ctl', () => { clearInterval(waitTimer); waitTimer = null; shufShow('signin'); }));
+    } else if (view === 'loading') {
+      sec.append(el('div', 'sline', msg || 'Working…'));
+    } else if (view === 'ready') {
+      const n = sh.current.length, m = sh.moves.length, u = Shuffle.units(m), used = usedToday();
+      const undo = sh.kind === 'undo';
+      if (sh.note) say1(sh.note);
+      if (sh.resumeOf) {
+        sec.append(el('h3', '', 'Unfinished ' + (undo ? 'put-back' : 'shuffle')),
+          el('div', 'sline', `${undo ? 'Putting back the earlier order' : 'A shuffle'} started ${when(sh.resumeOf / 1000)} didn't finish. ` +
+            `Finishing takes ${fmt(m)} more move${m === 1 ? '' : 's'}, about ${fmt(u)} quota units.`));
+      } else {
+        sec.append(el('h3', '', undo ? 'The order before the last shuffle' : 'New order'),
+          el('div', 'sline', `${fmt(n)} songs. Putting them in this order takes ${fmt(m)} move${m === 1 ? '' : 's'}, about ${fmt(u)} quota units.`));
+      }
+      sec.append(el('div', 'snote', `Google allows ${fmt(Shuffle.DAILY_UNITS)} units a day; this script has used about ${fmt(used)} today. Signed in as ${sh.channel}.`));
+      if (used + u > Shuffle.DAILY_UNITS) say1(`That's more than today's quota has left, so it will stop partway. Open Shuffle again after midnight Pacific (${quotaReset()} your time) to finish.`, 'err');
+      const ol = el('ol', 'shlist');
+      for (let i = 0; i < Math.min(12, n); i++) ol.append(el('li', '', sh.titles.get(sh.target[i]) || '?'));
+      sec.append(ol);
+      if (n > 12) sec.append(el('div', 'snote', `…and ${fmt(n - 12)} more.`));
+      const label = sh.resumeOf ? 'Finish it' : undo ? 'Put back this order' : 'Shuffle the playlist';
+      let armed = null;
+      const goBtn = plain(label, 'ctl primary', () => {
+        if (!m) return;
+        if (!armed) { goBtn.textContent = 'Tap again to start'; armed = setTimeout(() => { armed = null; goBtn.textContent = label; }, 5000); return; }
+        clearTimeout(armed); go();
+      });
+      goBtn.disabled = !m;
+      if (sh.resumeOf) row(goBtn, plain('Start a new shuffle instead', 'ctl', () => { GM_setValue(JOBKEY, null); newShuffle(); }));
+      else row(goBtn, plain(undo ? 'Back to a new shuffle' : 'Reshuffle', 'ctl', newShuffle));
+      const last = GM_getValue(LASTKEY, null);
+      if (!sh.resumeOf && !undo && last && last.before && Shuffle.sameSongs(sh.current, last.before) && !Shuffle.matches(sh.current, last.before)) {
+        sec.append(el('div', 'snote', `Last shuffled ${when(last.at / 1000)}. You can put back the order from before that.`));
+        row(plain('Show the earlier order', 'ctl', () => prepare(last.before, 'undo', sh.current, 0)));
+      }
+      sec.append(el('div', 'snote', "Afterwards, play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order."));
+    } else if (view === 'running') {
+      const n = sh.moves.length;
+      sec.append(el('div', 'sline', sh.kind === 'undo' ? 'Putting back the earlier order…' : 'Shuffling your playlist…'));
+      const bar = el('div', 'bar'); bar.id = 'shbar'; bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', String(n)); bar.setAttribute('aria-valuenow', '0'); bar.setAttribute('aria-label', 'Songs moved');
+      const fill = el('div', 'fill'); fill.style.width = '0%'; bar.append(fill);
+      const t = el('div', 'snote', `Moved 0 of ${fmt(n)}`); t.id = 'shprog';
+      sec.append(bar, t, el('div', 'snote', "Keep this page open until it finishes. If it's interrupted, Shuffle picks up where it stopped."));
+      row(plain('Stop', 'ctl', () => { shufStop = true; $('#shprog').textContent += ' — stopping…'; }));
+    } else if (view === 'done') {
+      say1(sh.kind === 'undo' ? 'Done. The earlier order is back, and reading the playlist confirmed it.' : 'Done. Your playlist is in the new order, and reading it back confirmed it.', 'ok');
+      sec.append(el('div', 'snote', "Play it with YouTube's shuffle off. The YouTube app may take a few minutes to show the new order."));
+      row(plain('Shuffle again', 'ctl', shufStart));
+    } else {   // 'error'
+      say1(msg, 'err');
+      row(plain(validToken() ? 'Try again' : 'Sign in again', 'ctl primary', shufStart));
+    }
+  }
+  function openShuffle() {
+    const d = $('#shufbox'); if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+    if (!shufRunning && !waitTimer) shufStart();
+  }
+  $('#shuffle').onclick = openShuffle;
+  $('#shclose').onclick = () => { const d = $('#shufbox'); d.close ? d.close() : d.removeAttribute('open'); };
+  $('#shufbox').addEventListener('close', () => { if (renderPending) { renderPending = false; setTimeout(render, 50); } });
+  $('#shufbox').addEventListener('click', e => { if (e.target === $('#shufbox')) $('#shclose').click(); });
+
   /* ----- Export ----- */
   let exportNote = '';
   function csvText() {
@@ -1931,6 +2301,9 @@ function main() {
 
   render();
   holdScreen();
+  // Back from signing in to Google in this tab (when the browser blocked the sign-in window)
+  const back = GM_getValue('signin:reopen', 0);
+  if (back) { GM_setValue('signin:reopen', 0); if (Date.now() - back < 5 * 60000) openShuffle(); }
   (async () => {
     await Promise.all([loadSongs(), loadPlaylist(false)]);
     loading = false;

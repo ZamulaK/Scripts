@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.11.2**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.12.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -70,6 +70,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `Archive` | yes | Remembering playlist titles, detecting songs gone from the playlist (with a safety stop), dismissing, flagging plays of gone songs. |
 | `Backup` | yes | Backup file format, validation, merge rules (history, marks, dislikes, archive), import preview. |
 | `Stats` | yes | Everything in the Stats panel: counts, shares, rotation estimates, top lists, per-song play logs. |
+| `Shuffle` | yes (I/O injected) | Shuffling the real playlist: Fisher-Yates order, the move plan, reading the playlist and making the moves through the YouTube Data API, owner check. `call(method, resource, params, body)` is injected so it can be tested with a fake API. See §8a. |
 | `Reader` | yes (I/O injected) | Reading the YouTube playlist: page parsing, the >100-song side-panel fallback, complete/incomplete reads. `read(get, post)` takes fetch functions so it can be tested with a fake YouTube. |
 | `main()` | no | Everything on the page: UI, storage, timers, dialogs, event handlers. Runs only under Tampermonkey (the file exports the modules instead when loaded by Node). |
 
@@ -83,7 +84,12 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `marks` | Hand marks by song key: `{ v: 'have' \| 'not', at, id? }`. `id` = linked playlist video. Old 1.x marks are a bare timestamp meaning "have". |
 | `dislikes` | Song key → timestamp. Kept separate from marks so Undo restores exactly. |
 | `backup:beforeImport` | `{ at, data }` saved before every import, for "Undo last import". |
-| `filters`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups. |
+| `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
+| `signin:pending`, `signin:token`, `signin:reopen` | Sign-in in progress (random `state`, popup or same tab); the one-hour access key `{ token, at, exp }`; "reopen Shuffle after a same-tab sign-in". |
+| `shuffle:job:<playlistId>` | A shuffle or put-back in progress: `{ target, before, kind: 'shuffle' \| 'undo', at }`. Saved before the first move; cleared once the read-back confirms the order. |
+| `shuffle:last:<playlistId>` | `{ before, at }`: the order before the last shuffle, for "Show the earlier order". |
+| `shuffle:units` | `{ day, units }`: this script's own estimate of quota used today (Pacific date). |
+| `filters`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:` and `shuffle:` keys). |
 
 **Song key** = `Matcher.markKey(artist, title)` = normalized artist + `|` + normalized title (case, accents, punctuation ignored). Marks, dislikes, stats and caches all use it.
 
@@ -96,7 +102,9 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `https://www.youtube.com/playlist?list=…` | First 100 playlist songs | Fetched via `GM_xmlhttpRequest` with **`anonymous: true`** (signed-out view) and a **desktop User-Agent** (tablets otherwise get redirected to m.youtube.com). Parses `ytInitialData`; the mobile escaped-string format is handled too. |
 | `youtubei/v1/browse` (continuation) | Songs past 100 | **Returns empty for scripted requests** (as of Oct 2026). Still tried first in case it comes back. |
 | `https://www.youtube.com/watch?v=<last>&list=…&index=<n>` | Songs past 100 | The watch page's playlist side panel lists the songs around position n. The script steps forward until the playlist's stated total is reached. |
-| `https://www.youtube.com/watch_videos?video_ids=a,b,c` | Not used yet (shuffle idea, §10) | Builds a temporary queue **in the exact order given**, **max 50 videos**. Verified Oct 26 from a US connection. |
+| `https://accounts.google.com/o/oauth2/v2/auth` | Google sign-in for Shuffle | Implicit flow (`response_type=token`), scope `youtube`, returns to `SIGNIN_RETURN` (must match the OAuth client's redirect URI exactly). |
+| `https://www.googleapis.com/youtube/v3/…` | Shuffle: `channels`, `playlists`, `playlistItems` list and update | Plain `fetch` with `Authorization: Bearer`. List = 1 unit, update = 50 units; 10,000 units a day (checked Oct 26, 2026). |
+| `https://www.youtube.com/watch_videos?video_ids=a,b,c` | Not used (an alternative to Shuffle that was considered) | Builds a temporary queue **in the exact order given**, **max 50 videos**. Verified Oct 26 from a US connection. |
 
 ## 5. Hard-won gotchas (each one broke something once)
 
@@ -150,21 +158,39 @@ Mommy…" played 9:47 PM, then not until 2:48 PM. Dan's view: SomaFM probably pl
 - **Colors** are tokens in `:host` with a dark set under `prefers-color-scheme: dark`. Check contrast (white-on-button ≥ 4.5:1) when adding buttons.
 - Before shipping UI changes, check 600 px (tablet portrait) and 360 px, light and dark, ideally with screenshots.
 
+## 8a. Shuffle (3.12)
+
+Dan wanted the playlist itself in a fair random order, because YouTube's own shuffle seems to favor some songs.
+"🔀 Shuffle playlist" (footer) reorders the real playlist through the YouTube Data API.
+
+- **Setup (done Oct 26):** an OAuth client of type Web application in Dan's Google Cloud project, JavaScript origin
+  `https://somafm.com`, redirect URI `https://somafm.com/christmas/songhistory.html`, publishing status Testing with Dan as
+  test user. The Client ID is pasted into the panel on each device. No client secret is used.
+- **Sign-in:** a popup goes to Google; Google returns to the song history page with the key in the `#fragment`. `catchSignIn()`
+  (runs before `main()`) checks `state` against `signin:pending`, saves the key, strips it from the address, and closes the
+  popup. The waiting page polls `signin:token`. If popups are blocked, the sign-in happens in the same tab and Shuffle reopens.
+- **Why so many units:** there's no bulk reorder, so each song is a `playlistItems.update` with a new position (50 units).
+  `Shuffle.plan` keeps the longest group of songs already in the right relative order (longest increasing subsequence)
+  and moves each other song straight after its new predecessor. That's about 95 moves for 116 songs, not 116 (about 4,750 units).
+- **Safety:** checks that the signed-in channel owns the playlist; songs are only moved, never added or removed; two taps to
+  start; the job is saved first, so a run cut short by quota, expiry, Stop or closing the page is finished next time; the playlist
+  is read back and compared before it says Done; the order before the last shuffle can be put back.
+- **Not yet seen on the real API:** a deleted or private video in the playlist may refuse to move. If that happens, the panel
+  reports YouTube's message and the job can be finished or set aside.
+- Playing it: shuffle off, playlist sort setting on **Manual** (otherwise YouTube shows another order).
+
 ## 9. Testing and regression gates
 
-- `npm test`: about 330 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 35 real-page checks. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
+- `npm run test:page`: 51 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
 ## 10. Open items / next steps
 
-1. **Shuffle (Dan's next ask; he hasn't chosen yet).** He believes YouTube's playlist shuffle favors recent or early songs (widely reported, not documented by YouTube). Options presented:
-   - **A. "🔀 Shuffle play" button in the script:** true Fisher-Yates shuffle of available playlist songs, opened as `watch_videos` queues of 50 (116 songs = 3 links), plus Reshuffle. No API key or sign-in, and the playlist isn't changed. Recommended.
-   - **B. Reorder the actual playlist:** needs **OAuth** (Dan has an API key, but keys are read-only): an OAuth client in his Google Cloud project, himself as a test user, and a small sign-in page. `playlistItems.update` per song costs about 50 units of the 10,000/day default quota, so about 5,800 for 116 songs (at most once a day). Confirm current quota costs in YouTube's docs before building. Benefit: playing the playlist in order works in the YouTube app.
+1. **Shuffle: first real run** (3.12.0). Dan chose to reorder the real playlist (§8a). Watch the first run for anything the fake API didn't show (deleted videos, sort setting).
 2. **Laptop setup** (above). Then merge the tablet backup into it.
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.
-4. Small: the `@description` predates the stats and history features.
 
 ## 11. Working with Dan
 
@@ -190,3 +216,4 @@ Mommy…" played 9:47 PM, then not until 2:48 PM. Dan's view: SomaFM probably pl
 | 3.9 | Only the changed song is re-matched (2.3 s → 0.2 s on a slowed CPU); "Working…" indicator; no redraws under dialogs; Open buttons in Stats. |
 | 3.10 | "▸ N plays" history on cards; "Most recent" sort in Stats. |
 | 3.11 | Backup / Restore (merge, replace, undo); Per page fix; source check for delayed actions; `page-check.js`. 3.11.1 moved into the Scripts repo; Tampermonkey auto-update from GitHub. 3.11.2 play logs show the elapsed time with * for a gap (legend below), wider Stats panel on desktop. |
+| 3.12 | Shuffle the real playlist through the YouTube Data API (Google sign-in, fewest moves, resume, read-back check, put back). |

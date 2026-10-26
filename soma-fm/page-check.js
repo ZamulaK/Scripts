@@ -49,17 +49,52 @@ const STUBS = `
 const results = [];
 const check = (label, ok, detail) => { results.push({ label, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${!ok && detail ? '  — ' + detail : ''}`); };
 
-async function openPage(browser, { width, height = 1000, scheme = 'light', store = {} }) {
+async function openPage(browser, { width, height = 1000, scheme = 'light', store = {}, hash = '', api = null }) {
   const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, timezoneId: 'America/New_York', acceptDownloads: true });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto(URL, { waitUntil: 'load' });
+  if (api) await page.route('https://www.googleapis.com/**', api.handle);
+  await page.goto(URL + hash, { waitUntil: 'load' });
   await page.evaluate(s => { window.__store = s; }, Object.assign({ playlist: { schema: 3, at: Date.now(), items, hidden: 0 }, 'history:christmas': seedHistory(), live: false }, store));
   await page.addScriptTag({ content: STUBS + script });
   await page.waitForTimeout(1500);
   return { ctx, page, errors };
 }
+// Fake YouTube Data API for the Shuffle panel: a playlist owned by the signed-in channel
+function fakeApi(n) {
+  const api = { order: [], puts: 0 };
+  for (let i = 0; i < n; i++) api.order.push('pi' + i);
+  api.start = api.order.slice();
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,PUT,OPTIONS' };
+  const json = (route, body, status = 200) => route.fulfill({ status, headers: Object.assign({ 'content-type': 'application/json' }, cors), body: JSON.stringify(body) });
+  api.handle = async route => {
+    const req = route.request(), u = new globalThis.URL(req.url()), res = u.pathname.split('/').pop(), q = u.searchParams;
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    if (req.headers().authorization !== 'Bearer TESTKEY') return json(route, { error: { code: 401, message: 'Invalid Credentials', errors: [{ reason: 'authError' }] } }, 401);
+    if (res === 'channels') return json(route, { items: [{ id: 'UCme', snippet: { title: 'Dan' } }] });
+    if (res === 'playlists') return json(route, { items: [{ snippet: { channelId: 'UCme', title: 'Xmas Mixed' } }] });
+    if (res === 'playlistItems' && req.method() === 'GET') {
+      const start = Number(q.get('pageToken') || 0), size = Number(q.get('maxResults')), out = [];
+      for (let i = start; i < Math.min(start + size, api.order.length); i++) out.push({ id: api.order[i], snippet: { position: i, title: 'Song ' + api.order[i], resourceId: { videoId: 'v' + api.order[i] } } });
+      return json(route, start + size < api.order.length ? { items: out, nextPageToken: String(start + size) } : { items: out });
+    }
+    if (res === 'playlistItems' && req.method() === 'PUT') {
+      const b = JSON.parse(req.postData());
+      api.puts++;
+      api.order.splice(api.order.indexOf(b.id), 1);
+      api.order.splice(b.snippet.position, 0, b.id);
+      return json(route, {});
+    }
+    return json(route, { error: { message: 'unexpected' } }, 400);
+  };
+  return api;
+}
+const signedIn = () => ({ 'signin:clientId': 'test.apps.googleusercontent.com', 'signin:token': { token: 'TESTKEY', at: Date.now(), exp: Date.now() + 3600000 } });
+const shufText = page => inShadow(page, r => r.querySelector('#shufbody').textContent);
+const shufClick = (page, label) => inShadow(page, (r, l) => { const b = [...r.querySelectorAll('#shufbody button')].find(x => x.textContent === l); if (b) b.click(); return !!b; }, label);
+const waitShuf = (page, re) => page.waitForFunction(src => new RegExp(src).test(document.getElementById('xm-host').shadowRoot.querySelector('#shufbody').textContent), re.source, { timeout: 15000 }).then(() => true, () => false);
+
 const inShadow = (page, fn, arg) => page.evaluate(([src, a]) => (new Function('r', 'a', src))(document.getElementById('xm-host').shadowRoot, a), [`return (${fn.toString()})(r, a);`, arg]);
 const settle = page => page.evaluate(() => new Promise(r => requestAnimationFrame(() => setTimeout(r, 50))));
 
@@ -92,6 +127,68 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check('1600px: Stats panel is wide (over 1100 px) and centered', box.w > 1100 && Math.abs(box.l - box.r) <= 2, JSON.stringify(box));
     const cut = await inShadow(page, r => { r.querySelector('.ctbtn').click(); return [...r.querySelectorAll('.plog li')].filter(x => x.scrollWidth > x.clientWidth + 1).length; });
     check('1600px: Stats play log entries are not cut off', cut === 0, String(cut));
+    await ctx.close();
+  }
+
+  // Shuffle panel: first-time setup, then sign-in
+  {
+    const { ctx, page, errors } = await openPage(browser, { width: 360, scheme: 'light' });
+    await inShadow(page, r => r.querySelector('#shuffle').click());
+    await settle(page);
+    check('Shuffle first asks for the Client ID', /Client ID/.test(await shufText(page)));
+    await inShadow(page, r => { r.querySelector('#shclient').value = 'not an id'; });
+    await shufClick(page, 'Save'); await settle(page);
+    check('Shuffle refuses something that isn\'t a Client ID', /doesn't look like a Client ID/.test(await shufText(page)));
+    await inShadow(page, r => { r.querySelector('#shclient').value = 'abc-123.apps.googleusercontent.com'; });
+    await shufClick(page, 'Save'); await settle(page);
+    const t = await shufText(page);
+    check('After saving the Client ID, Shuffle offers Google sign-in', /Sign in with Google/.test(t) && await page.evaluate(() => window.__store['signin:clientId'] === 'abc-123.apps.googleusercontent.com'), t);
+    check('360px: Shuffle panel has no sideways scrolling', await inShadow(page, r => { const d = r.querySelector('#shufbox'); return d.scrollWidth <= d.clientWidth + 1; }));
+    check('Shuffle setup: no script errors', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
+  // Shuffle, put back, and the sign-in return, against a fake YouTube API (Google is never contacted)
+  {
+    const api = fakeApi(30);
+    const { ctx, page, errors } = await openPage(browser, { width: 600, scheme: 'dark', store: signedIn(), api });
+    await inShadow(page, r => r.querySelector('#shuffle').click());
+    const ready = await waitShuf(page, /New order/);
+    const t = await shufText(page);
+    const moves = Number((t.match(/takes (\d+) move/) || [])[1]);
+    check('Shuffle reads the playlist and shows the new order and its cost', ready && /30 songs/.test(t) && moves > 15 && moves < 30 && /about [\d,]+ quota units/.test(t), t.slice(0, 200));
+    check('600px: Shuffle panel has no sideways scrolling', await inShadow(page, r => { const d = r.querySelector('#shufbox'); return d.scrollWidth <= d.clientWidth + 1; }));
+    await shufClick(page, 'Shuffle the playlist');
+    check('Shuffle asks for a second tap before changing anything', /Tap again/.test(await shufText(page)) && api.puts === 0);
+    await shufClick(page, 'Tap again to start');
+    const done = await waitShuf(page, /Done\./);
+    check('Shuffle moves the songs, checks the order, and reports done', done && api.puts === moves && api.order.join() !== api.start.join(), `puts ${api.puts}, moves ${moves}`);
+    check('Shuffle remembers the earlier order and clears the job', await page.evaluate(() => !window.__store['shuffle:job:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'] && window.__store['shuffle:last:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'].before.length === 30));
+    await shufClick(page, 'Shuffle again');
+    await waitShuf(page, /Show the earlier order/);
+    await shufClick(page, 'Show the earlier order');
+    await shufClick(page, 'Put back this order'); await shufClick(page, 'Tap again to start');
+    await waitShuf(page, /Done\./);
+    check('Putting back the earlier order restores it', api.order.join() === api.start.join());
+    check('Shuffle: no script errors', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+  {
+    // Signed in in the same tab (sign-in window blocked): the key is saved, the address cleaned, and Shuffle reopens
+    const api = fakeApi(30);
+    const { ctx, page, errors } = await openPage(browser, { width: 600, api, hash: '#state=s123&access_token=TESTKEY&token_type=Bearer&expires_in=3599',
+      store: { 'signin:clientId': 'test.apps.googleusercontent.com', 'signin:pending': { state: 's123', popup: false, at: Date.now() } } });
+    const info = await page.evaluate(() => ({ token: (window.__store['signin:token'] || {}).token, hash: location.hash, pending: window.__store['signin:pending'] }));
+    check('Sign-in return saves the key and clears it from the address', info.token === 'TESTKEY' && info.hash === '' && !info.pending, JSON.stringify(info));
+    check('Sign-in return in the same tab reopens Shuffle', await waitShuf(page, /New order/));
+    check('Sign-in return: no script errors', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+  {
+    // A sign-in return that this script didn't start is ignored
+    const { ctx, page } = await openPage(browser, { width: 600, hash: '#state=other&access_token=EVIL', store: { 'signin:pending': { state: 's123', popup: true, at: Date.now() } } });
+    const info = await page.evaluate(() => ({ token: window.__store['signin:token'], host: !!document.getElementById('xm-host') }));
+    check('A sign-in return with the wrong state is ignored', !info.token && info.host, JSON.stringify(info));
     await ctx.close();
   }
 
