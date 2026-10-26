@@ -1,0 +1,5 @@
+node_modules/
+*.log
+# exported play history and backups stay out of the repo unless added on purpose
+somafm-*-history-*.csv
+soma-xmas-checker-backup-*.json
