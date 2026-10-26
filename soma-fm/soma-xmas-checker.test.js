@@ -516,7 +516,15 @@ function backupChecks() {
   check('malformed entries are skipped and counted', B.validate(messy).skipped === 4 && B.validate(messy).data.history.christmas.length === 4);
   const refuse = o => { try { B.validate(o); return false; } catch (e) { return true; } };
   check('not ours / wrong format / no data: refused', refuse({ app: 'other' }) && refuse(Object.assign({}, good, { format: 99 })) && refuse({ app: 'soma-xmas-checker', format: 1 }) && refuse(null));
+  const orig = { at: 500, playlistId: 'PL1', songs: [{ id: 'p1', videoId: 'v1', title: 'One' }, { id: 'p2', videoId: 'v2', title: 'Two' }] };
+  const withOrig = B.validate(JSON.parse(JSON.stringify(B.build({ history: {}, marks: {}, dislikes: {}, archive: {}, original: orig }))));
+  check('original order: a backup carries it', withOrig.data.original && withOrig.data.original.songs.length === 2 && withOrig.data.original.songs[1].title === 'Two' && withOrig.data.original.at === 500);
+  check('original order: an older backup without it reads as none', v.data.original === null);
+  const later = { at: 900, songs: [{ id: 'p2', videoId: 'v2', title: 'Two' }] };
+  check('original order: merging keeps the one saved first; either side alone is kept',
+    B.mergeOriginal(later, orig) === orig && B.mergeOriginal(orig, later) === orig && B.mergeOriginal(null, orig) === orig && B.mergeOriginal(orig, null) === orig && B.mergeOriginal(null, null) === null);
   const pv = B.preview({ history: { christmas: tablet } }, v.data);
+  check('preview: says when the backup has the original order', B.preview({ history: {} }, withOrig.data).original === 500 && pv.original === 0);
   check('preview: plays in the backup, how many are new here, date range', pv.plays === 4 && pv.newPlays === 2 && pv.first === 4800 && pv.last === 9000 && pv.marks === 1);
 
   console.log('--- backup and restore ---');
@@ -566,6 +574,8 @@ async function shuffleChecks() {
   try { S.plan(['a', 'b'], ['a', 'c']); } catch (e) { threw = e.message; }
   check('a plan refuses when songs were added or removed', /changed/.test(threw));
   check('quota: 95 moves is 4,750 units', S.units(95) === 4750);
+  const ro = S.restoreOrder(['a', 'b', 'c', 'd'], ['x', 'd', 'b', 'a', 'y']);
+  check('original order: kept songs in their original order, removed ones skipped, added ones at the end', ro.join() === 'a,b,d,x,y');
   check('quota day is the Pacific date', S.quotaDay(Date.UTC(2026, 9, 27, 5, 0)) === '10/26/2026' && S.quotaDay(Date.UTC(2026, 9, 27, 8, 0)) === '10/27/2026');
 
   // Fake YouTube: 116 songs, pages of 50, owner check, moves, and a quota that can run out
@@ -637,6 +647,10 @@ async function shuffleChecks() {
   await S.run(yt4.call, 'PL1', l4, S.plan(before, S.order(before, rand)), null, null);
   const l4b = await S.readItems(yt4.call, 'PL1');
   await S.run(yt4.call, 'PL1', l4b, S.plan(S.idsOf(l4b), before), null, null);
+  const l4c = await S.readItems(yt4.call, 'PL1');
+  await S.run(yt4.call, 'PL1', l4c, S.plan(S.idsOf(l4c), S.order(S.idsOf(l4c), rand)), null, null);
+  const l4d = await S.readItems(yt4.call, 'PL1');
+  await S.run(yt4.call, 'PL1', l4d, S.plan(S.idsOf(l4d), S.restoreOrder(before, S.idsOf(l4d))), null, null);
   check('putting back the earlier order restores it exactly', S.matches(S.idsOf(await S.readItems(yt4.call, 'PL1')), before));
 
   // Refuse when the signed-in channel isn't the owner

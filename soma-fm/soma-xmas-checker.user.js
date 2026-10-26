@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.0
+// @version      3.12.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -469,7 +469,18 @@ const Backup = (() => {
       const e = d.archive[id];
       if (isObj(e) && typeof e.title === 'string') archive[id] = Object.assign({}, e, { id }); else skipped++;
     }
-    return { data: { history, marks, dislikes, archive }, skipped, exportedAt: obj.exportedAt };
+    let original = null;
+    const o = d.original;
+    if (isObj(o) && typeof o.at === 'number' && Array.isArray(o.songs)) {
+      const songs = [];
+      for (let i = 0; i < o.songs.length; i++) {
+        const x = o.songs[i];
+        if (isObj(x) && typeof x.id === 'string' && x.id) songs.push({ id: x.id, videoId: typeof x.videoId === 'string' ? x.videoId : '', title: typeof x.title === 'string' ? x.title : '' });
+        else skipped++;
+      }
+      if (songs.length) original = { at: o.at, playlistId: typeof o.playlistId === 'string' ? o.playlistId : '', songs };
+    } else if (o) skipped++;
+    return { data: { history, marks, dislikes, archive, original }, skipped, exportedAt: obj.exportedAt };
   }
 
   // Union of two newest-first play lists; the same play recorded on both devices is kept once.
@@ -523,6 +534,12 @@ const Backup = (() => {
     return out;
   }
 
+  // The playlist's original order: the one saved earliest is the true original, so it wins
+  function mergeOriginal(a, b) {
+    if (!a || !b) return a || b || null;
+    return b.at < a.at ? b : a;
+  }
+
   // What importing would do, for the summary shown before anything changes
   function preview(current, incoming) {
     const plays = [], newPlays = {};
@@ -536,10 +553,11 @@ const Backup = (() => {
       newPlays[ch] = n; added += n;
     }
     return { plays: total, newPlays: added, perChannel: newPlays, first, last,
-      marks: Object.keys(incoming.marks).length, dislikes: Object.keys(incoming.dislikes).length, songs: Object.keys(incoming.archive).length };
+      marks: Object.keys(incoming.marks).length, dislikes: Object.keys(incoming.dislikes).length, songs: Object.keys(incoming.archive).length,
+      original: incoming.original ? incoming.original.at : 0 };
   }
 
-  return { build, validate, mergeHistory, mergeMarks, mergeDislikes, mergeArchive, preview };
+  return { build, validate, mergeHistory, mergeMarks, mergeDislikes, mergeArchive, mergeOriginal, preview };
 })();
 
 /* ---------- Stats panel numbers (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -863,6 +881,13 @@ const Shuffle = (() => {
     return out;
   }
   const units = moves => moves * UNITS_PER_MOVE;
+  // The saved original order for the songs still in the playlist, then songs added since, in their current order
+  function restoreOrder(original, current) {
+    const now = new Set(current), was = new Set(original), out = [];
+    for (let i = 0; i < original.length; i++) if (now.has(original[i])) out.push(original[i]);
+    for (let i = 0; i < current.length; i++) if (!was.has(current[i])) out.push(current[i]);
+    return out;
+  }
 
   // Every song in the playlist, in playlist order: { id (playlist item), videoId, title }
   async function readItems(call, playlistId) {
@@ -924,7 +949,7 @@ const Shuffle = (() => {
   // The quota day runs midnight to midnight Pacific time
   const quotaDay = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });
 
-  return { order, longestRun, plan, applyMove, units, readItems, idsOf, readUnits, checkOwner, run, matches, sameSongs, quotaDay,
+  return { order, longestRun, plan, applyMove, units, restoreOrder, readItems, idsOf, readUnits, checkOwner, run, matches, sameSongs, quotaDay,
     UNITS_PER_MOVE, DAILY_UNITS };
 })();
 
@@ -1242,7 +1267,7 @@ function main() {
     <div id="backupbody">
       <div class="ssec">
         <h3>Save a backup</h3>
-        <div class="snote">One file with your play history, "I have it" / "Not this one" marks and links, dislikes, and the remembered playlist songs. Settings stay with each device.</div>
+        <div class="snote">One file with your play history, "I have it" / "Not this one" marks and links, dislikes, the remembered playlist songs, and the playlist's original order. Settings stay with each device.</div>
         <div class="brow"><button type="button" class="ctl primary" id="bkdown">Download backup</button><button type="button" class="ctl" id="bkcopy">Copy backup</button></div>
         <div class="bmsg" id="bkoutmsg" role="status"></div>
       </div>
@@ -1310,6 +1335,7 @@ function main() {
 
   /* ----- Playlist memory: titles of every song seen, so ones that disappear can still be named ----- */
   const AKEY = 'archive:' + PLAYLIST_ID;
+  const OKEY = 'shuffle:original:' + PLAYLIST_ID;   // the playlist's order before it was first shuffled
   let archive = GM_getValue(AKEY, {});
   if (!archive || typeof archive !== 'object' || Array.isArray(archive)) archive = {};
   let archiveNote = '', goneCache = null, goneOpen = false;
@@ -1900,7 +1926,7 @@ function main() {
   function snapshot() {
     const h = {};
     for (const k of historyKeys()) h[k.slice(8)] = GM_getValue(k, []);
-    return { history: h, marks: getMarks(), dislikes: getDislikes(), archive: GM_getValue(AKEY, {}) };
+    return { history: h, marks: getMarks(), dislikes: getDislikes(), archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null) };
   }
   function backupText() { return JSON.stringify(Backup.build(snapshot(), { playlistId: PLAYLIST_ID, scriptVersion: (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '' })); }
   function reloadState() {
@@ -1958,6 +1984,7 @@ function main() {
     const ul = el('ul', '');
     ul.append(el('li', '', pv.plays ? `${fmt(pv.plays)} plays, ${when(pv.first)} to ${when(pv.last)}; ${fmt(pv.newPlays)} of them aren't on this device yet` : 'No plays'),
       el('li', '', `${fmt(pv.marks)} marks, ${fmt(pv.dislikes)} dislikes, ${fmt(pv.songs)} remembered playlist songs`));
+    if (pv.original) ul.append(el('li', '', `The playlist's original order, saved ${when(pv.original / 1000)}`));
     if (v.exportedAt) ul.append(el('li', '', `Backed up ${when(v.exportedAt / 1000)}`));
     if (v.skipped) ul.append(el('li', '', `${fmt(v.skipped)} damaged entr${v.skipped === 1 ? 'y' : 'ies'} will be skipped`));
     const row = el('div', 'brow');
@@ -1985,6 +2012,8 @@ function main() {
     GM_setValue('marks', mode === 'merge' ? Backup.mergeMarks(before.marks, inc.marks) : inc.marks);
     GM_setValue('dislikes', mode === 'merge' ? Backup.mergeDislikes(before.dislikes, inc.dislikes) : inc.dislikes);
     GM_setValue(AKEY, mode === 'merge' ? Backup.mergeArchive(before.archive, inc.archive) : inc.archive);
+    // The original playlist order can't be recreated, so even Replace keeps this device's when the backup has none
+    GM_setValue(OKEY, mode === 'merge' ? Backup.mergeOriginal(before.original, inc.original) : inc.original || before.original || null);
     reloadState();
     pending = null; $('#bkpreview').textContent = '';
     say('#bkinmsg', mode === 'merge' ? `Merged. ${fmt(history.length)} plays saved here now.` : `Replaced. ${fmt(history.length)} plays saved here now.`, 'ok');
@@ -2006,6 +2035,7 @@ function main() {
     const chans = new Set(Object.keys(d.history).concat(mapOf(historyKeys(), k => k.slice(8))));   // also empties channels added by the import
     chans.forEach(ch => GM_setValue('history:' + ch, d.history[ch] || []));
     GM_setValue('marks', d.marks || {}); GM_setValue('dislikes', d.dislikes || {}); GM_setValue(AKEY, d.archive || {});
+    if ('original' in d) GM_setValue(OKEY, d.original || null);   // undo snapshots from before 3.12.1 don't have it
     GM_setValue(PREKEY, null);
     reloadState();
     say('#bkinmsg', `Import undone. ${fmt(history.length)} plays saved here, as before.`, 'ok');
@@ -2015,9 +2045,18 @@ function main() {
 
   /* ----- Shuffle the real playlist (YouTube Data API; you sign in with Google) ----- */
   // The plan and the moves are in Shuffle. The job is saved before the first move, so a shuffle cut short
-  // (quota, sign-in running out, closing the page) is finished the next time Shuffle opens. The order from
-  // before the last shuffle is kept so it can be put back.
+  // (quota, sign-in running out, closing the page) is finished the next time Shuffle opens. Kept for
+  // putting things back: the order before the last shuffle, and the playlist's original order (saved
+  // before the first shuffle, never overwritten, and carried in backups).
   const JOBKEY = 'shuffle:job:' + PLAYLIST_ID, LASTKEY = 'shuffle:last:' + PLAYLIST_ID, USEDKEY = 'shuffle:units';
+  const KINDS = {
+    shuffle: { head: 'New order', go: 'Shuffle the playlist', run: 'Shuffling your playlist…', name: 'A shuffle',
+      done: 'Done. Your playlist is in the new order, and reading it back confirmed it.' },
+    undo: { head: 'The order before the last shuffle', go: 'Put back this order', run: 'Putting back the earlier order…', name: 'Putting back the earlier order',
+      done: 'Done. The earlier order is back, and reading the playlist confirmed it.' },
+    original: { head: 'The original order', go: 'Put back the original order', run: 'Putting back the original order…', name: 'Putting back the original order',
+      done: 'Done. The original order is back, and reading the playlist confirmed it.' },
+  };
   const rand = n => { const lim = Math.floor(0x100000000 / n) * n, b = new Uint32Array(1); do { crypto.getRandomValues(b); } while (b[0] >= lim); return b[0] % n; };
   const plain = (text, cls, fn) => { const b = el('button', cls, text); b.type = 'button'; b.onclick = fn; return b; };   // no "Working…": these show their own progress
   let shufToken = null, shufRunning = false, shufStop = false, waitTimer = null, sh = {};
@@ -2073,6 +2112,27 @@ function main() {
     }, 700);
   }
 
+  // The playlist's original order: song ids with their video ids and titles, so it can also be read outside the script
+  function saveOriginal(ids, at) {
+    const byId = new Map();
+    for (const it of sh.items) byId.set(it.id, it);
+    const songs = [];
+    for (const id of ids) { const it = byId.get(id) || {}; songs.push({ id, videoId: it.videoId || '', title: it.title || '' }); }
+    GM_setValue(OKEY, { at, playlistId: PLAYLIST_ID, songs });
+  }
+  const originalIds = o => { const out = []; for (const s of o.songs) out.push(s.id); return out; };
+  function downloadOriginal() {
+    const o = GM_getValue(OKEY, null);
+    if (!o) return;
+    const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+    let csv = 'Position,Title,Video\r\n';
+    for (let i = 0; i < o.songs.length; i++) csv += `${i + 1},${q(o.songs[i].title)},${o.songs[i].videoId ? 'https://www.youtube.com/watch?v=' + o.songs[i].videoId : ''}\r\n`;
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${PLAYLIST_NAME.replace(/\W+/g, '-').toLowerCase()}-original-order.csv` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
   async function shufStart() {
     if (!GM_getValue('signin:clientId', '')) return shufShow('setup');
     shufToken = validToken();
@@ -2083,25 +2143,30 @@ function main() {
       const list = await Shuffle.readItems(ytCall, PLAYLIST_ID);
       sh = { channel: who.channel, items: list, current: Shuffle.idsOf(list), titles: new Map(), note: '' };
       for (const it of list) sh.titles.set(it.id, it.title);
+      // Shuffled with 3.12.0, before the original order was kept: the order before that shuffle is the original
+      const last = GM_getValue(LASTKEY, null);
+      if (!GM_getValue(OKEY, null) && last && last.before) saveOriginal(last.before, last.at);
       const job = GM_getValue(JOBKEY, null);
       if (job && job.target) {
         if (!Shuffle.sameSongs(sh.current, job.target)) { GM_setValue(JOBKEY, null); sh.note = "An earlier shuffle didn't finish, but songs have been added or removed since, so it was set aside."; }
         else if (Shuffle.matches(sh.current, job.target)) finished(job);
         else return prepare(job.target, job.kind, job.before, job.at);
       }
-      prepare(Shuffle.order(sh.current, rand), 'shuffle', sh.current, 0);
+      newShuffle();
     } catch (e) { shufShow('error', e.status !== undefined ? trouble(e) : `Can't shuffle: ${e.message}.`); }
   }
   function prepare(target, kind, before, resumeOf) {
     Object.assign(sh, { target, kind, before, resumeOf, moves: Shuffle.plan(sh.current, target) });
     shufShow('ready');
   }
+  const newShuffle = () => prepare(Shuffle.order(sh.current, rand), 'shuffle', sh.current, 0);
   function finished(job) {
     GM_setValue(JOBKEY, null);
     GM_setValue(LASTKEY, job.kind === 'undo' ? null : { before: job.before, at: Date.now() });
   }
   async function go() {
     const job = { target: sh.target, before: sh.before, kind: sh.kind, at: sh.resumeOf || Date.now() };
+    if (!GM_getValue(OKEY, null)) saveOriginal(sh.before, Date.now());   // first change on this device: keep the order as it was
     GM_setValue(JOBKEY, job);
     shufRunning = true; shufStop = false;
     shufShow('running');
@@ -2126,12 +2191,11 @@ function main() {
     if (bar) { bar.firstChild.style.width = (k / n * 100) + '%'; bar.setAttribute('aria-valuenow', String(k)); }
     if (t) t.textContent = `Moved ${fmt(k)} of ${fmt(n)}`;
   }
-  const newShuffle = () => prepare(Shuffle.order(sh.current, rand), 'shuffle', sh.current, 0);
 
   function shufShow(view, msg) {
     const body = $('#shufbody');
     body.textContent = '';
-    const sec = el('div', 'ssec');
+    let sec = el('div', 'ssec');
     body.append(sec);
     const say1 = (text, cls) => sec.append(el('div', 'bmsg' + (cls ? ' ' + cls : ''), text));
     const row = (...b) => { const r = el('div', 'brow'); r.append(...b); sec.append(r); };
@@ -2157,16 +2221,16 @@ function main() {
     } else if (view === 'loading') {
       sec.append(el('div', 'sline', msg || 'Working…'));
     } else if (view === 'ready') {
-      const n = sh.current.length, m = sh.moves.length, u = Shuffle.units(m), used = usedToday();
-      const undo = sh.kind === 'undo';
+      const n = sh.current.length, m = sh.moves.length, u = Shuffle.units(m), used = usedToday(), K = KINDS[sh.kind];
       if (sh.note) say1(sh.note);
       if (sh.resumeOf) {
-        sec.append(el('h3', '', 'Unfinished ' + (undo ? 'put-back' : 'shuffle')),
-          el('div', 'sline', `${undo ? 'Putting back the earlier order' : 'A shuffle'} started ${when(sh.resumeOf / 1000)} didn't finish. ` +
-            `Finishing takes ${fmt(m)} more move${m === 1 ? '' : 's'}, about ${fmt(u)} quota units.`));
+        sec.append(el('h3', '', 'Unfinished'),
+          el('div', 'sline', `${K.name} started ${when(sh.resumeOf / 1000)} didn't finish. Finishing takes ${fmt(m)} more move${m === 1 ? '' : 's'}, about ${fmt(u)} quota units.`));
       } else {
-        sec.append(el('h3', '', undo ? 'The order before the last shuffle' : 'New order'),
+        sec.append(el('h3', '', K.head),
           el('div', 'sline', `${fmt(n)} songs. Putting them in this order takes ${fmt(m)} move${m === 1 ? '' : 's'}, about ${fmt(u)} quota units.`));
+        if (sh.kind === 'original' && (sh.added || sh.removed)) sec.append(el('div', 'snote',
+          keep([sh.added ? `${fmt(sh.added)} song${sh.added === 1 ? '' : 's'} added since go at the end.` : '', sh.removed ? `${fmt(sh.removed)} removed since ${sh.removed === 1 ? 'is' : 'are'} skipped.` : ''], Boolean).join(' ')));
       }
       sec.append(el('div', 'snote', `Google allows ${fmt(Shuffle.DAILY_UNITS)} units a day; this script has used about ${fmt(used)} today. Signed in as ${sh.channel}.`));
       if (used + u > Shuffle.DAILY_UNITS) say1(`That's more than today's quota has left, so it will stop partway. Open Shuffle again after midnight Pacific (${quotaReset()} your time) to finish.`, 'err');
@@ -2174,7 +2238,7 @@ function main() {
       for (let i = 0; i < Math.min(12, n); i++) ol.append(el('li', '', sh.titles.get(sh.target[i]) || '?'));
       sec.append(ol);
       if (n > 12) sec.append(el('div', 'snote', `…and ${fmt(n - 12)} more.`));
-      const label = sh.resumeOf ? 'Finish it' : undo ? 'Put back this order' : 'Shuffle the playlist';
+      const label = sh.resumeOf ? 'Finish it' : K.go;
       let armed = null;
       const goBtn = plain(label, 'ctl primary', () => {
         if (!m) return;
@@ -2183,16 +2247,41 @@ function main() {
       });
       goBtn.disabled = !m;
       if (sh.resumeOf) row(goBtn, plain('Start a new shuffle instead', 'ctl', () => { GM_setValue(JOBKEY, null); newShuffle(); }));
-      else row(goBtn, plain(undo ? 'Back to a new shuffle' : 'Reshuffle', 'ctl', newShuffle));
-      const last = GM_getValue(LASTKEY, null);
-      if (!sh.resumeOf && !undo && last && last.before && Shuffle.sameSongs(sh.current, last.before) && !Shuffle.matches(sh.current, last.before)) {
-        sec.append(el('div', 'snote', `Last shuffled ${when(last.at / 1000)}. You can put back the order from before that.`));
-        row(plain('Show the earlier order', 'ctl', () => prepare(last.before, 'undo', sh.current, 0)));
+      else row(goBtn, plain(sh.kind === 'shuffle' ? 'Reshuffle' : 'Back to a new shuffle', 'ctl', newShuffle));
+      if (!m) sec.append(el('div', 'snote', 'The playlist is already in this order.'));
+
+      // Putting things back
+      if (!sh.resumeOf) {
+        sec = el('div', 'ssec'); body.append(sec);
+        sec.append(el('h3', '', 'Put back'));
+        const orig = GM_getValue(OKEY, null);
+        if (orig && orig.songs && orig.songs.length) {
+          sec.append(el('div', 'sline', `Original order saved ${when(orig.at / 1000)} (${fmt(orig.songs.length)} songs). It's kept on this device and in backups, and never overwritten.`));
+          const btns = [];
+          if (sh.kind !== 'original') btns.push(plain('Show the original order', 'ctl', () => {
+            const ids = originalIds(orig), target = Shuffle.restoreOrder(ids, sh.current);
+            const now = new Set(sh.current);
+            let removed = 0;
+            for (const id of ids) if (!now.has(id)) removed++;
+            sh.removed = removed; sh.added = sh.current.length - (ids.length - removed);
+            prepare(target, 'original', sh.current, 0);
+          }));
+          btns.push(plain('Download it', 'ctl', downloadOriginal));
+          row(...btns);
+        } else {
+          sec.append(el('div', 'snote', "No original order is saved on this device yet. The playlist's current order is saved as the original before the first change. " +
+            "If you've already shuffled on another device, bring in its backup first (Backup / Restore), so the true original comes with it."));
+        }
+        const last = GM_getValue(LASTKEY, null);
+        if (sh.kind === 'shuffle' && last && last.before && Shuffle.sameSongs(sh.current, last.before) && !Shuffle.matches(sh.current, last.before)) {
+          sec.append(el('div', 'snote', `Last changed ${when(last.at / 1000)}. You can put back the order from before that.`));
+          row(plain('Show the earlier order', 'ctl', () => prepare(last.before, 'undo', sh.current, 0)));
+        }
+        sec.append(el('div', 'snote', "Play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order."));
       }
-      sec.append(el('div', 'snote', "Afterwards, play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order."));
     } else if (view === 'running') {
       const n = sh.moves.length;
-      sec.append(el('div', 'sline', sh.kind === 'undo' ? 'Putting back the earlier order…' : 'Shuffling your playlist…'));
+      sec.append(el('div', 'sline', KINDS[sh.kind].run));
       const bar = el('div', 'bar'); bar.id = 'shbar'; bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuemin', '0');
       bar.setAttribute('aria-valuemax', String(n)); bar.setAttribute('aria-valuenow', '0'); bar.setAttribute('aria-label', 'Songs moved');
       const fill = el('div', 'fill'); fill.style.width = '0%'; bar.append(fill);
@@ -2200,7 +2289,7 @@ function main() {
       sec.append(bar, t, el('div', 'snote', "Keep this page open until it finishes. If it's interrupted, Shuffle picks up where it stopped."));
       row(plain('Stop', 'ctl', () => { shufStop = true; $('#shprog').textContent += ' — stopping…'; }));
     } else if (view === 'done') {
-      say1(sh.kind === 'undo' ? 'Done. The earlier order is back, and reading the playlist confirmed it.' : 'Done. Your playlist is in the new order, and reading it back confirmed it.', 'ok');
+      say1(KINDS[sh.kind].done, 'ok');
       sec.append(el('div', 'snote', "Play it with YouTube's shuffle off. The YouTube app may take a few minutes to show the new order."));
       row(plain('Shuffle again', 'ctl', shufStart));
     } else {   // 'error'

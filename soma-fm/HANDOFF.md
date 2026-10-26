@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.12.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.12.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -87,9 +87,10 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
 | `signin:pending`, `signin:token`, `signin:reopen` | Sign-in in progress (random `state`, popup or same tab); the one-hour access key `{ token, at, exp }`; "reopen Shuffle after a same-tab sign-in". |
 | `shuffle:job:<playlistId>` | A shuffle or put-back in progress: `{ target, before, kind: 'shuffle' \| 'undo', at }`. Saved before the first move; cleared once the read-back confirms the order. |
+| `shuffle:original:<playlistId>` | `{ at, playlistId, songs: [{ id, videoId, title }] }`: the playlist's order before it was first changed. Saved once, never overwritten; **included in backups** (merge keeps the earliest saved; Replace keeps this device's if the backup has none). |
 | `shuffle:last:<playlistId>` | `{ before, at }`: the order before the last shuffle, for "Show the earlier order". |
 | `shuffle:units` | `{ day, units }`: this script's own estimate of quota used today (Pacific date). |
-| `filters`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:` and `shuffle:` keys). |
+| `filters`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:` keys or the other `shuffle:` keys). |
 
 **Song key** = `Matcher.markKey(artist, title)` = normalized artist + `|` + normalized title (case, accents, punctuation ignored). Marks, dislikes, stats and caches all use it.
 
@@ -174,7 +175,11 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
   and moves each other song straight after its new predecessor. That's about 95 moves for 116 songs, not 116 (about 4,750 units).
 - **Safety:** checks that the signed-in channel owns the playlist; songs are only moved, never added or removed; two taps to
   start; the job is saved first, so a run cut short by quota, expiry, Stop or closing the page is finished next time; the playlist
-  is read back and compared before it says Done; the order before the last shuffle can be put back.
+  is read back and compared before it says Done; the order before the last change can be put back.
+- **Original order (3.12.1, Dan asked for it):** saved before the first change on a device, never overwritten, carried in backups,
+  and downloadable as a CSV (position, title, video link). Putting it back keeps songs added since at the end and skips removed ones.
+  A device with none saved says so, and suggests bringing in the other device's backup before shuffling there; otherwise that
+  device would save its already-shuffled order as the "original".
 - **Not yet seen on the real API:** a deleted or private video in the playlist may refuse to move. If that happens, the panel
   reports YouTube's message and the job can be finished or set aside.
 - Playing it: shuffle off, playlist sort setting on **Manual** (otherwise YouTube shows another order).
@@ -182,7 +187,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 51 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 56 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -216,4 +221,4 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.9 | Only the changed song is re-matched (2.3 s → 0.2 s on a slowed CPU); "Working…" indicator; no redraws under dialogs; Open buttons in Stats. |
 | 3.10 | "▸ N plays" history on cards; "Most recent" sort in Stats. |
 | 3.11 | Backup / Restore (merge, replace, undo); Per page fix; source check for delayed actions; `page-check.js`. 3.11.1 moved into the Scripts repo; Tampermonkey auto-update from GitHub. 3.11.2 play logs show the elapsed time with * for a gap (legend below), wider Stats panel on desktop. |
-| 3.12 | Shuffle the real playlist through the YouTube Data API (Google sign-in, fewest moves, resume, read-back check, put back). |
+| 3.12 | Shuffle the real playlist through the YouTube Data API (Google sign-in, fewest moves, resume, read-back check, put back). 3.12.1 keeps the original order (in backups, downloadable). |

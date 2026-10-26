@@ -164,12 +164,41 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const done = await waitShuf(page, /Done\./);
     check('Shuffle moves the songs, checks the order, and reports done', done && api.puts === moves && api.order.join() !== api.start.join(), `puts ${api.puts}, moves ${moves}`);
     check('Shuffle remembers the earlier order and clears the job', await page.evaluate(() => !window.__store['shuffle:job:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'] && window.__store['shuffle:last:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'].before.length === 30));
+    const orig = await page.evaluate(() => window.__store['shuffle:original:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt']);
+    check('The original order is saved before the first shuffle', orig && orig.songs.map(x => x.id).join() === api.start.join() && orig.songs[0].title === 'Song pi0' && orig.songs[0].videoId === 'vpi0');
+    await shufClick(page, 'Shuffle again');
+    await waitShuf(page, /Show the earlier order/);
+    // A second shuffle doesn't overwrite the original
+    await shufClick(page, 'Shuffle the playlist'); await shufClick(page, 'Tap again to start');
+    await waitShuf(page, /Done\./);
+    const orig2 = await page.evaluate(() => window.__store['shuffle:original:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt']);
+    check('A second shuffle keeps the original order as it was', orig2.at === orig.at && orig2.songs.map(x => x.id).join() === api.start.join());
+    await shufClick(page, 'Shuffle again');
+    await waitShuf(page, /Show the original order/);
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 5000 }).catch(() => null), shufClick(page, 'Download it')]);
+    const csv = dl ? fs.readFileSync(await dl.path(), 'utf8') : '';
+    check('The original order downloads as a CSV of titles and video links', /^\ufeff?Position,Title,Video\r\n1,"Song pi0",https:\/\/www\.youtube\.com\/watch\?v=vpi0\r\n/.test(csv), csv.slice(0, 120));
+    await shufClick(page, 'Show the original order');
+    await shufClick(page, 'Put back the original order'); await shufClick(page, 'Tap again to start');
+    await waitShuf(page, /original order is back/);
+    check('Putting back the original order restores it', api.order.join() === api.start.join());
+    // and back to the shuffled order, then put back "the earlier order" (the step before)
+    await shufClick(page, 'Shuffle again');
+    await waitShuf(page, /New order/);
+    await shufClick(page, 'Shuffle the playlist'); await shufClick(page, 'Tap again to start');
+    await waitShuf(page, /Done\./);
     await shufClick(page, 'Shuffle again');
     await waitShuf(page, /Show the earlier order/);
     await shufClick(page, 'Show the earlier order');
     await shufClick(page, 'Put back this order'); await shufClick(page, 'Tap again to start');
     await waitShuf(page, /Done\./);
     check('Putting back the earlier order restores it', api.order.join() === api.start.join());
+    // The original order travels in backups
+    await inShadow(page, r => r.querySelector('#shclose').click());
+    await inShadow(page, r => { r.querySelector('#backup').click(); r.querySelector('#bkcopy').click(); });
+    await settle(page); await page.waitForTimeout(200);
+    const backupHasIt = await page.evaluate(() => { const b = JSON.parse(window.__clip || '{}'); return !!(b.data && b.data.original && b.data.original.songs.length === 30); });
+    check('Backups include the original order', backupHasIt);
     check('Shuffle: no script errors', errors.length === 0, errors.join(' | '));
     await ctx.close();
   }
