@@ -1,8 +1,11 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.11.0
+// @version      3.11.1
 // @description  Marks each song on SomaFM's song history as in / not in your YouTube playlist, with a YouTube search link for the ones you don't have.
+// @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
+// @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
+// @downloadURL  https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
 // @match        https://somafm.com/*/songhistory.html
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue

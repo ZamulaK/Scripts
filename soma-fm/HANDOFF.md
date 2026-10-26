@@ -1,6 +1,9 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.11.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.11.1**.
+
+The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
+`C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
 Read this file before changing anything. `CLAUDE.md` holds the short list of rules; this file explains them.
 
 ---
@@ -25,7 +28,10 @@ song is already there, (2) find the ones he doesn't have, and (3) understand Som
 - **Laptop (next):** a desktop browser with Tampermonkey, kept running with PowerToys Awake for continuous recording.
   The site needs to be excluded from tab sleeping (Edge "Never put these sites to sleep" / Chrome "Always keep these sites active").
 - Tampermonkey storage is **per browser**. Moving data between devices uses Backup / Restore (merge).
-- Dan installs updates by importing the `.user.js` file in Tampermonkey (Dashboard → Utilities → Import from file). Every change bumps `@version`.
+- **Updates arrive automatically** (since 3.11.1): `@updateURL` / `@downloadURL` point at the raw file on GitHub's `main`
+  branch, and Tampermonkey installs any higher `@version` it finds there. So **every push to `main` ships to Dan's devices**;
+  push only after the regression gates pass. Every change bumps `@version` (and `package.json`, which a source check enforces).
+  Import from file (Dashboard → Utilities) still works for testing a build before pushing it.
 
 ## 3. Files
 
@@ -158,8 +164,7 @@ Mommy…" played 9:47 PM, then not until 2:48 PM. Dan's view: SomaFM probably pl
    - **B. Reorder the actual playlist:** needs **OAuth** (Dan has an API key, but keys are read-only): an OAuth client in his Google Cloud project, himself as a test user, and a small sign-in page. `playlistItems.update` per song costs about 50 units of the 10,000/day default quota, so about 5,800 for 116 songs (at most once a day). Confirm current quota costs in YouTube's docs before building. Benefit: playing the playlist in order works in the YouTube app.
 2. **Laptop setup** (above). Then merge the tablet backup into it.
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.
-4. **Auto-update from Git:** add `@updateURL` / `@downloadURL` pointing at the raw file in Dan's GitHub repo, so Tampermonkey updates itself instead of manual imports. Offered earlier; worth doing now.
-5. Small: the `@description` predates the stats and history features.
+4. Small: the `@description` predates the stats and history features.
 
 ## 11. Working with Dan
 
@@ -184,4 +189,4 @@ Mommy…" played 9:47 PM, then not until 2:48 PM. Dan's view: SomaFM probably pl
 | 3.6–3.8 | Replay statistics, per-song play logs, recorded-time replay estimate. |
 | 3.9 | Only the changed song is re-matched (2.3 s → 0.2 s on a slowed CPU); "Working…" indicator; no redraws under dialogs; Open buttons in Stats. |
 | 3.10 | "▸ N plays" history on cards; "Most recent" sort in Stats. |
-| 3.11 | Backup / Restore (merge, replace, undo); Per page fix; source check for delayed actions; `page-check.js`. |
+| 3.11 | Backup / Restore (merge, replace, undo); Per page fix; source check for delayed actions; `page-check.js`. 3.11.1 moved into the Scripts repo; Tampermonkey auto-update from GitHub. |

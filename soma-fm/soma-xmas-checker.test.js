@@ -545,6 +545,18 @@ function sourceChecks() {
   if (!ok) fail++;
   console.log('--- source checks ---');
   console.log(`${ok ? 'PASS' : 'FAIL'}  no event target read inside a delayed action${ok ? '' : ' (lines ' + bad.join(', ') + ')'}`);
+
+  // Tampermonkey auto-updates from the repo copy: both URLs must point at this file there,
+  // and package.json must carry the same version so a bump isn't half done.
+  const header = key => (src.match(new RegExp('^// @' + key + '\\s+(\\S+)', 'm')) || [])[1];
+  const raw = 'https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js';
+  const urlsOk = header('updateURL') === raw && header('downloadURL') === raw;
+  if (!urlsOk) fail++;
+  console.log(`${urlsOk ? 'PASS' : 'FAIL'}  update and download URLs point at the repo copy of this file`);
+  const pkgVersion = require('./package.json').version;
+  const versionOk = header('version') === pkgVersion;
+  if (!versionOk) fail++;
+  console.log(`${versionOk ? 'PASS' : 'FAIL'}  @version ${header('version')} matches package.json ${pkgVersion}`);
   console.log('');
   return fail;
 }
