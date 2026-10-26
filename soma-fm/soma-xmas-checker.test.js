@@ -382,6 +382,17 @@ async function readerChecks() {
   check('merge adds only later positions, once each, in order', added === 2 && list.length === 4 && list[2].idx === 3 && list[3].idx === 4);
   check('counts reads "1,234 videos"', R.counts({ stats: [{ runs: [{ text: '1,234' }] }] }).total === 1234);
 
+  // Oct 26: right after a shuffle, the first 100 came back in the new order and the side panel in the old one.
+  // The count added up (129), but 7 songs were repeats and 7 others were missing, and they were marked gone.
+  const good = [], mixed = [];
+  for (let i = 0; i < 129; i++) good.push({ id: 'v' + i });
+  for (let i = 0; i < 122; i++) mixed.push({ id: 'v' + i });
+  for (let i = 0; i < 7; i++) mixed.push({ id: 'v' + (i * 3) });
+  check('repeats: counts songs listed a second time', R.repeats(mixed) === 7 && R.repeats(good) === 0);
+  check('a read with songs repeated that weren\'t before is not trusted', !R.consistent(mixed, good));
+  check('a clean read is trusted, and a song really in the playlist twice stays fine', R.consistent(good, good) && R.consistent(good.concat([{ id: 'v5' }]), good.concat([{ id: 'v5' }])) && R.consistent(good, null));
+  check('with nothing to compare to, a read with repeats is not trusted', !R.consistent(mixed, null));
+
   const P = R.parseLength;
   check('lengths: "3:05", "1:02:03", junk', P('3:05') === 185 && P('1:02:03') === 3723 && P('') === 0 && P('live') === 0 && P('3:') === 0);
   check('lengths kept from both page types', r.items[0].secs === 180 && R.entryFrom({ videoId: 'x', title: { simpleText: 't' }, lengthText: { simpleText: '4:10' } }).secs === 250);

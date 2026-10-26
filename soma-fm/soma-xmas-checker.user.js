@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.2
+// @version      3.12.3
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -812,7 +812,19 @@ const Reader = (() => {
     return { items, hidden: hidden + unavailable, complete, read: entries.length, expected };
   }
 
-  return { read, readInitialData, entryFrom, collect, mergeByIndex, counts, parseLength };
+  // How many songs in a read are repeats of one already listed
+  function repeats(list) {
+    const seen = new Set();
+    let n = 0;
+    for (let i = 0; i < list.length; i++) { if (seen.has(list[i].id)) n++; else seen.add(list[i].id); }
+    return n;
+  }
+  // For a while after the playlist is reordered, the playlist page (first 100) and the watch-page side
+  // panel (the rest) can show different orders, so some songs come back twice and others not at all,
+  // while the count still adds up. A read with more repeats than the last good one is that, not real.
+  const consistent = (fresh, prevItems) => repeats(fresh) <= repeats(prevItems || []);
+
+  return { read, readInitialData, entryFrom, collect, mergeByIndex, counts, parseLength, repeats, consistent };
 })();
 
 /* ---------- Shuffling the real playlist (tested by soma-xmas-checker.test.js) ---------- */
@@ -1409,6 +1421,20 @@ function main() {
     }
     try {
       const fresh = await fetchPlaylist();
+      const prevItems = cached && cached.schema === CACHE_SCHEMA && Array.isArray(cached.items) ? cached.items : null;
+      if (!Reader.consistent(fresh.items, prevItems)) {
+        const n = Reader.repeats(fresh.items) - Reader.repeats(prevItems || []);
+        if (prevItems && prevItems.length) {
+          // Keep the last good read (only the order changes in a reorder, and order doesn't affect matching).
+          // Its time is moved on so the next try is in CACHE_MINUTES, not every minute; Refresh tries now.
+          if (items !== prevItems) statusCache.clear();
+          items = prevItems; hiddenCount = cached.hidden || 0; playlistAt = Date.now(); playlistError = '';
+          GM_setValue('playlist', Object.assign({}, cached, { at: playlistAt }));
+          archiveNote = `YouTube's playlist pages disagreed this time (${n} song${n === 1 ? '' : 's'} came back twice and others not at all), which happens for a while after the playlist is reordered. The previous read is still used; it tries again in ${CACHE_MINUTES} minutes, or use Refresh.`;
+          return;
+        }
+        fresh.complete = false;   // nothing to fall back on: show it, but never mark songs gone from it
+      }
       items = fresh.items; hiddenCount = fresh.hidden; playlistAt = Date.now(); playlistError = ''; statusCache.clear();
       GM_setValue('playlist', { schema: CACHE_SCHEMA, at: playlistAt, items, hidden: hiddenCount });
       // Remember every song, and notice any that have left the playlist since the last read,
