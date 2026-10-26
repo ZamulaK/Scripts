@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.1
+// @version      3.12.2
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -2143,10 +2143,14 @@ function main() {
       const list = await Shuffle.readItems(ytCall, PLAYLIST_ID);
       sh = { channel: who.channel, items: list, current: Shuffle.idsOf(list), titles: new Map(), note: '' };
       for (const it of list) sh.titles.set(it.id, it.title);
-      // Shuffled with 3.12.0, before the original order was kept: the order before that shuffle is the original
-      const last = GM_getValue(LASTKEY, null);
-      if (!GM_getValue(OKEY, null) && last && last.before) saveOriginal(last.before, last.at);
-      const job = GM_getValue(JOBKEY, null);
+      // No original order saved on this device yet: save it now, before anything can change. If this device
+      // already changed the playlist (3.12.0 didn't keep the original), the order from before that is the original.
+      const last = GM_getValue(LASTKEY, null), job = GM_getValue(JOBKEY, null);
+      if (!GM_getValue(OKEY, null)) {
+        if (last && last.before) saveOriginal(last.before, last.at);
+        else if (job && job.before) saveOriginal(job.before, job.at);
+        else { saveOriginal(sh.current, Date.now()); sh.savedNow = true; }
+      }
       if (job && job.target) {
         if (!Shuffle.sameSongs(sh.current, job.target)) { GM_setValue(JOBKEY, null); sh.note = "An earlier shuffle didn't finish, but songs have been added or removed since, so it was set aside."; }
         else if (Shuffle.matches(sh.current, job.target)) finished(job);
@@ -2268,9 +2272,8 @@ function main() {
           }));
           btns.push(plain('Download it', 'ctl', downloadOriginal));
           row(...btns);
-        } else {
-          sec.append(el('div', 'snote', "No original order is saved on this device yet. The playlist's current order is saved as the original before the first change. " +
-            "If you've already shuffled on another device, bring in its backup first (Backup / Restore), so the true original comes with it."));
+          if (sh.savedNow) sec.append(el('div', 'snote', "Saved just now from the playlist as it is. If you've already shuffled it on another device, " +
+            "bring in that device's backup (Backup / Restore, Merge): the order saved first is kept, so the true original wins."));
         }
         const last = GM_getValue(LASTKEY, null);
         if (sh.kind === 'shuffle' && last && last.before && Shuffle.sameSongs(sh.current, last.before) && !Shuffle.matches(sh.current, last.before)) {

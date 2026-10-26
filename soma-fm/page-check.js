@@ -154,6 +154,8 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const { ctx, page, errors } = await openPage(browser, { width: 600, scheme: 'dark', store: signedIn(), api });
     await inShadow(page, r => r.querySelector('#shuffle').click());
     const ready = await waitShuf(page, /New order/);
+    const early = await page.evaluate(() => window.__store['shuffle:original:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt']);
+    check('Opening Shuffle saves the original order before anything is moved', early && api.puts === 0 && early.songs.length === 30 && early.songs[0].id === 'pi0' && /Saved just now/.test(await shufText(page)));
     const t = await shufText(page);
     const moves = Number((t.match(/takes (\d+) move/) || [])[1]);
     check('Shuffle reads the playlist and shows the new order and its cost', ready && /30 songs/.test(t) && moves > 15 && moves < 30 && /about [\d,]+ quota units/.test(t), t.slice(0, 200));
