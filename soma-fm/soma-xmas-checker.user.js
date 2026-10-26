@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.11.1
+// @version      3.11.2
 // @description  Marks each song on SomaFM's song history as in / not in your YouTube playlist, with a YouTube search link for the ones you don't have.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -643,15 +643,15 @@ const Stats = (() => {
     const d = Math.floor(h / 24), rh = h % 24;
     return `${d} days${rh ? ' ' + rh + ' h' : ''}`;
   }
-  // One song's plays, newest first, each with the time since its previous play, or a note that a
-  // recording gap falls in between. times: that song's play times, oldest first.
+  // One song's plays, newest first, each with the time since its previous play and whether a
+  // recording gap falls in between (plays may have been missed there). times: oldest first.
   function playLog(times, gapTimes) {
     const out = [];
     for (let k = times.length - 1; k >= 0; k--) {
       const at = times[k], prev = k > 0 ? times[k - 1] : null;
       let spansGap = false;
       if (prev !== null) for (let g = 0; g < gapTimes.length; g++) if (gapTimes[g] > prev && gapTimes[g] <= at) { spansGap = true; break; }
-      out.push({ at, first: prev === null, spansGap, since: prev === null || spansGap ? 0 : at - prev });
+      out.push({ at, first: prev === null, spansGap, since: prev === null ? 0 : at - prev });
     }
     return out;
   }
@@ -943,8 +943,9 @@ function main() {
     .spin{width:.9em;height:.9em;border-radius:50%;border:2px solid currentColor;border-right-color:transparent}
     @media (prefers-reduced-motion:no-preference){.spin{animation:xmspin .7s linear infinite}@keyframes xmspin{to{transform:rotate(360deg)}}}
     [aria-busy="true"]{cursor:progress}
-    dialog#statsbox,dialog#backupbox{width:min(46rem,calc(100% - 32px));max-height:min(88vh,60rem);padding:0;border:1px solid var(--line);border-radius:16px;
+    dialog#statsbox,dialog#backupbox{width:min(46rem,calc(100% - 32px));margin:auto;max-height:min(88vh,60rem);padding:0;border:1px solid var(--line);border-radius:16px;
       background:var(--bg);color:var(--fg);font:inherit;box-shadow:0 18px 50px rgba(0,0,0,.25)}
+    dialog#statsbox{width:min(72rem,calc(100% - 32px))}
     dialog#statsbox::backdrop,dialog#backupbox::backdrop{background:rgba(10,20,15,.45)}
     #backupbody{padding:1rem;display:grid;gap:1.1rem}
     .brow{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
@@ -992,6 +993,7 @@ function main() {
     .plog li span{color:var(--muted)}
     .plog li.gapped span{color:var(--other-fg)}
     .plog li.this b{text-decoration:underline;text-underline-offset:2px}
+    .plog .plegend{margin:.35rem 0 0;font-size:.78em;color:var(--muted)}
     .cardlog{grid-column:1 / -1;margin-top:.35rem}
     .histbtn{display:inline-flex;margin-top:.35rem;font-size:.92em;font-weight:650;background:var(--chip);color:var(--fg);
       border:1px solid var(--line);border-radius:999px;padding:.15em .55em;white-space:nowrap}
@@ -1366,6 +1368,21 @@ function main() {
     render();
   }
 
+  // One song's play log: each play with the time since the previous one; * marks a recording gap in between
+  function playLogBox(cls, times, gapTimes, thisAt) {
+    const box = el('div', cls), ul = el('ul', '');
+    let gaps = false;
+    for (const e of Stats.playLog(times, gapTimes)) {
+      if (e.spansGap) gaps = true;
+      const it = el('li', (e.spansGap ? 'gapped' : '') + (e.at === thisAt ? ' this' : ''));
+      it.append(el('b', '', History.formatDate(e.at) + ' ' + History.formatTime(e.at)), ' ',
+        el('span', '', e.first ? 'first recorded' : Stats.formatSpan(e.since) + (e.spansGap ? '*' : '')));
+      ul.append(it);
+    }
+    box.append(ul, el('p', 'plegend', 'Time since the previous play.' + (gaps ? ' * A recording gap falls in between, so plays may have been missed.' : '')));
+    return box;
+  }
+
   function render() {
     const marks = getMarks(), dislikes = getDislikes();
     const base = baseRows();
@@ -1490,16 +1507,7 @@ function main() {
       }
       if (nPlays > 1 && openLogs.has(logKey)) {
         const { times, gapTimes } = Stats.songTimes(history, s.key);
-        const box = el('div', 'plog cardlog');
-        const ul = el('ul', '');
-        for (const e of Stats.playLog(times, gapTimes)) {
-          const it = el('li', (e.spansGap ? 'gapped' : '') + (e.at === s.at ? ' this' : ''));
-          it.append(el('b', '', History.formatDate(e.at) + ' ' + History.formatTime(e.at)), ' ',
-            el('span', '', e.first ? 'first recorded' : e.spansGap ? 'after a recording gap' : Stats.formatSpan(e.since) + ' later'));
-          ul.append(it);
-        }
-        box.append(ul);
-        li.append(box);
+        li.append(playLogBox('plog cardlog', times, gapTimes, s.at));
       }
       ol.append(li);
       // The page wasn't open between this play and the one below it
@@ -1574,15 +1582,7 @@ function main() {
         let box = root.getElementById ? root.getElementById(logId) : root.querySelector('#' + logId);
         if (open) { if (box) box.hidden = true; return; }
         if (!box) {                                    // built on first open only
-          box = el('div', 'plog'); box.id = logId;
-          const ul = el('ul', '');
-          for (const e of Stats.playLog(s.times, st.gapTimes)) {
-            const it = el('li', e.spansGap ? 'gapped' : '');
-            it.append(el('b', '', History.formatDate(e.at) + ' ' + History.formatTime(e.at)), ' ',
-              el('span', '', e.first ? 'first recorded' : e.spansGap ? 'after a recording gap' : Stats.formatSpan(e.since) + ' later'));
-            ul.append(it);
-          }
-          box.append(ul);
+          box = playLogBox('plog', s.times, st.gapTimes, null); box.id = logId;
           li.append(box);
         }
         box.hidden = false;

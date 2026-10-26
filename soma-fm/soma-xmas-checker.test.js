@@ -466,8 +466,8 @@ function statsChecks() {
   const stt = S.songTimes(plays, M.markKey('Kaskade', 'Christmas Is Here'));
   check('one song\'s times come back oldest first, with gap markers', stt.times.length === 2 && stt.times[0] === T && stt.times[1] === T + 1000 && stt.gapTimes.length === 1 && stt.gapTimes[0] === T + 600);
   const log = S.playLog([0, 600, 1500, 2000], [1500]);   // a gap was flagged on the play at 1500
-  check('play log: newest first, time since previous, gap marked, first play labeled',
-    log.length === 4 && log[0].at === 2000 && log[0].since === 500 && log[1].spansGap && log[1].since === 0 &&
+  check('play log: newest first, time since previous (kept across a gap, which is flagged), first play labeled',
+    log.length === 4 && log[0].at === 2000 && log[0].since === 500 && log[1].spansGap && log[1].since === 900 &&
     log[2].since === 600 && !log[2].spansGap && log[3].first);
   const unk = S.compute(plays, [], () => ({ status: 'unknown' }));
   check('playlist unreadable: no shares instead of a divide-by-zero', unk.labeledPlays === 0 && unk.shares.have.playPct === 0);

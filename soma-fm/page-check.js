@@ -83,6 +83,18 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     await ctx.close();
   }
 
+  // Stats panel uses most of a desktop screen
+  {
+    const { ctx, page } = await openPage(browser, { width: 1600, scheme: 'dark' });
+    await inShadow(page, r => r.querySelector('#stats').click());
+    await page.waitForTimeout(500);
+    const box = await inShadow(page, r => { const b = r.querySelector('#statsbox').getBoundingClientRect(); return { l: Math.round(b.left), r: Math.round(innerWidth - b.right), w: Math.round(b.width) }; });
+    check('1600px: Stats panel is wide (over 1100 px) and centered', box.w > 1100 && Math.abs(box.l - box.r) <= 2, JSON.stringify(box));
+    const cut = await inShadow(page, r => { r.querySelector('.ctbtn').click(); return [...r.querySelectorAll('.plog li')].filter(x => x.scrollWidth > x.clientWidth + 1).length; });
+    check('1600px: Stats play log entries are not cut off', cut === 0, String(cut));
+    await ctx.close();
+  }
+
   // 2. Interactions at the tablet width
   const { ctx, page, errors } = await openPage(browser, { width: 600, scheme: 'dark' });
 
@@ -97,6 +109,9 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await settle(page); await page.waitForTimeout(200);
   const logRows = await inShadow(page, r => r.querySelectorAll('.cardlog li').length);
   check('a repeated song opens its play history', log && logRows >= 2, `rows ${logRows}`);
+  const logText = await inShadow(page, r => ({ cut: [...r.querySelectorAll('.cardlog li')].filter(x => x.scrollWidth > x.clientWidth + 1).length,
+    legend: (r.querySelector('.cardlog .plegend') || {}).textContent || '', old: /later|after a recording/.test(r.querySelector('.cardlog').textContent) }));
+  check('play history entries are not cut off, and have a legend', logText.cut === 0 && /since the previous play/.test(logText.legend) && !logText.old, JSON.stringify(logText));
 
   // Stats panel
   await inShadow(page, r => r.querySelector('#stats').click());
