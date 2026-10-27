@@ -287,9 +287,12 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const offered = await inShadow(page, (r, was) => {
     const p = r.querySelector('.picker');
     if (!p) return null;
-    return { n: p.querySelectorAll('.choice').length, noKeep: ![...p.querySelectorAll('button')].some(b => /without linking/.test(b.textContent)) };
+    const labels = [...p.querySelectorAll('.pbtns button')].map(b => b.textContent);
+    return { n: p.querySelectorAll('.choice').length, labels };
   });
-  check('"Wrong video?" on an automatic match opens the picker without "Mark without linking"', fix && offered && offered.noKeep, JSON.stringify({ fix, offered }));
+  check('"Wrong video?" opens the picker with "Not in playlist" instead of "Mark without linking"',
+    fix && offered && offered.labels.join() === '✗ Not in playlist,Cancel', JSON.stringify({ fix, offered }));
+  check('An automatic match has no "Not this one" button', await inShadow(page, r => ![...r.querySelectorAll('li.have button')].some(b => /Not this one/.test(b.textContent))));
   if (offered && !offered.n) {   // no close matches besides the current one: search the playlist
     await inShadow(page, r => { const i = r.querySelector('#xm-pick'); i.value = 'christmas'; i.dispatchEvent(new Event('input')); });
     await settle(page);
@@ -308,6 +311,21 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     }, fix.title);
     check('Choosing another video relinks the song', after && /linked/.test(after.pill) && after.open !== fix.was, JSON.stringify(after));
   }
+
+  const notTitle = await inShadow(page, r => {
+    const li = [...r.querySelectorAll('li.have')].find(x => [...x.querySelectorAll('button')].some(b => b.textContent === 'Wrong video?'));
+    if (!li) return null;
+    [...li.querySelectorAll('button')].find(b => b.textContent === 'Wrong video?').click();
+    return li.querySelector('.title').textContent;
+  });
+  await settle(page); await page.waitForTimeout(200);
+  await inShadow(page, r => [...r.querySelectorAll('.picker .pbtns button')].find(b => /Not in playlist/.test(b.textContent)).click());
+  await settle(page); await page.waitForTimeout(200);
+  const notPill = await inShadow(page, (r, title) => {
+    const li = [...r.querySelectorAll('ol > li')].find(x => x.querySelector('.title') && x.querySelector('.title').textContent === title);
+    return li ? li.className + ' / ' + li.querySelector('.pill').textContent : '';
+  }, notTitle);
+  check('"Not in playlist" in the picker marks the song not in the playlist', notTitle && /^none/.test(notPill) && /Not in playlist · marked/.test(notPill), notPill);
 
   // A mark changes only that song, and quickly
   const t0 = Date.now();

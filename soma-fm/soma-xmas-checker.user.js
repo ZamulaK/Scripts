@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.4
+// @version      3.12.5
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1575,7 +1575,9 @@ function main() {
     });
     const cancel = btn('Cancel', 'ctl', () => { pickerKey = null; render(); });
     const btns = el('div', 'pbtns');
-    if (fixing) btns.append(cancel); else btns.append(unlinked, cancel);   // "without linking" would keep the wrong match
+    // "Without linking" would keep the wrong match; offer "not in playlist" instead
+    if (fixing) btns.append(btn('✗ Not in playlist', 'marknot', () => { setMark(s.key, 'not'); pickerKey = null; render(); }), cancel);
+    else btns.append(unlinked, cancel);
     box.append(el('div', 'ph', 'Which playlist song is it?'), input, label, choices, btns);
     fill();
     return box;
@@ -1708,7 +1710,7 @@ function main() {
           state.append(el('span', 'pill', '✗ Not in playlist · marked'), search, undo, dislike);
         } else if (r.status === 'have') {
           // An automatic match can be wrong: link the right video, or say it isn't in the playlist
-          state.append(el('span', 'pill', '✓ In playlist'), btn('Wrong video?', 'ctl', () => { pickerKey = key; render(); }), markNot);
+          state.append(el('span', 'pill', '✓ In playlist'), btn('Wrong video?', 'ctl', () => { pickerKey = key; render(); }));
         } else if (r.status === 'gone') {
           state.append(el('span', 'pill', '⚠ Gone from playlist'), search, markHave);
         } else if (r.status === 'other') {
