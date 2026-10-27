@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.5
+// @version      3.12.6
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -267,8 +267,12 @@ const Matcher = (() => {
 const History = (() => {
   const isBreak = (artist, title) => /station id/i.test(title) || /station id/i.test(artist) || /^\s*break\s*$/i.test(artist);
 
-  // SomaFM feed rows -> plays, newest first; station IDs and rows without a time are dropped
-  function fromFeed(songs) {
+  // A play dated more than this past "now" can't be real. On Oct 27, 2026 SomaFM's feed briefly dated an
+  // hour of plays a day ahead; saved, they hid every real play after them (merge only adds newer plays).
+  const FUTURE_SLACK = 15 * 60;
+
+  // SomaFM feed rows -> plays, newest first; station IDs, rows without a time, and (given now) future rows are dropped
+  function fromFeed(songs, now) {
     const out = [];
     const list = songs || [];
     for (let i = 0; i < list.length; i++) {
@@ -276,10 +280,17 @@ const History = (() => {
       if (!x || !x.artist || !x.title) continue;
       const at = Number(x.date);
       if (!isFinite(at) || at <= 0 || isBreak(String(x.artist), String(x.title))) continue;
+      if (now && at > now + FUTURE_SLACK) continue;
       out.push([at, String(x.artist), String(x.title), String(x.album || '')]);
     }
     out.sort((a, b) => b[0] - a[0]);
     return out;
+  }
+
+  // Saved plays dated in the future removed (see FUTURE_SLACK); the same list back when there are none
+  function dropFuture(plays, now) {
+    const out = Matcher.keep(plays, p => !(p[0] > now + FUTURE_SLACK));
+    return out.length === plays.length ? plays : out;
   }
 
   // Add newly fetched plays to the stored list. If the fetch no longer reaches back to the newest stored
@@ -357,7 +368,7 @@ const History = (() => {
     return (h ? h + ':' + pad(m) : m) + ':' + pad(r);
   }
 
-  return { fromFeed, merge, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
+  return { fromFeed, dropFuture, merge, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
 })();
 
 /* ---------- Playlist memory (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -1361,6 +1372,12 @@ function main() {
   const HKEY = 'history:' + channel;
   let history = GM_getValue(HKEY, []);
   if (!Array.isArray(history)) history = [];
+  // Plays saved with a future date (a SomaFM feed glitch, or merged in from a backup) would block new plays
+  function clearFuture() {
+    const clean = History.dropFuture(history, Date.now() / 1000);
+    if (clean !== history) { history = clean; GM_setValue(HKEY, history); }
+  }
+  clearFuture();
   let rowBase = null;   // display rows built from history; rebuilt only when history changes
   let playCounts = new Map();          // song key -> plays recorded
   const openLogs = new Set();          // cards whose play history is open (key@time), kept across refreshes
@@ -1382,7 +1399,7 @@ function main() {
       const r = await fetch(`/songs/${channel}.json`, { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       const data = await r.json();
-      const fetched = History.fromFeed(data.songs);
+      const fetched = History.fromFeed(data.songs, Date.now() / 1000);
       if (fetched.length) nowAt = fetched[0][0];
       const m = History.merge(history, fetched, HISTORY_MAX);
       if (m.added) { history = m.plays; rowBase = null; GM_setValue(HKEY, history); }
@@ -1963,6 +1980,7 @@ function main() {
   function backupText() { return JSON.stringify(Backup.build(snapshot(), { playlistId: PLAYLIST_ID, scriptVersion: (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '' })); }
   function reloadState() {
     history = GM_getValue(HKEY, []); if (!Array.isArray(history)) history = [];
+    clearFuture();
     archive = GM_getValue(AKEY, {}); if (!archive || typeof archive !== 'object' || Array.isArray(archive)) archive = {};
     rowBase = null; goneCache = null; statusCache.clear(); openLogs.clear();
   }

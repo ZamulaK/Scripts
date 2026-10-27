@@ -199,6 +199,18 @@ function historyChecks() {
   const capped = H.merge(g.plays, H.fromFeed(feed([[9500, 'F', 'Six']])), 4);
   check('cap keeps the newest plays', capped.plays.length === 4 && capped.plays[0][2] === 'Six' && capped.plays[3][2] === 'Three');   // Six, Five, Four, Three
 
+  // Oct 27, 2026: SomaFM's feed briefly dated an hour of plays a day ahead
+  const nowS = 100000;
+  const ahead = H.fromFeed(feed([[nowS + 86400, 'X', 'Tomorrow'], [nowS + 600, 'Y', 'Clock skew'], [nowS - 200, 'Z', 'Real']]), nowS);
+  check('feed: plays dated in the future are dropped; a few minutes ahead is kept', ahead.length === 2 && ahead[0][2] === 'Clock skew' && ahead[1][2] === 'Real');
+  check('feed: without "now", nothing is dropped for its date', H.fromFeed(feed([[nowS + 86400, 'X', 'Tomorrow']])).length === 1);
+  const stuck = [[nowS + 86400, 'X', 'Tomorrow', '', 1], [nowS - 3600, 'Z', 'Real', '']];
+  const unstuck = H.dropFuture(stuck, nowS);
+  check('saved future plays are removed', unstuck.length === 1 && unstuck[0][2] === 'Real');
+  check('nothing to remove: same list back', H.dropFuture(unstuck, nowS) === unstuck);
+  const resumed = H.merge(unstuck, H.fromFeed(feed([[nowS - 60, 'N', 'New']]), nowS), 100);
+  check('after removing them, new plays are recorded again (flagged after a gap)', resumed.added === 1 && resumed.plays[0][2] === 'New' && resumed.gap);
+
   const at = new Date(2026, 9, 5, 15, 7).getTime() / 1000;   // Oct 5 2026, 3:07 PM local
   check('date is m/d/yy', H.formatDate(at) === '10/5/26');
   check('time is h:mm AM/PM', H.formatTime(at) === '3:07 PM' && H.formatTime(new Date(2026, 0, 1, 0, 5).getTime() / 1000) === '12:05 AM');

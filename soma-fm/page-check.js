@@ -335,6 +335,18 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
 
   check('no script errors during interactions', errors.length === 0, errors.join(' | '));
   await ctx.close();
+
+  // 3. Plays saved with a future date (SomaFM's feed, Oct 27, 2026) are cleared on load (3.12.6)
+  {
+    const h = seedHistory();
+    const future = [h[0][0] + 86400, 'Ventures', 'Frosty The Snowman', '', 1];
+    const fp = await openPage(browser, { width: 600, store: { 'history:christmas': [future].concat(h) } });
+    const after = await fp.page.evaluate(() => window.__store['history:christmas']);
+    const ahead = after.filter(p => p[0] > Date.now() / 1000 + 900).length;
+    check('A play dated a day ahead is removed from the saved history', ahead === 0 && after.length >= h.length, JSON.stringify({ ahead, n: after.length, was: h.length + 1 }));
+    check('Future plays: no script errors', fp.errors.length === 0, fp.errors.join(' | '));
+    await fp.ctx.close();
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;
