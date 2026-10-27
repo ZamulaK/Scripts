@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.14.0
+// @version      3.15.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -512,7 +512,7 @@ const Archive = (() => {
 })();
 
 /* ---------- Backup and restore (pure; tested by soma-xmas-checker.test.js) ---------- */
-// One file holds everything worth keeping: play history (per channel), marks and links, dislikes, favorites,
+// One file holds everything worth keeping: play history (per channel), marks and links, dislikes, favorites, categories,
 // and the remembered playlist titles. Settings stay with each device.
 const Backup = (() => {
   const APP = 'soma-xmas-checker', FORMAT = 1;
@@ -561,6 +561,12 @@ const Backup = (() => {
       const f = d.favorites[id];
       if (isObj(f) && typeof f.on === 'boolean' && typeof f.at === 'number') favorites[id] = { on: f.on, at: f.at }; else skipped++;
     }
+    // Categories: playlist video id -> { c, at }; c is '' once a category is cleared, for the same reason
+    const categories = {};
+    for (const id of Object.keys(isObj(d.categories) ? d.categories : {})) {
+      const f = d.categories[id];
+      if (isObj(f) && typeof f.c === 'string' && typeof f.at === 'number') categories[id] = { c: f.c, at: f.at }; else skipped++;
+    }
     const archive = {};
     for (const id of Object.keys(isObj(d.archive) ? d.archive : {})) {
       const e = d.archive[id];
@@ -577,7 +583,7 @@ const Backup = (() => {
       }
       if (songs.length) original = { at: o.at, playlistId: typeof o.playlistId === 'string' ? o.playlistId : '', songs };
     } else if (o) skipped++;
-    return { data: { history, marks, dislikes, favorites, archive, original }, skipped, exportedAt: obj.exportedAt };
+    return { data: { history, marks, dislikes, favorites, categories, archive, original }, skipped, exportedAt: obj.exportedAt };
   }
 
   // Union of two newest-first play lists; the same play recorded on both devices is kept once.
@@ -611,12 +617,14 @@ const Backup = (() => {
     for (const k of Object.keys(b || {})) out[k] = Math.max(out[k] || 0, b[k]);
     return out;
   }
-  // Favorites: the more recent change wins, whether it added or removed one
+  // Favorites and categories: the more recent change wins, whether it added, changed or removed one
   function mergeFavorites(a, b) {
     const out = Object.assign({}, a);
     for (const k of Object.keys(b || {})) if (!(k in out) || b[k].at > out[k].at) out[k] = b[k];
     return out;
   }
+  const mergeCategories = mergeFavorites;
+  const catCount = f => { let n = 0; for (const k of Object.keys(f || {})) if (f[k] && f[k].c) n++; return n; };
   const favCount = f => { let n = 0; for (const k of Object.keys(f || {})) if (f[k] && f[k].on) n++; return n; };
   // Remembered playlist songs: newest sighting wins; "gone" only if marked gone after its last sighting anywhere
   function mergeArchive(a, b) {
@@ -657,11 +665,11 @@ const Backup = (() => {
       newPlays[ch] = n; added += n;
     }
     return { plays: total, newPlays: added, perChannel: newPlays, first, last,
-      marks: Object.keys(incoming.marks).length, dislikes: Object.keys(incoming.dislikes).length, favorites: favCount(incoming.favorites), songs: Object.keys(incoming.archive).length,
+      marks: Object.keys(incoming.marks).length, dislikes: Object.keys(incoming.dislikes).length, favorites: favCount(incoming.favorites), categories: catCount(incoming.categories), songs: Object.keys(incoming.archive).length,
       original: incoming.original ? incoming.original.at : 0 };
   }
 
-  return { build, validate, mergeHistory, mergeMarks, mergeDislikes, mergeFavorites, favCount, mergeArchive, mergeOriginal, preview };
+  return { build, validate, mergeHistory, mergeMarks, mergeDislikes, mergeFavorites, favCount, mergeCategories, catCount, mergeArchive, mergeOriginal, preview };
 })();
 
 /* ---------- Stats panel numbers (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -963,7 +971,7 @@ const Shuffle = (() => {
 
   /* A shuffle that keeps like songs apart. Favorites, and the versions of a song, are spread about evenly
      (counting around the end, for a playlist that repeats); songs by the same artist, from the same album or
-     posted by the same channel just aren't put close together. Starting from a plain shuffle, songs are
+     posted by the same channel just aren't put close together. A category may repeat, but not too many in a row. Starting from a plain shuffle, songs are
      swapped while that makes the spacing better, so the rest of the order stays random. */
 
   // What a playlist video is, for spreading: soma is SomaFM's { artist, title, album } when it has played
@@ -1006,7 +1014,9 @@ const Shuffle = (() => {
   }
 
   // Groups to spread: { members (indexes), even: true to space them evenly, kind }. favs[i] says if song i is a favorite.
-  function spreadGroups(descs, favs) {
+  // cats[i] is song i's category ('' for none): no more than maxRun of one category in a row, more allowed for bigger ones
+  const maxRun = (k, n) => Math.min(5, Math.max(3, Math.ceil(k / n * 12)));
+  function spreadGroups(descs, favs, cats) {
     const groups = [], n = descs.length;
     const favList = [];
     for (let i = 0; i < n; i++) if (favs[i]) favList.push(i);
@@ -1030,6 +1040,9 @@ const Shuffle = (() => {
     byKey('artist', i => descs[i].artist, false);
     byKey('album', i => descs[i].album, false);
     byKey('uploader', i => descs[i].uploader, false);
+    const cm = new Map();
+    for (let i = 0; cats && i < n; i++) if (cats[i]) { if (!cm.has(cats[i])) cm.set(cats[i], []); cm.get(cats[i]).push(i); }
+    cm.forEach((members, c) => { if (members.length > 3) groups.push({ members, even: false, kind: 'category', category: c, maxRun: maxRun(members.length, n) }); });
     return groups;
   }
 
@@ -1039,6 +1052,19 @@ const Shuffle = (() => {
     for (let i = 0; i < g.members.length; i++) p.push(pos[g.members[i]]);
     p.sort((x, y) => x - y);
     const k = p.length, ideal = n / k;
+    if (g.maxRun) {
+      // Runs of this category's songs one after another (around the end too); only the songs past maxRun cost
+      const gapAfter = i => i + 1 < k ? p[i + 1] - p[i] : n - p[k - 1] + p[0];
+      let s = 0;
+      while (s < k && gapAfter((s - 1 + k) % k) === 1) s++;   // the first song of a run
+      if (s === k) { const over = k - g.maxRun; return over > 0 ? 2 * over * over : 0; }
+      let c = 0, run = 0;
+      for (let t = 0; t < k; t++) {
+        run++;
+        if (gapAfter((s + t) % k) !== 1) { if (run > g.maxRun) c += 2 * (run - g.maxRun) * (run - g.maxRun); run = 0; }
+      }
+      return c;
+    }
     const near = Math.min(12, Math.max(2, Math.round(ideal / 2)));   // closer than this counts as bunched
     let c = 0;
     for (let i = 0; i < k; i++) {
@@ -1082,12 +1108,12 @@ const Shuffle = (() => {
     return at;
   }
 
-  // A new order for the playlist: items are { id, videoId, title, ch }; somaOf(videoId) and isFav(videoId)
-  // describe them. Returns the ids in order and the groups that were spread.
-  function arrange(items, somaOf, isFav, rand) {
+  // A new order for the playlist: items are { id, videoId, title, ch }; somaOf(videoId), isFav(videoId) and
+  // catOf(videoId) describe them. Returns the ids in order and the groups that were spread.
+  function arrange(items, somaOf, isFav, rand, catOf) {
     const names = nameWords(items, it => somaOf(it.videoId));
     const descs = mapOf(items, it => describe(it, somaOf(it.videoId), names));
-    const groups = spreadGroups(descs, mapOf(items, it => !!isFav(it.videoId)));
+    const groups = spreadGroups(descs, mapOf(items, it => !!isFav(it.videoId)), catOf ? mapOf(items, it => catOf(it.videoId) || '') : null);
     const at = spread(items.length, groups, rand);
     return { ids: mapOf(at, i => items[i].id), groups };
   }
@@ -1211,7 +1237,7 @@ const Shuffle = (() => {
   // The quota day runs midnight to midnight Pacific time
   const quotaDay = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });
 
-  return { order, describe, nameWords, spreadGroups, groupCost, spread, arrange, longestRun, plan, applyMove, units, restoreOrder, readItems, idsOf, readUnits, checkOwner, run, matches, sameSongs, quotaDay,
+  return { order, describe, nameWords, maxRun, spreadGroups, groupCost, spread, arrange, longestRun, plan, applyMove, units, restoreOrder, readItems, idsOf, readUnits, checkOwner, run, matches, sameSongs, quotaDay,
     UNITS_PER_MOVE, DAILY_UNITS };
 })();
 
@@ -1328,10 +1354,13 @@ function main() {
     .filters{display:flex;flex-wrap:wrap;gap:.4rem}
     .filters button{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:600}
     .filters button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+    .filters .one{margin-left:auto}
     .filters .n{font-variant-numeric:tabular-nums;opacity:.8}
     ol{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
     li{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:.8rem .95rem;
       display:grid;grid-template-columns:5.2em minmax(0,1fr);gap:.2rem .8rem}
+    /* Only cards on screen are laid out (about 9× faster redraws with 50 cards); the rest keep their last size */
+    #cards > li{content-visibility:auto;contain-intrinsic-size:auto 140px}
     li.none{background:var(--none-card);border-color:var(--none-line)}
     li.other{background:var(--other-card);border-color:var(--other-line)}
     li.gone{background:var(--none-card);border-color:var(--none-line)}
@@ -1360,6 +1389,8 @@ function main() {
     .artist{margin-top:.1rem;overflow-wrap:anywhere}
     button.fav{background:none;border:0;padding:.05em .3em;font-size:1.1em;line-height:1;color:var(--muted);vertical-align:baseline;font-weight:400}
     button.fav[aria-pressed="true"]{color:var(--now)}
+    select.cat{font:inherit;font-size:.82em;font-weight:650;border-radius:999px;padding:.38em .7em;background:var(--chip);color:var(--muted);border:1px dashed var(--line);max-width:100%}
+    select.cat.set{color:var(--fg);border-style:solid}
     .len{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
     .album{color:var(--muted);font-size:.82em;margin-top:.1rem;overflow-wrap:anywhere}
     .state{grid-column:2;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.45rem}
@@ -1509,7 +1540,7 @@ function main() {
       <div class="warnline" id="anote" hidden></div>
       <details class="gonebox" id="gonebox" hidden><summary id="gonesum"></summary><div class="gonelist" id="gonelist"></div></details>
     </header>
-    <ol></ol>
+    <ol id="cards"></ol>
     <footer>
       <div class="pager">
         <button type="button" class="ctl" id="prev">‹ Newer</button>
@@ -1532,7 +1563,7 @@ function main() {
     <div id="backupbody">
       <div class="ssec">
         <h3>Save a backup</h3>
-        <div class="snote">One file with your play history, "I have it" / "Not this one" marks and links, dislikes, favorites, the remembered playlist songs, and the playlist's original order. Settings stay with each device.</div>
+        <div class="snote">One file with your play history, "I have it" / "Not this one" marks and links, dislikes, favorites, categories, the remembered playlist songs, and the playlist's original order. Settings stay with each device.</div>
         <div class="brow"><button type="button" class="ctl primary" id="bkdown">Download backup</button><button type="button" class="ctl" id="bkcopy">Copy backup</button></div>
         <div class="bmsg" id="bkoutmsg" role="status"></div>
       </div>
@@ -1580,6 +1611,7 @@ function main() {
     page = 0;
     render();
   }
+  let latestOnly = GM_getValue('latestOnly', false) === true;   // one card per song: its most recent play
   let live = GM_getValue('live', true);
   let pageSize = GM_getValue('pageSize', 50);
   if (PAGE_SIZES.indexOf(pageSize) < 0) pageSize = 50;
@@ -1608,21 +1640,51 @@ function main() {
   const isFav = (favs, id) => !!(id && favs[id] && favs[id].on);
   function setFav(id, on) { const f = Object.assign({}, getFavs()); f[id] = { on, at: Date.now() }; favCache = f; GM_setValue('favorites', f); }
   // The star button: ☆ to add, ⭐ to remove
+  // Stars and categories change in place (every card or Stats row for that video), without redrawing the list,
+  // so they respond at once. Nothing else on a card depends on them.
+  const sameVideo = (sel, id) => keep([...root.querySelectorAll(sel)], x => x.dataset.vid === id);
+  function showFav(b, on) {
+    b.textContent = on ? '⭐' : '☆';
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', (on ? 'Remove from favorites: ' : 'Add to favorites: ') + b.dataset.name);
+    b.title = on ? 'Favorite. Tap to remove.' : 'Add to favorites';
+  }
   function favBtn(id, title) {
-    const b = btn('', 'fav', () => {
-      setFav(id, !isFav(getFavs(), id));
-      show(isFav(getFavs(), id));
-      // In the Stats panel only this star changes now; the cards catch up when it closes
-      if ($('#statsbox').open) renderPending = true; else render();
-    });
-    const show = on => {
-      b.textContent = on ? '⭐' : '☆';
-      b.setAttribute('aria-pressed', String(on));
-      b.setAttribute('aria-label', (on ? 'Remove from favorites: ' : 'Add to favorites: ') + title);
-      b.title = on ? 'Favorite. Tap to remove.' : 'Add to favorites';
+    const b = el('button', 'fav'); b.type = 'button';
+    b.dataset.vid = id; b.dataset.name = title;
+    b.onclick = () => {
+      const on = !isFav(getFavs(), id);
+      setFav(id, on);
+      for (const x of sameVideo('button.fav', id)) showFav(x, on);
     };
-    show(isFav(getFavs(), id));
+    showFav(b, isFav(getFavs(), id));
     return b;
+  }
+
+  // Categories, also by playlist video id: { c, at }, with c '' once cleared (so a merge doesn't bring it back).
+  // Stored by these keys, so the names can change.
+  const CATEGORIES = [['band', 'Band/Swing'], ['classics', 'Classics'], ['dance', 'Dance'], ['jazz', 'Jazz/Piano'], ['mellow', 'Mellow'], ['soul', 'Soul/Funk']];
+  const catName = c => { for (const [k, name] of CATEGORIES) if (k === c) return name; return ''; };
+  let catCache = null;
+  function getCats() {
+    if (!catCache) { const f = GM_getValue('categories', {}); catCache = f && typeof f === 'object' && !Array.isArray(f) ? f : {}; }
+    return catCache;
+  }
+  const catOf = (cats, id) => (id && cats[id] && catName(cats[id].c) ? cats[id].c : '');
+  function setCat(id, c) { const f = Object.assign({}, getCats()); f[id] = { c, at: Date.now() }; catCache = f; GM_setValue('categories', f); }
+  function catSelect(id, title) {
+    const sel = el('select', 'cat');
+    sel.append(Object.assign(document.createElement('option'), { value: '', textContent: 'Category…' }));
+    for (const [k, name] of CATEGORIES) sel.append(Object.assign(document.createElement('option'), { value: k, textContent: name }));
+    sel.value = catOf(getCats(), id);
+    sel.classList.toggle('set', !!sel.value);
+    sel.setAttribute('aria-label', 'Category: ' + title);
+    sel.dataset.vid = id;
+    sel.onchange = () => {
+      setCat(id, sel.value);
+      for (const x of sameVideo('select.cat', id)) { x.value = sel.value; x.classList.toggle('set', !!sel.value); }
+    };
+    return sel;
   }
 
   /* ----- Playlist memory: titles of every song seen, so ones that disappear can still be named ----- */
@@ -1935,7 +1997,8 @@ function main() {
   function render() {
     const marks = getMarks(), dislikes = getDislikes();
     const base = baseRows();
-    const rows = mapOf(base, s => ({ s, r: statusOf(s, marks, dislikes) }));
+    let rows = mapOf(base, s => ({ s, r: statusOf(s, marks, dislikes) }));
+    if (latestOnly) { const seen = new Set(); rows = keep(rows, x => { if (seen.has(x.s.key)) return false; seen.add(x.s.key); return true; }); }
 
     const st = $('.status');
     st.className = 'status' + (playlistError ? ' err' : '');
@@ -1970,6 +2033,10 @@ function main() {
         b.setAttribute('aria-pressed', String(key === 'all' ? filters.size === 0 : filters.has(key)));
         f.append(b);
       }
+      const one = btn('Latest play only', 'one', () => { latestOnly = !latestOnly; GM_setValue('latestOnly', latestOnly); page = 0; render(); });
+      one.setAttribute('aria-pressed', String(latestOnly));
+      one.title = 'One card per song, at its most recent play';
+      f.append(one);
     }
 
     const shownAll = filters.size === 0 || playlistError ? rows : keep(rows, x => filters.has(x.r.status) || (x.r.status === 'gone' && filters.has('none')));
@@ -2035,14 +2102,14 @@ function main() {
           state.append(el('span', 'pill', '✓ In playlist · marked'), linkBtn, undo);
         } else if (r.marked === 'have' && r.linked) {
           // Two-level undo: Unlink keeps "I have it"; the next Undo clears it
-          state.append(el('span', 'pill', '✓ In playlist · linked'), btn('Unlink', 'undo', () => { setMark(key, 'have'); render(); }));
+          state.append(el('span', 'pill', '✓ In playlist · linked'), btn('Unlink', 'undo', () => { setMark(key, 'have'); render(); }), catSelect(r.item.id, s.title));
         } else if (r.marked === 'have') {
           state.append(el('span', 'pill', '✓ In playlist · marked'), linkBtn, undo);
         } else if (r.marked === 'not') {
           state.append(el('span', 'pill', '✗ Not in playlist · marked'), search, undo, dislike);
         } else if (r.status === 'have') {
           // An automatic match can be wrong: link the right video, or say it isn't in the playlist
-          state.append(el('span', 'pill', '✓ In playlist'), btn('Wrong video?', 'ctl', () => { pickerKey = key; render(); }));
+          state.append(el('span', 'pill', '✓ In playlist'), btn('Wrong video?', 'ctl', () => { pickerKey = key; render(); }), catSelect(r.item.id, s.title));
         } else if (r.status === 'gone') {
           state.append(el('span', 'pill', '⚠ Gone from playlist'), search, markHave);
         } else if (r.status === 'other') {
@@ -2067,7 +2134,7 @@ function main() {
       }
       ol.append(li);
       // The page wasn't open between this play and the one below it
-      if (s.gap) ol.append(el('li', 'gap', 'Not recording here — plays in this stretch were missed'));
+      if (s.gap && !latestOnly) ol.append(el('li', 'gap', 'Not recording here — plays in this stretch were missed'));
     }
 
     // Songs gone from the playlist
@@ -2193,6 +2260,26 @@ function main() {
         det.append(ul);
         pl.append(det);
       }
+      // Categories: how many of each, and the songs without one (to set them here, heard or not)
+      {
+        const cats = getCats(), count = new Map(), none = [], seen = new Set();
+        for (const it of items) {
+          if (seen.has(it.id)) continue;
+          seen.add(it.id);
+          const c = catOf(cats, it.id);
+          if (c) count.set(c, (count.get(c) || 0) + 1); else none.push(it);
+        }
+        const parts = [];
+        for (const [k, name] of CATEGORIES) if (count.get(k)) parts.push(`${name} ${fmt(count.get(k))}`);
+        pl.append(line('Categories: ', parts.length ? parts.join(' · ') : 'none set yet'));
+        if (none.length) {
+          const det = el('details', 'sdet'); det.append(el('summary', '', `No category yet: ${fmt(none.length)}`));
+          const ul = document.createElement('ul');
+          for (const it of none) { const li = el('li', ''); li.append(el('span', 'nh', it.title), catSelect(it.id, it.title)); ul.append(li); }
+          det.append(ul);
+          pl.append(det);
+        }
+      }
       pl.append(el('div', 'snote', 'Heard counts automatic matches and linked songs. Unlinked "I have it" marks don\'t say which video, so they aren\'t counted.'));
     } else sec('Your playlist', el('div', 'snote', playlistError ? `Couldn't read the playlist: ${playlistError}` : 'Reading the playlist…'));
 
@@ -2296,14 +2383,14 @@ function main() {
   function snapshot() {
     const h = {};
     for (const k of historyKeys()) h[k.slice(8)] = GM_getValue(k, []);
-    return { history: h, marks: getMarks(), dislikes: getDislikes(), favorites: getFavs(), archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null) };
+    return { history: h, marks: getMarks(), dislikes: getDislikes(), favorites: getFavs(), categories: getCats(), archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null) };
   }
   function backupText() { return JSON.stringify(Backup.build(snapshot(), { playlistId: PLAYLIST_ID, scriptVersion: (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '' })); }
   function reloadState() {
     history = GM_getValue(HKEY, []); if (!Array.isArray(history)) history = [];
     clearFuture();
     archive = GM_getValue(AKEY, {}); if (!archive || typeof archive !== 'object' || Array.isArray(archive)) archive = {};
-    rowBase = null; measured = null; goneCache = null; favCache = null; statusCache.clear(); openLogs.clear();
+    rowBase = null; measured = null; goneCache = null; favCache = null; catCache = null; statusCache.clear(); openLogs.clear();
   }
   const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; };
   const say = (id, text, cls) => { const m = $(id); m.className = 'bmsg' + (cls ? ' ' + cls : ''); m.textContent = text; };
@@ -2354,7 +2441,7 @@ function main() {
     const box = el('div', 'bpreview');
     const ul = el('ul', '');
     ul.append(el('li', '', pv.plays ? `${fmt(pv.plays)} plays, ${when(pv.first)} to ${when(pv.last)}; ${fmt(pv.newPlays)} of them aren't on this device yet` : 'No plays'),
-      el('li', '', `${fmt(pv.marks)} marks, ${fmt(pv.dislikes)} dislikes, ${fmt(pv.favorites)} favorites, ${fmt(pv.songs)} remembered playlist songs`));
+      el('li', '', `${fmt(pv.marks)} marks, ${fmt(pv.dislikes)} dislikes, ${fmt(pv.favorites)} favorites, ${fmt(pv.categories)} categories, ${fmt(pv.songs)} remembered playlist songs`));
     if (pv.original) ul.append(el('li', '', `The playlist's original order, saved ${when(pv.original / 1000)}`));
     if (v.exportedAt) ul.append(el('li', '', `Backed up ${when(v.exportedAt / 1000)}`));
     if (v.skipped) ul.append(el('li', '', `${fmt(v.skipped)} damaged entr${v.skipped === 1 ? 'y' : 'ies'} will be skipped`));
@@ -2383,6 +2470,7 @@ function main() {
     GM_setValue('marks', mode === 'merge' ? Backup.mergeMarks(before.marks, inc.marks) : inc.marks);
     GM_setValue('dislikes', mode === 'merge' ? Backup.mergeDislikes(before.dislikes, inc.dislikes) : inc.dislikes);
     GM_setValue('favorites', mode === 'merge' ? Backup.mergeFavorites(before.favorites, inc.favorites) : inc.favorites);
+    GM_setValue('categories', mode === 'merge' ? Backup.mergeCategories(before.categories, inc.categories) : inc.categories);
     GM_setValue(AKEY, mode === 'merge' ? Backup.mergeArchive(before.archive, inc.archive) : inc.archive);
     // The original playlist order can't be recreated, so even Replace keeps this device's when the backup has none
     GM_setValue(OKEY, mode === 'merge' ? Backup.mergeOriginal(before.original, inc.original) : inc.original || before.original || null);
@@ -2407,8 +2495,9 @@ function main() {
     const chans = new Set(Object.keys(d.history).concat(mapOf(historyKeys(), k => k.slice(8))));   // also empties channels added by the import
     chans.forEach(ch => GM_setValue('history:' + ch, d.history[ch] || []));
     GM_setValue('marks', d.marks || {}); GM_setValue('dislikes', d.dislikes || {}); GM_setValue(AKEY, d.archive || {});
-    if ('original' in d) GM_setValue(OKEY, d.original || null);
-    if ('favorites' in d) GM_setValue('favorites', d.favorites || {});   // undo snapshots from before 3.14 don't have them   // undo snapshots from before 3.12.1 don't have it
+    if ('original' in d) GM_setValue(OKEY, d.original || null);   // undo snapshots from before 3.12.1 don't have it
+    if ('favorites' in d) GM_setValue('favorites', d.favorites || {});   // nor favorites before 3.14
+    if ('categories' in d) GM_setValue('categories', d.categories || {});   // nor categories before 3.15
     GM_setValue(PREKEY, null);
     reloadState();
     say('#bkinmsg', `Import undone. ${fmt(history.length)} plays saved here, as before.`, 'ok');
@@ -2555,16 +2644,21 @@ function main() {
   }
   // A shuffle that spreads out favorites and versions of a song, and keeps an artist's, album's or channel's songs apart
   function newShuffle() {
-    const info = somaInfo(), favs = getFavs();
-    const a = Shuffle.arrange(sh.items, v => info.get(v) || null, v => isFav(favs, v), rand);
-    sh.spreadCounts = { favorites: 0, versions: 0, apart: 0 };
+    const info = somaInfo(), favs = getFavs(), cats = getCats();
+    const a = Shuffle.arrange(sh.items, v => info.get(v) || null, v => isFav(favs, v), rand, v => catOf(cats, v));
+    sh.spreadCounts = { favorites: 0, versions: 0, apart: 0, runs: [] };
     for (const g of a.groups) {
       if (g.kind === 'favorites') sh.spreadCounts.favorites = g.members.length;
+      else if (g.kind === 'category') sh.spreadCounts.runs.push(`${catName(g.category)} ${g.maxRun}`);
       else if (g.kind === 'versions') sh.spreadCounts.versions++;
       else sh.spreadCounts.apart++;
     }
-    sh.favIds = new Set();
-    for (const it of sh.items) if (isFav(favs, it.videoId)) sh.favIds.add(it.id);
+    sh.favIds = new Set(); sh.catNames = new Map();
+    for (const it of sh.items) {
+      if (isFav(favs, it.videoId)) sh.favIds.add(it.id);
+      const c = catOf(cats, it.videoId);
+      if (c) sh.catNames.set(it.id, catName(c));
+    }
     prepare(a.ids, 'shuffle', sh.current, 0);
   }
   function finished(job) {
@@ -2642,7 +2736,12 @@ function main() {
       sec.append(el('div', 'snote', `Google allows ${fmt(Shuffle.DAILY_UNITS)} units a day; this script has used about ${fmt(used)} today. Signed in as ${sh.channel}.`));
       if (used + u > Shuffle.DAILY_UNITS) say1(`That's more than today's quota has left, so it will stop partway. Open Shuffle again after midnight Pacific (${quotaReset()} your time) to finish.`, 'err');
       const ol = el('ol', 'shlist');
-      for (let i = 0; i < Math.min(12, n); i++) ol.append(el('li', '', (sh.favIds && sh.favIds.has(sh.target[i]) ? '⭐ ' : '') + (sh.titles.get(sh.target[i]) || '?')));
+      for (let i = 0; i < Math.min(12, n); i++) {
+        const li = el('li', '', (sh.favIds && sh.favIds.has(sh.target[i]) ? '⭐ ' : '') + (sh.titles.get(sh.target[i]) || '?'));
+        const cn = sh.catNames && sh.catNames.get(sh.target[i]);
+        if (cn) li.append(el('span', 'len', ' · ' + cn));
+        ol.append(li);
+      }
       sec.append(ol);
       if (n > 12) sec.append(el('div', 'snote', `…and ${fmt(n - 12)} more.`));
       const sc = sh.kind === 'shuffle' && !sh.resumeOf && sh.spreadCounts;
@@ -2651,7 +2750,8 @@ function main() {
         if (sc.favorites) parts.push(`your ${fmt(sc.favorites)} favorites`);
         if (sc.versions) parts.push(`the versions of ${fmt(sc.versions)} song${sc.versions === 1 ? '' : 's'} you have more than once`);
         sec.append(el('div', 'snote', (parts.length ? 'Spread out evenly: ' + parts.join(' and ') + '. ' : '') +
-          'Songs by the same artist, from the same album or posted by the same channel are kept apart. The rest is random.' +
+          'Songs by the same artist, from the same album or posted by the same channel are kept apart. ' +
+          (sc.runs.length ? `Most in a row from one category: ${sc.runs.join(', ')}. ` : '') + 'The rest is random.' +
           (sc.favorites ? '' : ' Tap ☆ on a song to make it a favorite.')));
       }
       const label = sh.resumeOf ? 'Finish it' : K.go;

@@ -617,6 +617,10 @@ function backupChecks() {
   const withFav = B.validate(JSON.parse(JSON.stringify(B.build({ history: {}, marks: {}, dislikes: {}, favorites: { v1: { on: true, at: 5 }, v2: { on: false, at: 6 }, bad: 'x' }, archive: {} }))));
   check('favorites: a backup carries them; damaged ones skipped', withFav.data.favorites.v1.on && withFav.data.favorites.v2.on === false && !withFav.data.favorites.bad && withFav.skipped === 1);
   check('favorites: an older backup without them reads as none', Object.keys(v.data.favorites).length === 0);
+  const ca = B.mergeCategories({ v1: { c: 'dance', at: 100 } }, { v1: { c: '', at: 200 }, v2: { c: 'jazz', at: 5 } });
+  check('categories: newer change wins, clearing included', ca.v1.c === '' && ca.v2.c === 'jazz' && B.catCount(ca) === 1);
+  const withCat = B.validate(JSON.parse(JSON.stringify(B.build({ history: {}, marks: {}, dislikes: {}, categories: { v1: { c: 'soul', at: 5 }, bad: { c: 3 } }, archive: {} }))));
+  check('categories: a backup carries them; damaged ones skipped; older backups have none', withCat.data.categories.v1.c === 'soul' && withCat.skipped === 1 && Object.keys(v.data.categories).length === 0 && B.preview({ history: {} }, withCat.data).categories === 1);
   check('preview: counts favorites that are on', B.preview({ history: {} }, withFav.data).favorites === 1);
 
   console.log('--- backup and restore ---');
@@ -677,6 +681,17 @@ async function shuffleChecks() {
     const b = S.arrange(items, () => null, v => fav.has(v), rand);
     let same = 0; for (let i = 0; i < 136; i++) if (a.ids[i] === b.ids[i]) same++;
     check(`still random: another shuffle is a different order (${same} in the same place)`, same < 20);
+    // Categories: repeats are fine, long runs aren't (3 in a row for a small category, up to 5 for a big one)
+    check('most in a row: 3 for a small category, 5 for one that is most of the playlist', S.maxRun(20, 136) === 3 && S.maxRun(40, 136) === 4 && S.maxRun(70, 136) === 5);
+    const run = (pos, n) => { const g = { members: [], maxRun: 3 }; const at2 = []; for (let i = 0; i < pos.length; i++) { g.members.push(i); at2.push(pos[i]); } return S.groupCost(g, at2, n); };
+    check('category runs: 3 in a row costs nothing, 5 in a row does, also around the end', run([4, 5, 6, 20], 40) === 0 && run([4, 5, 6, 7, 8], 40) > 0 && run([38, 39, 0, 1, 2], 40) > 0 && run([38, 39, 1, 2], 40) === 0);
+    const catOf = v => { const i = Number(v.slice(1)); return i % 2 ? 'dance' : i % 5 === 0 ? 'mellow' : ''; };
+    const c = S.arrange(items, () => null, v => fav.has(v), rand, catOf);
+    const longest = name => { let best = 0, cur = 0; for (let i = 0; i < 2 * 136; i++) { const it = c.ids[i % 136]; if (catOf('v' + it.slice(1)) === name) { cur++; best = Math.max(best, Math.min(cur, 136)); } else cur = 0; } return best; };
+    const cap = S.maxRun(68, 136);
+    check(`half the songs in one category: never more than ${cap} in a row (longest ${longest('dance')})`, longest('dance') <= cap && longest('mellow') <= 3);
+    let pairs = 0; for (let i = 0; i < 136; i++) if (catOf('v' + c.ids[i].slice(1)) === 'dance' && catOf('v' + c.ids[(i + 1) % 136].slice(1)) === 'dance') pairs++;
+    check(`categories may still repeat in a row (${pairs} dance pairs)`, pairs > 5);
     const plain = S.arrange(items.slice(50, 60), () => null, () => false, rand);
     check('nothing to spread: a plain shuffle', plain.groups.length === 0 && S.sameSongs(plain.ids, S.idsOf(items.slice(50, 60))));
   }

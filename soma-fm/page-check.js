@@ -252,6 +252,33 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Tapping ☆ on an "In playlist" card makes it a favorite (⭐), saved', star === 'false' && fav.on >= 1 && fav.text === '⭐' && saved === 1, JSON.stringify(fav) + ' saved ' + saved);
   check('Only songs in the playlist have a star', fav.others === 0, String(fav.others));
 
+  // Categories (3.15): a drop-down beside the buttons of "In playlist" cards, saved by video id
+  const catSet = await page.evaluate(() => {
+    const r = document.getElementById('xm-host').shadowRoot;
+    const sel = r.querySelector('ol > li.have .state select.cat');
+    if (!sel) return null;
+    const opts = [...sel.options].map(o => o.textContent).join();
+    sel.value = 'dance'; sel.dispatchEvent(new Event('change'));
+    return opts;
+  });
+  await settle(page); await page.waitForTimeout(200);
+  const catInfo = await page.evaluate(() => { const r = document.getElementById('xm-host').shadowRoot; const f = window.__store.categories || {};
+    return { saved: Object.keys(f).filter(k => f[k].c === 'dance').length, shown: r.querySelectorAll('ol > li.have select.cat.set').length,
+      others: r.querySelectorAll('ol > li:not(.have) select.cat').length, wide: document.documentElement.scrollWidth > window.innerWidth }; });
+  check('"In playlist" cards have a category drop-down; choosing one saves it', catSet === 'Category…,Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk' && catInfo.saved === 1 && catInfo.shown >= 1 && catInfo.others === 0 && !catInfo.wide, catSet + ' ' + JSON.stringify(catInfo));
+
+  // Latest play only (3.15): one card per song
+  const dupCount = () => inShadow(page, r => { const seen = new Set(); let d = 0; for (const li of r.querySelectorAll('#cards > li:not(.gap):not(.empty)')) { const k = li.querySelector('.title').firstChild.textContent + '|' + li.querySelector('.artist').firstChild.textContent; if (seen.has(k)) d++; seen.add(k); } return d; });
+  const before1 = await dupCount();
+  await inShadow(page, r => r.querySelector('.filters .one').click());
+  await settle(page); await page.waitForTimeout(300);
+  const one = await inShadow(page, r => ({ pressed: r.querySelector('.filters .one').getAttribute('aria-pressed'), gaps: r.querySelectorAll('#cards > li.gap').length }));
+  const after1 = await dupCount();
+  check('"Latest play only" shows each song once', before1 > 0 && after1 === 0 && one.pressed === 'true' && one.gaps === 0 && await page.evaluate(() => window.__store.latestOnly === true), `dups ${before1} → ${after1} ${JSON.stringify(one)}`);
+  await inShadow(page, r => r.querySelector('.filters .one').click());
+  await settle(page); await page.waitForTimeout(300);
+  check('Cards are laid out only when on screen (content-visibility)', await inShadow(page, r => getComputedStyle(r.querySelector('#cards > li')).contentVisibility === 'auto'));
+
   // Card play history
   const log =await inShadow(page, r => { const b = r.querySelector('.histbtn'); if (!b) return null; b.click(); return true; });
   await settle(page); await page.waitForTimeout(200);
@@ -282,6 +309,9 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await inShadow(page, r => r.querySelector('#statsbox button.fav[aria-pressed="true"]').click());   // and back, so one favorite stays
   await settle(page); await page.waitForTimeout(200);
   const sAfter = await page.evaluate(() => { const f = window.__store.favorites || {}; return Object.keys(f).filter(k => f[k].on).length; });
+  const sCats = await inShadow(page, r => ({ line: [...r.querySelectorAll('#statsbox .sline')].map(x => x.textContent).find(x => /^Categories:/.test(x)) || '',
+    none: [...r.querySelectorAll('#statsbox .sdet summary')].map(x => x.textContent).find(x => /No category yet/.test(x)) || '', sels: r.querySelectorAll('#statsbox .sdet select.cat').length }));
+  check('Stats counts categories and lists songs without one', /Dance 1/.test(sCats.line) && /No category yet: [0-9]+/.test(sCats.none) && sCats.sels > 10, JSON.stringify(sCats));
   check('Stats has stars for playlist songs, and tapping one updates it in place', sStars > 3 && sOn >= 1 && sAfter === 1, `${sStars} stars, ${sOn} on, ${sAfter} saved`);
   await inShadow(page, r => [...r.querySelectorAll('.seg button')].find(b => b.textContent === 'Most recent').click());
   await settle(page); await page.waitForTimeout(200);
@@ -298,7 +328,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     await page.locator('#xm-host #bkfile').setInputFiles(await dl.path());
     await page.waitForTimeout(500);
     const pv = await inShadow(page, r => [...r.querySelectorAll('.bpreview li')].map(x => x.textContent).join(' / '));
-    check('Importing your own backup previews "0 of them aren\'t on this device"', /; 0 of them aren't on this device yet/.test(pv) && /, 1 favorites,/.test(pv), pv);
+    check('Importing your own backup previews "0 of them aren\'t on this device"', /; 0 of them aren't on this device yet/.test(pv) && /, 1 favorites, 1 categories,/.test(pv), pv);
   }
   await inShadow(page, r => { r.querySelector('#bkpaste').value = '{"hello":1}'; r.querySelector('#bkread').click(); });
   await settle(page); await page.waitForTimeout(200);

@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.14.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.15.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -69,7 +69,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `Matcher` | yes | Song matching, search text, mark keys, hand-mark logic, suggestions and search for linking, unavailable-video test, array helpers that are safe under prototype.js (`anyOf`, `allOf`, `mapOf`, `keep`). |
 | `History` | yes | Play history: feed → plays, merging with gap detection, date/time formats, CSV, coverage (playlist songs heard), playlist length stats. |
 | `Archive` | yes | Remembering playlist titles, detecting songs gone from the playlist (with a safety stop), dismissing, flagging plays of gone songs. |
-| `Backup` | yes | Backup file format, validation, merge rules (history, marks, dislikes, favorites, archive), import preview. |
+| `Backup` | yes | Backup file format, validation, merge rules (history, marks, dislikes, favorites, categories, archive), import preview. |
 | `Stats` | yes | Everything in the Stats panel: counts, shares, rotation estimates, top lists, per-song play logs. |
 | `Shuffle` | yes (I/O injected) | Shuffling the real playlist: Fisher-Yates order, the move plan, reading the playlist and making the moves through the YouTube Data API, owner check. `call(method, resource, params, body)` is injected so it can be tested with a fake API. See §8a. |
 | `Reader` | yes (I/O injected) | Reading the YouTube playlist: page parsing, the >100-song side-panel fallback, complete/incomplete reads. `read(get, post)` takes fetch functions so it can be tested with a fake YouTube. |
@@ -86,6 +86,8 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `marks` | Hand marks by song key: `{ v: 'have' \| 'not', at, id? }`. `id` = linked playlist video. Old 1.x marks are a bare timestamp meaning "have". |
 | `dislikes` | Song key → timestamp. Kept separate from marks so Undo restores exactly. |
 | `favorites` | Playlist **video id** → `{ on, at }` (3.14). Keyed by video, not song key, so Shuffle can use it and every SomaFM song linked to the video shares the star. Removing keeps `on: false` so a backup merge (newer `at` wins) doesn't bring it back. In backups. |
+| `categories` | Playlist video id → `{ c, at }` (3.15), `c` one of the keys in `CATEGORIES` (band, classics, dance, jazz, mellow, soul; names can change, keys can't), `''` once cleared. Same merge rule as favorites. In backups. |
+| `latestOnly` | "Latest play only" toggle: one card per song, at its most recent play (per device). |
 | `backup:beforeImport` | `{ at, data }` saved before every import, for "Undo last import". |
 | `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
 | `signin:pending`, `signin:token`, `signin:reopen` | Sign-in in progress (random `state`, popup or same tab); the one-hour access key `{ token, at, exp }`; "reopen Shuffle after a same-tab sign-in". |
@@ -120,10 +122,11 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 6. **The 63-character cutoff** in SomaFM titles and artists can leave an unclosed bracket (`[Rudolph the Red-Nosed Re`) or a word fragment. The matcher treats an open bracket as closed and lets a final fragment match the start of a word (a one-letter fragment only after two or more matched words).
 7. **Tampermonkey's sandbox:** the wake lock is looked up on `unsafeWindow.navigator` first. `@connect` must list `www.youtube.com`, `m.youtube.com` and `youtube.com`, or requests fail as "network error".
 8. **Background redraws are paused while a dialog or the song picker is open** (`quietRender()` + `renderPending`), then caught up on close. Rendering under an open dialog made closing it lag.
-9. **Performance:** matching every recorded song against the playlist takes about 0.3 s on a desktop and over 2 s on a tablet. `statusCache` is keyed by song key: marks and dislikes **delete only that key**. Clear the whole cache only when the playlist or the gone list changes.
+9. **Performance (see also 14):** matching every recorded song against the playlist takes about 0.3 s on a desktop and over 2 s on a tablet. `statusCache` is keyed by song key: marks and dislikes **delete only that key**. Clear the whole cache only when the playlist or the gone list changes.
 10. **An incomplete playlist read must never mark songs as gone.** `Reader.read` reports `complete` only when it reaches the stated total (minus "N unavailable videos are hidden"). `Archive.update` also refuses if more than max(5, 25%) of songs vanish at once. Short or failed reads are retried twice (after 5 s and 15 s, `Reader.readRetry`); if still short, the fuller previous read is kept and the next check tries again. `loadPlaylist` runs one read at a time.
 12. **Right after a reorder, YouTube's pages disagree.** On Oct 26, just after the first shuffle, the playlist page (first 100) showed the new order and the watch-page side panel (the rest) the old one. The count still came to 129, so the read looked complete, but 7 songs were repeats and 7 others were missing: they were marked gone, and 3 songs fell back to amber matches. Since 3.12.3, a read with more repeated songs than the last good read is not trusted (`Reader.consistent`): the previous read is kept, and it tries again in 15 minutes.
 13. **SomaFM's feed can date plays in the future.** Around 2:58 AM on Oct 27, the christmas feed briefly listed the plays from 2:04–2:58 AM again, dated a day ahead (Oct 28). Both devices saved them, and since `History.merge` only adds plays newer than the newest saved one, nothing real was recorded after that. Since 3.12.6, `History.dropFuture` clears saved plays more than 15 minutes in the future when the page loads (also after a backup import). Since 3.12.7, `History.fromFeed` expects every feed play within [now − 6 h, now + 15 min] and moves one outside it by whole days into that window (`History.fixDate`); if no whole-day move fits, the time itself is wrong and the play is dropped. "Now" is SomaFM's server clock (the feed response's `Date` header), falling back to the device clock.
+14. **Redrawing cards is layout-bound, not JS-bound.** Measured Oct 27 (3.15): with 50 cards a redraw spent ~0.8 s in layout at 2× CPU slowdown and only ~20 ms in script; 200 cards took several seconds. `#cards > li{content-visibility:auto}` lays out only cards on screen (about 9× faster). Stars and categories update their buttons in place (`sameVideo`) instead of calling `render()`. Measure with a CDP trace (`Layout`, `UpdateLayoutTree`), not wall-clock clicks: SomaFM's ads make those noisy.
 11. **YouTube page formats change.** Parsing walks `ytInitialData` for `playlistVideoRenderer` / `playlistPanelVideoRenderer` / `continuationItemRenderer` wherever they are, rather than fixed paths. If a read breaks, the header says so (refuse and report) and songs aren't labeled.
 
 ## 6. Matching rules, and why
@@ -185,7 +188,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
   starts from Fisher-Yates and then swaps songs (simulated annealing, 300 × n tries, about 0.2 s for 136 songs on a desktop) to lower
   `groupCost`. Favorites and each song's versions (`Matcher.sameTitle` on any title of either, joined through chains, medleys split at "/")
   are spaced evenly, counting around the end; same artist, album or uploading channel only get a "not closer than half the even spacing,
-  max 12" penalty. Artist/title/album come from SomaFM's plays of that video (`somaInfo`), else the video title and channel: a side of
+  max 12" penalty. Categories (3.15) aren't spaced: only runs longer than `maxRun` (3, or up to 5 for a category that's a big share: `ceil(share × 12)`) cost. Artist/title/album come from SomaFM's plays of that video (`somaInfo`), else the video title and channel: a side of
   "A - B" that matches an artist or channel name anywhere in the playlist (`nameWords`) is the artist, otherwise both sides count as titles.
   Swaps that don't change the cost are kept, so the rest of the order stays random. The rules are meant to be rough, not exact.
 - **Original order (3.12.1, Dan asked for it):** saved when Shuffle first reads the playlist on a device (3.12.2; 3.12.1 waited for the first change), never overwritten, carried in backups,
@@ -199,7 +202,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 70 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 74 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -235,5 +238,6 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.11 | Backup / Restore (merge, replace, undo); Per page fix; source check for delayed actions; `page-check.js`. 3.11.1 moved into the Scripts repo; Tampermonkey auto-update from GitHub. 3.11.2 play logs show the elapsed time with * for a gap (legend below), wider Stats panel on desktop. |
 | 3.12 | Shuffle the real playlist through the YouTube Data API (Google sign-in, fewest moves, resume, read-back check, put back). 3.12.1 keeps the original order (in backups, downloadable). 3.12.2 saves it as soon as Shuffle opens; original order also committed as a CSV. 3.12.3 distrusts playlist reads with new repeats (false "gone" songs right after a shuffle). 3.12.4: an automatic match can be corrected ("Wrong video?" links another video). 3.12.5: "Not in playlist" moved into that picker. 3.12.6: plays dated in the future are ignored and cleared (gotcha 13). 3.12.7: misdated feed plays are moved by whole days to the right date instead of dropped. |
 | 3.13 | Song lengths on cards and in Stats lists: the playlist video's length for "In playlist" songs, otherwise measured (~) from SomaFM's start times to the next song or break (`History.measuredLengths`: median of a song's plays, skipping plays before a gap and spans under 20 s or over 20 min). |
+| 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |
