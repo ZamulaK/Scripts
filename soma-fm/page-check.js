@@ -232,8 +232,18 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const pos = await inShadow(page, r => r.querySelector('#pos').textContent);
   check('Per page 25 shows 25 cards', /^1–25 of/.test(pos), pos);
 
+  // Song lengths (3.13): the playlist video's for "In playlist" songs, measured (~) for the rest
+  const lens = await inShadow(page, r => {
+    const have = [...r.querySelectorAll('ol > li.have .artist .len')].map(x => x.textContent);
+    const other = [...r.querySelectorAll('ol > li:not(.have) .artist .len')].map(x => x.textContent);
+    return { have: have.slice(0, 3), other: other.slice(0, 3), haveN: have.length, otherN: other.length,
+      stats: 0, wide: document.documentElement.scrollWidth > window.innerWidth };
+  });
+  check('Cards show song lengths: playlist length for "In playlist", measured (~) for others',
+    lens.haveN > 0 && lens.otherN > 0 && lens.have.every(t => /^ · \d+:\d\d$/.test(t)) && lens.other.every(t => /^ · ~\d+:\d\d$/.test(t)) && !lens.wide, JSON.stringify(lens));
+
   // Card play history
-  const log = await inShadow(page, r => { const b = r.querySelector('.histbtn'); if (!b) return null; b.click(); return true; });
+  const log =await inShadow(page, r => { const b = r.querySelector('.histbtn'); if (!b) return null; b.click(); return true; });
   await settle(page); await page.waitForTimeout(200);
   const logRows = await inShadow(page, r => r.querySelectorAll('.cardlog li').length);
   check('a repeated song opens its play history', log && logRows >= 2, `rows ${logRows}`);
@@ -253,6 +263,8 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Stats opens without overflow', stats.open && !stats.overflow && stats.sections >= 6, JSON.stringify(stats));
   check('Stats shares add up to about 100%', stats.shareCount === 4 && Math.abs(stats.shareSum - 100) <= 2, String(stats.shareSum));
   check('Stats shows the replay headline', /\d/.test(stats.headline), stats.headline);
+  const statLens = await inShadow(page, r => r.querySelectorAll('#statsbox .slist .nm small .len').length);
+  check('Stats song lists show song lengths', statLens > 5, String(statLens));
   await inShadow(page, r => [...r.querySelectorAll('.seg button')].find(b => b.textContent === 'Most recent').click());
   await settle(page); await page.waitForTimeout(200);
   check('Stats "Most recent" sort switches the list', await inShadow(page, r => /Most recently replayed/.test(r.querySelector('.sechead h3').textContent)));

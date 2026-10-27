@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.7
+// @version      3.13.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -300,6 +300,57 @@ const History = (() => {
     return out;
   }
 
+  // Start times of station IDs and breaks in the feed, newest first. Never shown; they only end the song before them.
+  function breaksFromFeed(songs, now) {
+    const out = [];
+    const list = songs || [];
+    for (let i = 0; i < list.length; i++) {
+      const x = list[i];
+      if (!x || !isBreak(String(x.artist || ''), String(x.title || ''))) continue;
+      let at = Number(x.date);
+      if (!isFinite(at) || at <= 0) continue;
+      if (now) { at = fixDate(at, now); if (at === null) continue; }
+      out.push(at);
+    }
+    return out.sort((a, b) => b - a);
+  }
+  // Saved break times plus new ones, newest first, no repeats, at most max; the same list back when nothing is new
+  function mergeBreaks(stored, fetched, max) {
+    const seen = new Set(stored);
+    const fresh = Matcher.keep(fetched, t => !seen.has(t));
+    if (!fresh.length) return stored;
+    const all = stored.concat(fresh).sort((a, b) => b - a);
+    return all.length > max ? all.slice(0, max) : all;
+  }
+
+  // How long each song ran on SomaFM: from its start to the next song or break. Plays whose end wasn't
+  // recorded (the newest, or before a recording gap) and implausible spans are skipped. Per song key, the
+  // median of its measured plays, so one odd span (a missed break) doesn't skew it. plays newest first.
+  const LEN_MIN = 20, LEN_MAX = 20 * 60;
+  function measuredLengths(plays, breaks, keyOf) {
+    const spans = new Map();
+    const br = (breaks || []).slice().sort((a, b) => a - b);   // oldest first, to walk alongside the plays
+    let b = 0;
+    for (let i = plays.length - 1; i >= 1; i--) {               // oldest play first; plays[i - 1] is the next one
+      const at = plays[i][0], next = plays[i - 1];
+      if (next[4]) continue;                                    // a recording gap before the next play
+      while (b < br.length && br[b] <= at) b++;
+      const end = b < br.length && br[b] < next[0] ? br[b] : next[0];
+      const len = end - at;
+      if (len < LEN_MIN || len > LEN_MAX) continue;
+      const k = keyOf(plays[i][1], plays[i][2]);
+      const l = spans.get(k);
+      if (l) l.push(len); else spans.set(k, [len]);
+    }
+    const out = new Map();
+    spans.forEach((l, k) => {
+      l.sort((x, y) => x - y);
+      const m = l.length >> 1;
+      out.set(k, l.length % 2 ? l[m] : Math.round((l[m - 1] + l[m]) / 2));
+    });
+    return out;
+  }
+
   // Saved plays dated in the future removed (see FUTURE_SLACK); the same list back when there are none
   function dropFuture(plays, now) {
     const out = Matcher.keep(plays, p => !(p[0] > now + FUTURE_SLACK));
@@ -381,7 +432,7 @@ const History = (() => {
     return (h ? h + ':' + pad(m) : m) + ':' + pad(r);
   }
 
-  return { fromFeed, fixDate, dropFuture, merge, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
+  return { fromFeed, fixDate, breaksFromFeed, mergeBreaks, measuredLengths, dropFuture, merge, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
 })();
 
 /* ---------- Playlist memory (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -1132,6 +1183,7 @@ function main() {
     a.open{margin-top:.1em}
     .title{font-weight:700;font-size:1.08em;line-height:1.25;overflow-wrap:anywhere}
     .artist{margin-top:.1rem;overflow-wrap:anywhere}
+    .len{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
     .album{color:var(--muted);font-size:.82em;margin-top:.1rem;overflow-wrap:anywhere}
     .state{grid-column:2;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.45rem}
     .pill{font-size:.8em;font-weight:700;border-radius:999px;padding:.3em .75em;white-space:nowrap}
@@ -1391,6 +1443,25 @@ function main() {
     if (clean !== history) { history = clean; GM_setValue(HKEY, history); }
   }
   clearFuture();
+  // Station ID / break start times: never shown, only used to end the song before them (song lengths)
+  const BKEY = 'breaks:' + channel, BREAKS_MAX = 2000;
+  let breaks = GM_getValue(BKEY, []);
+  if (!Array.isArray(breaks)) breaks = [];
+  let measured = null;   // song key -> seconds it ran on SomaFM; rebuilt when history or breaks change
+  // A song's length: your playlist video's when it's that recording, otherwise measured from SomaFM's play times
+  function songLength(key, r) {
+    if (r && r.status === 'have' && r.item && Number(r.item.secs) > 0) return { secs: Number(r.item.secs), measured: false };
+    if (!measured) measured = History.measuredLengths(history, breaks, Matcher.markKey);
+    const m = measured.get(key);
+    return m ? { secs: m, measured: true } : null;
+  }
+  function lengthTag(key, r) {
+    const l = songLength(key, r);
+    if (!l) return null;
+    const t = el('span', 'len', ' · ' + (l.measured ? '~' : '') + History.formatClock(l.secs));
+    t.title = l.measured ? 'Measured from when SomaFM started this song and the next one' : 'Length of your playlist video';
+    return t;
+  }
   let rowBase = null;   // display rows built from history; rebuilt only when history changes
   let playCounts = new Map();          // song key -> plays recorded
   const openLogs = new Set();          // cards whose play history is open (key@time), kept across refreshes
@@ -1414,10 +1485,13 @@ function main() {
       const data = await r.json();
       // "Now" from SomaFM's server clock when it sends one, so a device clock that's off doesn't move real plays
       const served = Date.parse(r.headers.get('Date') || '');
-      const fetched = History.fromFeed(data.songs, (isFinite(served) ? served : Date.now()) / 1000);
+      const nowS = (isFinite(served) ? served : Date.now()) / 1000;
+      const fetched = History.fromFeed(data.songs, nowS);
       if (fetched.length) nowAt = fetched[0][0];
       const m = History.merge(history, fetched, HISTORY_MAX);
-      if (m.added) { history = m.plays; rowBase = null; GM_setValue(HKEY, history); }
+      if (m.added) { history = m.plays; rowBase = null; measured = null; GM_setValue(HKEY, history); }
+      const nb = History.mergeBreaks(breaks, History.breaksFromFeed(data.songs, nowS), BREAKS_MAX);
+      if (nb !== breaks) { breaks = nb; measured = null; GM_setValue(BKEY, breaks); }
       songsFrom = 'live';
     } catch (e) {
       if (songsFrom !== 'live') songsFrom = 'page';
@@ -1710,7 +1784,10 @@ function main() {
       }
       const song = el('div', 'song');
       const names = el('div', 'names');
-      names.append(el('div', 'title', s.title), el('div', 'artist', s.artist));
+      const artist = el('div', 'artist', s.artist);
+      const len = lengthTag(s.key, r);
+      if (len) artist.append(len);
+      names.append(el('div', 'title', s.title), artist);
       song.append(names);
       // "Open" always sits beside the song name: your matching video, or the version you have, to compare
       // Hidden while you've marked the song "not this one"; Undo brings it back
@@ -1829,7 +1906,10 @@ function main() {
       const li = document.createElement('li');
       const nm = el('div', 'nm'); nm.append(s.title);
       if (STATUS_CHIP[s.r.status]) nm.append(el('span', 'chip ' + s.r.status, STATUS_CHIP[s.r.status]));
-      nm.append(el('small', '', s.artist));
+      const by = el('small', '', s.artist);
+      const len = lengthTag(s.key, s.r);
+      if (len) by.append(len);
+      nm.append(by);
       const ct = el('div', 'ct');
       const logId = 'plog-' + (++logSeq);
       const toggle = btn('', 'ctbtn', () => {
@@ -1997,7 +2077,7 @@ function main() {
     history = GM_getValue(HKEY, []); if (!Array.isArray(history)) history = [];
     clearFuture();
     archive = GM_getValue(AKEY, {}); if (!archive || typeof archive !== 'object' || Array.isArray(archive)) archive = {};
-    rowBase = null; goneCache = null; statusCache.clear(); openLogs.clear();
+    rowBase = null; measured = null; goneCache = null; statusCache.clear(); openLogs.clear();
   }
   const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; };
   const say = (id, text, cls) => { const m = $(id); m.className = 'bmsg' + (cls ? ' ' + cls : ''); m.textContent = text; };

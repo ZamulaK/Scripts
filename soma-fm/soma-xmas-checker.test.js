@@ -226,6 +226,27 @@ function historyChecks() {
   const resumed = H.merge(unstuck, H.fromFeed(feed([[nowS - 60, 'N', 'New']]), nowS), 100);
   check('after removing them, new plays are recorded again (flagged after a gap)', resumed.added === 1 && resumed.plays[0][2] === 'New' && resumed.gap);
 
+  // Breaks and measured song lengths
+  const bfeed = feed([[nowS - 100, 'A', 'One'], [nowS - 300, 'SomaFM', 'Station ID'], [nowS - 500, 'B', 'Two'], [nowS + 86400 - 700, 'Break', 'Break']]);
+  const br = H.breaksFromFeed(bfeed, nowS);
+  check('breaks: station IDs and breaks captured (dates fixed), songs left out', br.length === 2 && br[0] === nowS - 300 && br[1] === nowS - 700);
+  check('breaks: never become plays', H.fromFeed(bfeed, nowS).length === 2);
+  const bm = H.mergeBreaks([nowS - 300], br, 100);
+  check('breaks: merged without repeats, newest first; nothing new gives the same list back',
+    bm.length === 2 && bm[0] === nowS - 300 && bm[1] === nowS - 700 && H.mergeBreaks(bm, br, 100) === bm);
+  const key = (a, t) => a + '|' + t;
+  // newest first: C (now playing), break, B, A twice, with a gap before the newest A
+  const lp = [[1000, 'C', 'Three', ''], [800, 'B', 'Two', ''], [600, 'A', 'One', ''],
+    [400, 'A', 'One', '', 1], [100, 'A', 'One', ''], [-100, 'A', 'One', '']];
+  for (const p of lp) p[0] += nowS;
+  const ml = H.measuredLengths(lp, [nowS + 950], key);
+  check('length: until the next song', ml.get('A|One') === 200);   // plays at 600 (->800) and -100 (->100); 100->400 crosses a gap
+  check('length: a break ends the song before it', ml.get('B|Two') === 150);
+  check('length: the song still playing has none', !ml.has('C|Three'));
+  const odd = H.measuredLengths([[nowS + 5000, 'Z', 'Z', ''], [nowS + 4000, 'Y', 'Y', ''], [nowS + 3000, 'Y', 'Y', ''], [nowS + 2810, 'Y', 'Y', ''], [nowS + 2800, 'X', 'X', ''], [nowS, 'X', 'X', '']], [], key);
+  check('length: median of several plays; spans under 20 s or over 20 min are left out',
+    odd.get('Y|Y') === 1000 && !odd.has('X|X'));   // Y: 1000, 1000, 190 -> 1000; X: 10 s and 2800 s both skipped
+
   const at = new Date(2026, 9, 5, 15, 7).getTime() / 1000;   // Oct 5 2026, 3:07 PM local
   check('date is m/d/yy', H.formatDate(at) === '10/5/26');
   check('time is h:mm AM/PM', H.formatTime(at) === '3:07 PM' && H.formatTime(new Date(2026, 0, 1, 0, 5).getTime() / 1000) === '12:05 AM');

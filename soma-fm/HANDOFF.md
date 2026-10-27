@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.12.7**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.13.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -80,6 +80,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | Key | Contents |
 |---|---|
 | `history:<channel>` | Plays, newest first: `[unixSeconds, artist, title, album, afterGap?]`. `afterGap = 1` on the first play recorded after a stretch that was missed. Capped at `HISTORY_MAX` (10,000). |
+| `breaks:<channel>` | Start times (unix seconds, newest first) of station IDs / breaks seen in the feed. Never shown; they end the song before them when measuring song lengths. Capped at 2,000. Not in backups (a missed break only nudges a median). |
 | `playlist` | Cached playlist read: `{ schema, at, items: [{id, title, ch, secs}], hidden }`. Re-read when older than 15 min or when `schema !== CACHE_SCHEMA` (currently 3). |
 | `archive:<playlistId>` | Every playlist song ever seen: `{ [videoId]: { id, title, ch, first, last, gone?, dismissed? } }` (ms). |
 | `marks` | Hand marks by song key: `{ v: 'have' \| 'not', at, id? }`. `id` = linked playlist video. Old 1.x marks are a bare timestamp meaning "have". |
@@ -190,7 +191,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 64 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 66 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -225,3 +226,4 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.10 | "▸ N plays" history on cards; "Most recent" sort in Stats. |
 | 3.11 | Backup / Restore (merge, replace, undo); Per page fix; source check for delayed actions; `page-check.js`. 3.11.1 moved into the Scripts repo; Tampermonkey auto-update from GitHub. 3.11.2 play logs show the elapsed time with * for a gap (legend below), wider Stats panel on desktop. |
 | 3.12 | Shuffle the real playlist through the YouTube Data API (Google sign-in, fewest moves, resume, read-back check, put back). 3.12.1 keeps the original order (in backups, downloadable). 3.12.2 saves it as soon as Shuffle opens; original order also committed as a CSV. 3.12.3 distrusts playlist reads with new repeats (false "gone" songs right after a shuffle). 3.12.4: an automatic match can be corrected ("Wrong video?" links another video). 3.12.5: "Not in playlist" moved into that picker. 3.12.6: plays dated in the future are ignored and cleared (gotcha 13). 3.12.7: misdated feed plays are moved by whole days to the right date instead of dropped. |
+| 3.13 | Song lengths on cards and in Stats lists: the playlist video's length for "In playlist" songs, otherwise measured (~) from SomaFM's start times to the next song or break (`History.measuredLengths`: median of a song's plays, skipping plays before a gap and spans under 20 s or over 20 min). |
