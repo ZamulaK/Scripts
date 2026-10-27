@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.15.1
+// @version      3.15.2
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -2054,7 +2054,7 @@ function main() {
         b.setAttribute('aria-pressed', String(key === 'all' ? filters.size === 0 : filters.has(key)));
         f.append(b);
       }
-      const one = btn('Latest only', 'one', () => { latestOnly = !latestOnly; GM_setValue('latestOnly', latestOnly); page = 0; render(); });
+      const one = btn('Latest', 'one', () => { latestOnly = !latestOnly; GM_setValue('latestOnly', latestOnly); page = 0; render(); });
       one.setAttribute('aria-pressed', String(latestOnly));
       one.title = 'One card per song, at its most recent play';
       f.append(one);

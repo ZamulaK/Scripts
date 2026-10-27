@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.15.1**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.15.2**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -87,7 +87,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `dislikes` | Song key → timestamp. Kept separate from marks so Undo restores exactly. |
 | `favorites` | Playlist **video id** → `{ on, at }` (3.14). Keyed by video, not song key, so Shuffle can use it and every SomaFM song linked to the video shares the star. Removing keeps `on: false` so a backup merge (newer `at` wins) doesn't bring it back. In backups. |
 | `categories` | Playlist video id → `{ c, at }` (3.15), `c` one of the keys in `CATEGORIES` (band, classics, dance, jazz, mellow, soul; names can change, keys can't), `''` once cleared. Same merge rule as favorites. In backups. |
-| `latestOnly` | "Latest only" toggle: one card per song, at its most recent play (per device). |
+| `latestOnly` | "Latest" toggle: one card per song, at its most recent play (per device). |
 | `backup:beforeImport` | `{ at, data }` saved before every import, for "Undo last import". |
 | `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
 | `signin:pending`, `signin:token`, `signin:reopen` | Sign-in in progress (random `state`, popup or same tab); the one-hour access key `{ token, at, exp }`; "reopen Shuffle after a same-tab sign-in". |
@@ -239,6 +239,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.12 | Shuffle the real playlist through the YouTube Data API (Google sign-in, fewest moves, resume, read-back check, put back). 3.12.1 keeps the original order (in backups, downloadable). 3.12.2 saves it as soon as Shuffle opens; original order also committed as a CSV. 3.12.3 distrusts playlist reads with new repeats (false "gone" songs right after a shuffle). 3.12.4: an automatic match can be corrected ("Wrong video?" links another video). 3.12.5: "Not in playlist" moved into that picker. 3.12.6: plays dated in the future are ignored and cleared (gotcha 13). 3.12.7: misdated feed plays are moved by whole days to the right date instead of dropped. |
 | 3.13 | Song lengths on cards and in Stats lists: the playlist video's length for "In playlist" songs, otherwise measured (~) from SomaFM's start times to the next song or break (`History.measuredLengths`: median of a song's plays, skipping plays before a gap and spans under 20 s or over 20 min). |
 | 3.15.1 | Fixed freezes of a few seconds about once a minute: the saved matches were thrown away on every playlist check even when nothing changed. No background redraw while a drop-down is open. "Latest play only" renamed "Latest only" to fit the filter row on a tablet. |
+| 3.15.2 | "Latest only" renamed "Latest", since the higher counts in the filter chips pushed it to the next line. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

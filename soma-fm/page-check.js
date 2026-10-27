@@ -274,7 +274,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await settle(page); await page.waitForTimeout(300);
   const one = await inShadow(page, r => ({ pressed: r.querySelector('.filters .one').getAttribute('aria-pressed'), gaps: r.querySelectorAll('#cards > li.gap').length }));
   const after1 = await dupCount();
-  check('"Latest only" shows each song once', before1 > 0 && after1 === 0 && one.pressed === 'true' && one.gaps === 0 && await page.evaluate(() => window.__store.latestOnly === true), `dups ${before1} → ${after1} ${JSON.stringify(one)}`);
+  check('"Latest" shows each song once', before1 > 0 && after1 === 0 && one.pressed === 'true' && one.gaps === 0 && await page.evaluate(() => window.__store.latestOnly === true), `dups ${before1} → ${after1} ${JSON.stringify(one)}`);
   await inShadow(page, r => r.querySelector('.filters .one').click());
   await settle(page); await page.waitForTimeout(300);
   check('Cards are laid out only when on screen (content-visibility)', await inShadow(page, r => getComputedStyle(r.querySelector('#cards > li')).contentVisibility === 'auto'));
