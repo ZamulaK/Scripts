@@ -275,6 +275,40 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('A file that isn\'t a backup is refused', /Nothing was changed/.test(await inShadow(page, r => r.querySelector('#bkinmsg').textContent)));
   await inShadow(page, r => r.querySelector('#bkclose').click());
 
+  // A wrong automatic match can be linked to another video (3.12.4)
+  const fix = await inShadow(page, r => {
+    const li = [...r.querySelectorAll('li.have')].find(x => [...x.querySelectorAll('button')].some(b => b.textContent === 'Wrong video?'));
+    if (!li) return null;
+    const was = li.querySelector('a.open').href;
+    [...li.querySelectorAll('button')].find(b => b.textContent === 'Wrong video?').click();
+    return { was, title: li.querySelector('.title').textContent };
+  });
+  await settle(page); await page.waitForTimeout(200);
+  const offered = await inShadow(page, (r, was) => {
+    const p = r.querySelector('.picker');
+    if (!p) return null;
+    return { n: p.querySelectorAll('.choice').length, noKeep: ![...p.querySelectorAll('button')].some(b => /without linking/.test(b.textContent)) };
+  });
+  check('"Wrong video?" on an automatic match opens the picker without "Mark without linking"', fix && offered && offered.noKeep, JSON.stringify({ fix, offered }));
+  if (offered && !offered.n) {   // no close matches besides the current one: search the playlist
+    await inShadow(page, r => { const i = r.querySelector('#xm-pick'); i.value = 'christmas'; i.dispatchEvent(new Event('input')); });
+    await settle(page);
+  }
+  const pick = await inShadow(page, (r, was) => {
+    const c = [...r.querySelectorAll('.picker .choice')];
+    return c.length;
+  });
+  check('The picker offers other videos', pick > 0, String(pick));
+  if (pick) {
+    await inShadow(page, r => r.querySelector('.picker .choice').click());
+    await page.waitForTimeout(1200); await settle(page);
+    const after = await inShadow(page, (r, title) => {
+      const li = [...r.querySelectorAll('ol > li')].find(x => x.querySelector('.title') && x.querySelector('.title').textContent === title);
+      return li ? { pill: li.querySelector('.pill').textContent, open: (li.querySelector('a.open') || {}).href } : null;
+    }, fix.title);
+    check('Choosing another video relinks the song', after && /linked/.test(after.pill) && after.open !== fix.was, JSON.stringify(after));
+  }
+
   // A mark changes only that song, and quickly
   const t0 = Date.now();
   await inShadow(page, r => { const b = [...r.querySelectorAll('li.none button')].find(x => /Dislike/.test(x.textContent)); if (b) b.click(); });

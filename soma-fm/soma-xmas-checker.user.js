@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.3
+// @version      3.12.4
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1536,6 +1536,7 @@ function main() {
     input.type = 'search'; input.id = 'xm-pick'; input.placeholder = 'Search your playlist'; input.autocomplete = 'off';
     // Show the choice as linked for a moment before the panel closes, so it's clear it worked
     let chosen = false;
+    const fixing = r.status === 'have' && !r.marked;   // correcting a wrong automatic match
     const choose = (it, b) => {
       if (chosen) return;
       chosen = true;
@@ -1554,8 +1555,9 @@ function main() {
     function fill() {
       const q = input.value.trim();
       let list = q ? Matcher.searchItems(q, items, 40) : Matcher.suggest(s.artist, s.title, items, 6);
-      // The card's closest match goes first, so confirming it is one tap
-      if (!q && r.item && !r.linked) list = [r.item].concat(keep(list, it => it.id !== r.item.id)).slice(0, 6);
+      // The card's closest match goes first, so confirming it is one tap; when fixing a wrong match, it's left out
+      if (!q && r.item && fixing) list = keep(list, it => it.id !== r.item.id);
+      else if (!q && r.item && !r.linked) list = [r.item].concat(keep(list, it => it.id !== r.item.id)).slice(0, 6);
       label.textContent = q ? `Matching "${q}"` : 'Closest matches';
       choices.textContent = '';
       if (!list.length) choices.append(el('div', 'pempty', q ? 'No playlist songs match that search.' : 'No close matches. Search your playlist above.'));
@@ -1572,7 +1574,8 @@ function main() {
       if (r.marked !== 'have') setMark(s.key, 'have'); pickerKey = null; render();
     });
     const cancel = btn('Cancel', 'ctl', () => { pickerKey = null; render(); });
-    const btns = el('div', 'pbtns'); btns.append(unlinked, cancel);
+    const btns = el('div', 'pbtns');
+    if (fixing) btns.append(cancel); else btns.append(unlinked, cancel);   // "without linking" would keep the wrong match
     box.append(el('div', 'ph', 'Which playlist song is it?'), input, label, choices, btns);
     fill();
     return box;
@@ -1704,7 +1707,8 @@ function main() {
         } else if (r.marked === 'not') {
           state.append(el('span', 'pill', '✗ Not in playlist · marked'), search, undo, dislike);
         } else if (r.status === 'have') {
-          state.append(el('span', 'pill', '✓ In playlist'));
+          // An automatic match can be wrong: link the right video, or say it isn't in the playlist
+          state.append(el('span', 'pill', '✓ In playlist'), btn('Wrong video?', 'ctl', () => { pickerKey = key; render(); }), markNot);
         } else if (r.status === 'gone') {
           state.append(el('span', 'pill', '⚠ Gone from playlist'), search, markHave);
         } else if (r.status === 'other') {
