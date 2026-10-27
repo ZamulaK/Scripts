@@ -200,10 +200,25 @@ function historyChecks() {
   check('cap keeps the newest plays', capped.plays.length === 4 && capped.plays[0][2] === 'Six' && capped.plays[3][2] === 'Three');   // Six, Five, Four, Three
 
   // Oct 27, 2026: SomaFM's feed briefly dated an hour of plays a day ahead
-  const nowS = 100000;
-  const ahead = H.fromFeed(feed([[nowS + 86400, 'X', 'Tomorrow'], [nowS + 600, 'Y', 'Clock skew'], [nowS - 200, 'Z', 'Real']]), nowS);
-  check('feed: plays dated in the future are dropped; a few minutes ahead is kept', ahead.length === 2 && ahead[0][2] === 'Clock skew' && ahead[1][2] === 'Real');
-  check('feed: without "now", nothing is dropped for its date', H.fromFeed(feed([[nowS + 86400, 'X', 'Tomorrow']])).length === 1);
+  const nowS = 1793100000;   // Oct 2026
+  const ahead = H.fromFeed(feed([[nowS + 86400 - 300, 'X', 'Tomorrow'], [nowS + 600, 'Y', 'Clock skew'], [nowS - 200, 'Z', 'Real']]), nowS);
+  check('feed: a play dated a day ahead gets today\'s date; a few minutes ahead is kept as is',
+    ahead.length === 3 && ahead[0][2] === 'Clock skew' && ahead[0][0] === nowS + 600 && ahead[1][2] === 'Real' && ahead[2][2] === 'Tomorrow' && ahead[2][0] === nowS - 300);
+  const behind = H.fromFeed(feed([[nowS - 86400 - 120, 'B', 'Yesterday'], [nowS - 2 * 86400 - 900, 'C', 'Two days back'], [nowS + 3 * 86400 - 60, 'D', 'Three days ahead']]), nowS);
+  check('feed: plays dated whole days behind or ahead are moved to today',
+    behind.length === 3 && behind[0][0] === nowS - 60 && behind[1][0] === nowS - 120 && behind[2][0] === nowS - 900);
+  const offTime = H.fromFeed(feed([[nowS + 10 * 3600, 'E', 'Ten hours ahead'], [nowS - 12 * 3600, 'F', 'Twelve hours back'], [nowS - 100, 'G', 'Fine']]), nowS);
+  check('feed: a play no whole-day move can fix (wrong time of day) is dropped', offTime.length === 1 && offTime[0][2] === 'Fine');
+  check('fixDate: the window edges', H.fixDate(nowS - 6 * 3600, nowS) === nowS - 6 * 3600 && H.fixDate(nowS + 900, nowS) === nowS + 900 && H.fixDate(nowS + 901, nowS) === null);
+  check('feed: without "now", dates are used as given', H.fromFeed(feed([[nowS + 86400, 'X', 'Tomorrow']]))[0][0] === nowS + 86400);
+  // The Oct 27 glitch: the last hour repeated a day ahead. Fixed, the repeats land on the saved plays and add nothing.
+  const hour = []; for (let k = 0; k < 15; k++) hour.push([nowS - 4000 + k * 240, 'Art' + k, 'Song' + k]);
+  const savedHour = H.merge([], H.fromFeed(feed(hour), nowS), 100).plays;
+  const repeatDayAhead = []; for (const [t, a, ti] of hour) repeatDayAhead.push([t + 86400, a, ti]);
+  check('feed: the Oct 27 repeats, fixed, add nothing', H.merge(savedHour, H.fromFeed(feed(repeatDayAhead), nowS), 100).added === 0);
+  const newDayAhead = H.merge(savedHour, H.fromFeed(feed([[nowS - 30 + 86400, 'New', 'Misdated']].concat(repeatDayAhead)), nowS), 100);
+  check('feed: a new play dated a day ahead is recorded at the right time, with no gap',
+    newDayAhead.added === 1 && newDayAhead.plays[0][0] === nowS - 30 && newDayAhead.plays[0][2] === 'Misdated' && !newDayAhead.gap);
   const stuck = [[nowS + 86400, 'X', 'Tomorrow', '', 1], [nowS - 3600, 'Z', 'Real', '']];
   const unstuck = H.dropFuture(stuck, nowS);
   check('saved future plays are removed', unstuck.length === 1 && unstuck[0][2] === 'Real');

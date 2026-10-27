@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.12.6
+// @version      3.12.7
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -270,17 +270,30 @@ const History = (() => {
   // A play dated more than this past "now" can't be real. On Oct 27, 2026 SomaFM's feed briefly dated an
   // hour of plays a day ahead; saved, they hid every real play after them (merge only adds newer plays).
   const FUTURE_SLACK = 15 * 60;
+  // The feed lists about the last hour, so every play in it should fall within this window before "now"
+  const FEED_BACK = 6 * 3600;
+  const DAY = 86400;
 
-  // SomaFM feed rows -> plays, newest first; station IDs, rows without a time, and (given now) future rows are dropped
+  // A feed date outside [now - FEED_BACK, now + FUTURE_SLACK] moved by whole days into it (the Oct 27 glitch
+  // had the right time of day on the wrong day); null when no whole-day move fits, since then the time is wrong too
+  function fixDate(at, now) {
+    const lo = now - FEED_BACK, hi = now + FUTURE_SLACK;
+    if (at >= lo && at <= hi) return at;
+    const moved = at + Math.ceil((lo - at) / DAY) * DAY;   // the earliest whole-day move that reaches lo
+    return moved <= hi ? moved : null;
+  }
+
+  // SomaFM feed rows -> plays, newest first; station IDs and rows without a time are dropped. Given now,
+  // a misdated play gets its date fixed (fixDate), or is dropped when it can't be.
   function fromFeed(songs, now) {
     const out = [];
     const list = songs || [];
     for (let i = 0; i < list.length; i++) {
       const x = list[i];
       if (!x || !x.artist || !x.title) continue;
-      const at = Number(x.date);
+      let at = Number(x.date);
       if (!isFinite(at) || at <= 0 || isBreak(String(x.artist), String(x.title))) continue;
-      if (now && at > now + FUTURE_SLACK) continue;
+      if (now) { at = fixDate(at, now); if (at === null) continue; }
       out.push([at, String(x.artist), String(x.title), String(x.album || '')]);
     }
     out.sort((a, b) => b[0] - a[0]);
@@ -368,7 +381,7 @@ const History = (() => {
     return (h ? h + ':' + pad(m) : m) + ':' + pad(r);
   }
 
-  return { fromFeed, dropFuture, merge, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
+  return { fromFeed, fixDate, dropFuture, merge, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
 })();
 
 /* ---------- Playlist memory (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -1399,7 +1412,9 @@ function main() {
       const r = await fetch(`/songs/${channel}.json`, { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       const data = await r.json();
-      const fetched = History.fromFeed(data.songs, Date.now() / 1000);
+      // "Now" from SomaFM's server clock when it sends one, so a device clock that's off doesn't move real plays
+      const served = Date.parse(r.headers.get('Date') || '');
+      const fetched = History.fromFeed(data.songs, (isFinite(served) ? served : Date.now()) / 1000);
       if (fetched.length) nowAt = fetched[0][0];
       const m = History.merge(history, fetched, HISTORY_MAX);
       if (m.added) { history = m.plays; rowBase = null; GM_setValue(HKEY, history); }
