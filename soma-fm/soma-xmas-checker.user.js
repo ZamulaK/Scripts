@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.15.0
+// @version      3.15.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1680,6 +1680,7 @@ function main() {
     sel.classList.toggle('set', !!sel.value);
     sel.setAttribute('aria-label', 'Category: ' + title);
     sel.dataset.vid = id;
+    sel.onblur = () => { if (renderPending && !pickerKey && !$('#statsbox').open) { renderPending = false; setTimeout(render, 50); } };
     sel.onchange = () => {
       setCat(id, sel.value);
       for (const x of sameVideo('select.cat', id)) { x.value = sel.value; x.classList.toggle('set', !!sel.value); }
@@ -1794,19 +1795,34 @@ function main() {
     if (!playlistRead) playlistRead = readPlaylistNow(force).finally(() => { playlistRead = null; });
     return playlistRead;
   }
+  // Matching every song again takes seconds on a tablet, so the saved matches are kept unless the playlist
+  // really changed. (Each read of the saved copy is a new object, so comparing objects always said "changed",
+  // and every minute's check threw all the matches away.)
+  function samePlaylist(a, b) {
+    if (a === b) return true;
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i], y = b[i];
+      if (x.id !== y.id || x.title !== y.title || x.ch !== y.ch || (x.secs || 0) !== (y.secs || 0)) return false;
+    }
+    return true;
+  }
+  function useItems(list) {
+    if (samePlaylist(items, list)) return;
+    items = list; statusCache.clear();
+  }
+  const goneSig = () => mapOf(goneItems(), g => g.id).join();
   async function readPlaylistNow(force) {
     const cached = GM_getValue('playlist', null);
     if (!force && cached && cached.schema === CACHE_SCHEMA && Array.isArray(cached.items) && Date.now() - cached.at < CACHE_MINUTES * 60000) {
-      if (items !== cached.items) statusCache.clear();
-      items = cached.items; hiddenCount = cached.hidden || 0; playlistAt = cached.at; playlistError = ''; return;
+      useItems(cached.items); hiddenCount = cached.hidden || 0; playlistAt = cached.at; playlistError = ''; return;
     }
     try {
       const prevItems = cached && cached.schema === CACHE_SCHEMA && Array.isArray(cached.items) ? cached.items : null;
       const fresh = await Reader.readRetry(fetchPlaylist, f => f.complete && Reader.consistent(f.items, prevItems), RETRY_WAITS, sleep);
       if (!fresh.complete && prevItems && prevItems.length > fresh.items.length) {
         // Still short after the retries: keep the fuller last read, and leave its time so the next check tries again
-        if (items !== prevItems) statusCache.clear();
-        items = prevItems; hiddenCount = cached.hidden || 0; playlistAt = cached.at; playlistError = '';
+        useItems(prevItems); hiddenCount = cached.hidden || 0; playlistAt = cached.at; playlistError = '';
         archiveNote = `YouTube gave only ${fresh.read} of ${fresh.expected || 'all'} playlist songs after ${RETRY_WAITS.length + 1} tries, so the previous read is still used. It tries again on the next check, or use Refresh.`;
         return;
       }
@@ -1815,15 +1831,14 @@ function main() {
         if (prevItems && prevItems.length) {
           // Keep the last good read (only the order changes in a reorder, and order doesn't affect matching).
           // Its time is moved on so the next try is in CACHE_MINUTES, not every minute; Refresh tries now.
-          if (items !== prevItems) statusCache.clear();
-          items = prevItems; hiddenCount = cached.hidden || 0; playlistAt = Date.now(); playlistError = '';
+          useItems(prevItems); hiddenCount = cached.hidden || 0; playlistAt = Date.now(); playlistError = '';
           GM_setValue('playlist', Object.assign({}, cached, { at: playlistAt }));
           archiveNote = `YouTube's playlist pages disagreed this time (${n} song${n === 1 ? '' : 's'} came back twice and others not at all), which happens for a while after the playlist is reordered. The previous read is still used; it tries again in ${CACHE_MINUTES} minutes, or use Refresh.`;
           return;
         }
         fresh.complete = false;   // nothing to fall back on: show it, but never mark songs gone from it
       }
-      items = fresh.items; hiddenCount = fresh.hidden; playlistAt = Date.now(); playlistError = ''; statusCache.clear();
+      useItems(fresh.items); hiddenCount = fresh.hidden; playlistAt = Date.now(); playlistError = '';
       GM_setValue('playlist', { schema: CACHE_SCHEMA, at: playlistAt, items, hidden: hiddenCount });
       // Remember every song, and notice any that have left the playlist since the last read,
       // but only from a complete read: songs a short read missed aren't gone
@@ -1832,7 +1847,11 @@ function main() {
       } else {
         const u = Archive.update(archive, items, playlistAt);
         if (u.refused) archiveNote = `This playlist read looked incomplete (${u.refused} songs missing at once), so none were marked as gone.`;
-        else { archiveNote = ''; archive = u.archive; GM_setValue(AKEY, archive); goneCache = null; }
+        else {
+          const was = goneSig();
+          archiveNote = ''; archive = u.archive; GM_setValue(AKEY, archive); goneCache = null;
+          if (goneSig() !== was) statusCache.clear();   // songs gone (or back) are labeled differently
+        }
       }
     } catch (e) {
       // Refuse and report: never label songs from a playlist we couldn't read
@@ -1975,7 +1994,9 @@ function main() {
   let renderPending = false;
   function quietRender() {
     const statsOpen = $('#statsbox').open || $('#backupbox').open || $('#shufbox').open;
-    if (pickerKey || statsOpen) { renderPending = true; return; }
+    // Not while a category drop-down is open or focused either: redrawing would close it
+    const choosing = root.activeElement && root.activeElement.tagName === 'SELECT';
+    if (pickerKey || statsOpen || choosing) { renderPending = true; return; }
     render();
   }
 
@@ -2033,7 +2054,7 @@ function main() {
         b.setAttribute('aria-pressed', String(key === 'all' ? filters.size === 0 : filters.has(key)));
         f.append(b);
       }
-      const one = btn('Latest play only', 'one', () => { latestOnly = !latestOnly; GM_setValue('latestOnly', latestOnly); page = 0; render(); });
+      const one = btn('Latest only', 'one', () => { latestOnly = !latestOnly; GM_setValue('latestOnly', latestOnly); page = 0; render(); });
       one.setAttribute('aria-pressed', String(latestOnly));
       one.title = 'One card per song, at its most recent play';
       f.append(one);
