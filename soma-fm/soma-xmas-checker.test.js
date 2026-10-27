@@ -425,6 +425,31 @@ async function readerChecks() {
   r = await R.read(f.get, f.post, 'PLX');
   check('a song in the playlist twice is counted at both positions', r.complete && r.items.length === 101 && r.items[100].id === 'v5');
 
+  // Oct 27: a background read stopped at 100 of 136; reading again a moment later got them all
+  {
+    const waited = [];
+    const sleep = async ms => { waited.push(ms); };
+    const good = x => x.complete;
+    let n = 0;
+    let rr = await R.readRetry(async () => ({ complete: ++n >= 2, n }), good, [5, 15], sleep);
+    check('short read is retried, and the full one is used', rr.complete && rr.n === 2 && waited.join() === '5');
+    n = 0; waited.length = 0;
+    rr = await R.readRetry(async () => ({ complete: false, n: ++n }), good, [5, 15], sleep);
+    check('still short after every try: the last read is returned', !rr.complete && rr.n === 3 && waited.join() === '5,15');
+    n = 0; waited.length = 0;
+    rr = await R.readRetry(async () => { if (++n === 1) throw new Error('network'); return { complete: true, n }; }, good, [5, 15], sleep);
+    check('a failed read is retried', rr.complete && rr.n === 2);
+    n = 0;
+    rr = await R.readRetry(async () => { if (++n === 3) throw new Error('network'); return { complete: false, n }; }, good, [5, 15], sleep);
+    check('a later failure keeps the short read from before', !rr.complete && rr.n === 2);
+    let msg = '';
+    try { await R.readRetry(async () => { throw new Error('down'); }, good, [5, 15], sleep); } catch (e) { msg = e.message; }
+    check('every try failed: the error is reported', msg === 'down');
+    n = 0;
+    rr = await R.readRetry(async () => ({ complete: true, n: ++n }), good, [5, 15], sleep);
+    check('a good first read is not repeated', rr.n === 1);
+  }
+
   const list = [{ idx: 1 }, { idx: 2 }];
   const added = R.mergeByIndex(list, [{ idx: 2 }, { idx: 4 }, { idx: 3 }, { idx: 3 }]);
   check('merge adds only later positions, once each, in order', added === 2 && list.length === 4 && list[2].idx === 3 && list[3].idx === 4);

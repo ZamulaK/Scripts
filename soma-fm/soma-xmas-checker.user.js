@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.13.0
+// @version      3.13.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -899,7 +899,20 @@ const Reader = (() => {
   // while the count still adds up. A read with more repeats than the last good one is that, not real.
   const consistent = (fresh, prevItems) => repeats(fresh) <= repeats(prevItems || []);
 
-  return { read, readInitialData, entryFrom, collect, mergeByIndex, counts, parseLength, repeats, consistent };
+  // A short or failed read is usually YouTube having a moment, so try again after each wait.
+  // Returns the first good read, else the last read; throws only if every try failed.
+  async function readRetry(readOnce, good, waits, sleep) {
+    let last = null, err = null;
+    for (let i = 0; i <= waits.length; i++) {
+      if (i) await sleep(waits[i - 1]);
+      try { last = await readOnce(); } catch (e) { err = e; continue; }
+      if (good(last)) return last;
+    }
+    if (!last) throw err;
+    return last;
+  }
+
+  return { read, readInitialData, entryFrom, collect, mergeByIndex, counts, parseLength, repeats, consistent, readRetry };
 })();
 
 /* ---------- Shuffling the real playlist (tested by soma-xmas-checker.test.js) ---------- */
@@ -1519,15 +1532,31 @@ function main() {
   }
   const fetchPlaylist = () => Reader.read(gmGet, gmPost);
 
-  async function loadPlaylist(force) {
+  // Waits (ms) before each retry when a read comes back short or fails
+  const RETRY_WAITS = [5000, 15000];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // One read at a time: a timer tick or Refresh during a read (and its retries) waits for it
+  let playlistRead = null;
+  function loadPlaylist(force) {
+    if (!playlistRead) playlistRead = readPlaylistNow(force).finally(() => { playlistRead = null; });
+    return playlistRead;
+  }
+  async function readPlaylistNow(force) {
     const cached = GM_getValue('playlist', null);
     if (!force && cached && cached.schema === CACHE_SCHEMA && Array.isArray(cached.items) && Date.now() - cached.at < CACHE_MINUTES * 60000) {
       if (items !== cached.items) statusCache.clear();
       items = cached.items; hiddenCount = cached.hidden || 0; playlistAt = cached.at; playlistError = ''; return;
     }
     try {
-      const fresh = await fetchPlaylist();
       const prevItems = cached && cached.schema === CACHE_SCHEMA && Array.isArray(cached.items) ? cached.items : null;
+      const fresh = await Reader.readRetry(fetchPlaylist, f => f.complete && Reader.consistent(f.items, prevItems), RETRY_WAITS, sleep);
+      if (!fresh.complete && prevItems && prevItems.length > fresh.items.length) {
+        // Still short after the retries: keep the fuller last read, and leave its time so the next check tries again
+        if (items !== prevItems) statusCache.clear();
+        items = prevItems; hiddenCount = cached.hidden || 0; playlistAt = cached.at; playlistError = '';
+        archiveNote = `YouTube gave only ${fresh.read} of ${fresh.expected || 'all'} playlist songs after ${RETRY_WAITS.length + 1} tries, so the previous read is still used. It tries again on the next check, or use Refresh.`;
+        return;
+      }
       if (!Reader.consistent(fresh.items, prevItems)) {
         const n = Reader.repeats(fresh.items) - Reader.repeats(prevItems || []);
         if (prevItems && prevItems.length) {
