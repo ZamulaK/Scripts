@@ -159,6 +159,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const t = await shufText(page);
     const moves = Number((t.match(/takes (\d+) move/) || [])[1]);
     check('Shuffle reads the playlist and shows the new order and its cost', ready && /30 songs/.test(t) && moves > 15 && moves < 30 && /about [\d,]+ quota units/.test(t), t.slice(0, 200));
+    check('Shuffle says what it spreads out', /kept apart/.test(t), t);
     check('600px: Shuffle panel has no sideways scrolling', await inShadow(page, r => { const d = r.querySelector('#shufbox'); return d.scrollWidth <= d.clientWidth + 1; }));
     await shufClick(page, 'Shuffle the playlist');
     check('Shuffle asks for a second tap before changing anything', /Tap again/.test(await shufText(page)) && api.puts === 0);
@@ -242,6 +243,15 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Cards show song lengths: playlist length for "In playlist", measured (~) for others',
     lens.haveN > 0 && lens.otherN > 0 && lens.have.every(t => /^ · \d+:\d\d$/.test(t)) && lens.other.every(t => /^ · ~\d+:\d\d$/.test(t)) && !lens.wide, JSON.stringify(lens));
 
+  // Favorites (3.14): a star on "In playlist" cards, saved by video id
+  const star = await inShadow(page, r => { const b = r.querySelector('ol > li.have .title button.fav'); if (!b) return null; const was = b.getAttribute('aria-pressed'); b.click(); return was; });
+  await settle(page); await page.waitForTimeout(200);
+  const fav = await inShadow(page, r => ({ on: r.querySelectorAll('ol > li.have .title button.fav[aria-pressed="true"]').length, text: (r.querySelector('button.fav[aria-pressed="true"]') || {}).textContent,
+    others: r.querySelectorAll('ol > li:not(.have) button.fav').length }));
+  const saved = await page.evaluate(() => { const f = window.__store.favorites || {}; return Object.keys(f).filter(k => f[k].on).length; });
+  check('Tapping ☆ on an "In playlist" card makes it a favorite (⭐), saved', star === 'false' && fav.on >= 1 && fav.text === '⭐' && saved === 1, JSON.stringify(fav) + ' saved ' + saved);
+  check('Only songs in the playlist have a star', fav.others === 0, String(fav.others));
+
   // Card play history
   const log =await inShadow(page, r => { const b = r.querySelector('.histbtn'); if (!b) return null; b.click(); return true; });
   await settle(page); await page.waitForTimeout(200);
@@ -265,6 +275,14 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Stats shows the replay headline', /\d/.test(stats.headline), stats.headline);
   const statLens = await inShadow(page, r => r.querySelectorAll('#statsbox .slist .nm small .len').length);
   check('Stats song lists show song lengths', statLens > 5, String(statLens));
+  const sStars = await inShadow(page, r => r.querySelectorAll('#statsbox button.fav').length);
+  await inShadow(page, r => r.querySelector('#statsbox button.fav[aria-pressed="false"]').click());
+  await settle(page); await page.waitForTimeout(200);
+  const sOn = await inShadow(page, r => r.querySelectorAll('#statsbox button.fav[aria-pressed="true"]').length);
+  await inShadow(page, r => r.querySelector('#statsbox button.fav[aria-pressed="true"]').click());   // and back, so one favorite stays
+  await settle(page); await page.waitForTimeout(200);
+  const sAfter = await page.evaluate(() => { const f = window.__store.favorites || {}; return Object.keys(f).filter(k => f[k].on).length; });
+  check('Stats has stars for playlist songs, and tapping one updates it in place', sStars > 3 && sOn >= 1 && sAfter === 1, `${sStars} stars, ${sOn} on, ${sAfter} saved`);
   await inShadow(page, r => [...r.querySelectorAll('.seg button')].find(b => b.textContent === 'Most recent').click());
   await settle(page); await page.waitForTimeout(200);
   check('Stats "Most recent" sort switches the list', await inShadow(page, r => /Most recently replayed/.test(r.querySelector('.sechead h3').textContent)));
@@ -280,7 +298,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     await page.locator('#xm-host #bkfile').setInputFiles(await dl.path());
     await page.waitForTimeout(500);
     const pv = await inShadow(page, r => [...r.querySelectorAll('.bpreview li')].map(x => x.textContent).join(' / '));
-    check('Importing your own backup previews "0 of them aren\'t on this device"', /; 0 of them aren't on this device yet/.test(pv), pv);
+    check('Importing your own backup previews "0 of them aren\'t on this device"', /; 0 of them aren't on this device yet/.test(pv) && /, 1 favorites,/.test(pv), pv);
   }
   await inShadow(page, r => { r.querySelector('#bkpaste').value = '{"hello":1}'; r.querySelector('#bkread').click(); });
   await settle(page); await page.waitForTimeout(200);
@@ -293,7 +311,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     if (!li) return null;
     const was = li.querySelector('a.open').href;
     [...li.querySelectorAll('button')].find(b => b.textContent === 'Wrong video?').click();
-    return { was, title: li.querySelector('.title').textContent };
+    return { was, title: li.querySelector('.title').firstChild.textContent };
   });
   await settle(page); await page.waitForTimeout(200);
   const offered = await inShadow(page, (r, was) => {
@@ -318,7 +336,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     await inShadow(page, r => r.querySelector('.picker .choice').click());
     await page.waitForTimeout(1200); await settle(page);
     const after = await inShadow(page, (r, title) => {
-      const li = [...r.querySelectorAll('ol > li')].find(x => x.querySelector('.title') && x.querySelector('.title').textContent === title);
+      const li = [...r.querySelectorAll('ol > li')].find(x => x.querySelector('.title') && x.querySelector('.title').firstChild.textContent === title);
       return li ? { pill: li.querySelector('.pill').textContent, open: (li.querySelector('a.open') || {}).href } : null;
     }, fix.title);
     check('Choosing another video relinks the song', after && /linked/.test(after.pill) && after.open !== fix.was, JSON.stringify(after));
@@ -328,13 +346,13 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const li = [...r.querySelectorAll('li.have')].find(x => [...x.querySelectorAll('button')].some(b => b.textContent === 'Wrong video?'));
     if (!li) return null;
     [...li.querySelectorAll('button')].find(b => b.textContent === 'Wrong video?').click();
-    return li.querySelector('.title').textContent;
+    return li.querySelector('.title').firstChild.textContent;
   });
   await settle(page); await page.waitForTimeout(200);
   await inShadow(page, r => [...r.querySelectorAll('.picker .pbtns button')].find(b => /Not in playlist/.test(b.textContent)).click());
   await settle(page); await page.waitForTimeout(200);
   const notPill = await inShadow(page, (r, title) => {
-    const li = [...r.querySelectorAll('ol > li')].find(x => x.querySelector('.title') && x.querySelector('.title').textContent === title);
+    const li = [...r.querySelectorAll('ol > li')].find(x => x.querySelector('.title') && x.querySelector('.title').firstChild.textContent === title);
     return li ? li.className + ' / ' + li.querySelector('.pill').textContent : '';
   }, notTitle);
   check('"Not in playlist" in the picker marks the song not in the playlist', notTitle && /^none/.test(notPill) && /Not in playlist · marked/.test(notPill), notPill);

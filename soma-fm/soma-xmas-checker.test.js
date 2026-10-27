@@ -611,6 +611,14 @@ function backupChecks() {
   check('preview: says when the backup has the original order', B.preview({ history: {} }, withOrig.data).original === 500 && pv.original === 0);
   check('preview: plays in the backup, how many are new here, date range', pv.plays === 4 && pv.newPlays === 2 && pv.first === 4800 && pv.last === 9000 && pv.marks === 1);
 
+  // Favorites: the more recent change wins, so removing one on a device isn't undone by merging the other
+  const fa = B.mergeFavorites({ v1: { on: true, at: 100 }, v2: { on: true, at: 100 } }, { v1: { on: false, at: 200 }, v2: { on: false, at: 50 }, v3: { on: true, at: 1 } });
+  check('favorites: newer change wins, removals included; new ones added', !fa.v1.on && fa.v2.on && fa.v3.on && B.favCount(fa) === 2);
+  const withFav = B.validate(JSON.parse(JSON.stringify(B.build({ history: {}, marks: {}, dislikes: {}, favorites: { v1: { on: true, at: 5 }, v2: { on: false, at: 6 }, bad: 'x' }, archive: {} }))));
+  check('favorites: a backup carries them; damaged ones skipped', withFav.data.favorites.v1.on && withFav.data.favorites.v2.on === false && !withFav.data.favorites.bad && withFav.skipped === 1);
+  check('favorites: an older backup without them reads as none', Object.keys(v.data.favorites).length === 0);
+  check('preview: counts favorites that are on', B.preview({ history: {} }, withFav.data).favorites === 1);
+
   console.log('--- backup and restore ---');
   for (const [label, ok] of res) console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
   console.log('');
@@ -628,6 +636,50 @@ async function shuffleChecks() {
   const rand = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
   const range = n => { const a = []; for (let i = 0; i < n; i++) a.push('item' + i); return a; };
   const equal = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+
+  // Spreading: like songs kept apart, by position in the playlist (counting around the end)
+  {
+    const T = (a, b) => M.sameTitle(M.titleWords(a), M.titleWords(b));
+    check('same title: typo, a leading "Its", one extra word, year and bracket text', T('Ruldolph the Red-Nosed Reindeer (Remastered 2023)', 'Rudolph The Red Nosed Reindeer') &&
+      T("It's A Marshmallow World", 'Marshmallow World') && T('We Wish You A Merry Christmas', 'We Wish You A Very Merry Christmas'));
+    check('same title: different songs stay apart', !T('Jingle Bells', 'Jingle Bell Rock') && !T('Christmas Eve', 'Christmas Island') && !T('Adore', 'Adore You Baby'));
+    const names = S.nameWords([{ title: 'Still Still Still', ch: 'Kaskade' }], () => null);
+    const k = S.describe({ title: 'Kaskade - This Christmas Night (Lyrics) ft. Dia Frampton', ch: 'HORIZON VIBE' }, null, names);
+    check('"Artist - Title" from another channel: the artist side is known from the playlist', k.artist === 'kaskade' && !M.anyOf(k.titles, w => w.join(' ') === 'kaskade'));
+    const tb = S.describe({ title: 'Tex Beneke: Sleigh Ride', ch: 'MrMaymac' }, null, []);
+    check('unknown side: either side may be the title', M.anyOf(tb.titles, w => w.join(' ') === 'sleigh ride') && tb.uploader === 'mrmaymac');
+    const so = S.describe({ title: 'White Christmas (King Kooba Remix)', ch: 'Charlie Parker - Topic' }, { artist: 'Charlie Parker & Friends', title: 'White Christmas', album: 'Xmas Lounge' }, []);
+    check("SomaFM's artist, title and album are used when it played the video", so.artist === 'charlie parker' && so.album === 'xmas lounge' && so.uploader === '');
+
+    const items = [];
+    for (let i = 0; i < 136; i++) items.push({ id: 'p' + i, videoId: 'v' + i, title: 'Song Number ' + i, ch: 'Singer ' + i + ' - Topic' });
+    for (let g = 0; g < 5; g++) for (let j = 0; j < 3; j++) items[g * 3 + j].title = ['Sleigh Ride', 'Silent Night', 'Feliz Navidad', 'Frosty The Snowman', 'Blue Christmas'][g] + (j ? ' (Remix ' + j + ')' : '');
+    for (let j = 0; j < 4; j++) items[40 + j].ch = 'Kay Starr - Topic';
+    const fav = new Set(); for (let i = 3; i < 136; i += 7) fav.add('v' + i);
+    const gaps = pos => { pos.sort((a, b) => a - b); const out = []; for (let i = 0; i < pos.length; i++) out.push(i + 1 < pos.length ? pos[i + 1] - pos[i] : 136 - pos[pos.length - 1] + pos[0]); return out; };
+    const placeOf = ids => { const m = new Map(); for (let i = 0; i < ids.length; i++) m.set(ids[i], i); return m; };
+    const lo = a => { let x = Infinity; for (const v of a) x = Math.min(x, v); return x; };
+    const hi = a => { let x = 0; for (const v of a) x = Math.max(x, v); return x; };
+    const t0 = Date.now();
+    const a = S.arrange(items, () => null, v => fav.has(v), rand);
+    const ms = Date.now() - t0;
+    const at = placeOf(a.ids);
+    const fp = []; for (const it of items) if (fav.has(it.videoId)) fp.push(at.get(it.id));
+    const fg = gaps(fp), ideal = 136 / fp.length;
+    check(`136 songs: still every song once (${ms} ms)`, S.sameSongs(a.ids, S.idsOf(items)));
+    check(`favorites spread about evenly (gaps ${lo(fg)}–${hi(fg)}, even is ${ideal.toFixed(1)})`, lo(fg) >= ideal * 0.5 && hi(fg) <= ideal * 1.6);
+    let vOk = true, vMin = 999;
+    for (let g = 0; g < 5; g++) { const pos = []; for (let j = 0; j < 3; j++) pos.push(at.get('p' + (g * 3 + j))); const m = lo(gaps(pos)); vMin = Math.min(vMin, m); if (m < 136 / 3 * 0.6) vOk = false; }
+    check(`versions of a song spread out (closest pair ${vMin} apart, even is 45)`, vOk);
+    const kp = []; for (let j = 0; j < 4; j++) kp.push(at.get('p' + (40 + j)));
+    check(`same artist kept apart (closest ${lo(gaps(kp))} apart)`, lo(gaps(kp)) >= 6);
+    seed = 99;
+    const b = S.arrange(items, () => null, v => fav.has(v), rand);
+    let same = 0; for (let i = 0; i < 136; i++) if (a.ids[i] === b.ids[i]) same++;
+    check(`still random: another shuffle is a different order (${same} in the same place)`, same < 20);
+    const plain = S.arrange(items.slice(50, 60), () => null, () => false, rand);
+    check('nothing to spread: a plain shuffle', plain.groups.length === 0 && S.sameSongs(plain.ids, S.idsOf(items.slice(50, 60))));
+  }
 
   const ids = range(116);
   const o = S.order(ids, rand);
