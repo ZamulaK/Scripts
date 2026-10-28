@@ -135,7 +135,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const { ctx, page, errors } = await openPage(browser, { width: 360, scheme: 'light' });
     await inShadow(page, r => r.querySelector('#shuffle').click());
     await settle(page);
-    check('Shuffle first asks for the Client ID', /Client ID/.test(await shufText(page)));
+    check('Shuffle first asks for the Client ID, with the Quota line already there', /Client ID/.test(await shufText(page)) && /Quota: about 10,000 units left/.test(await shufText(page)));
     await inShadow(page, r => { r.querySelector('#shclient').value = 'not an id'; });
     await shufClick(page, 'Save'); await settle(page);
     check('Shuffle refuses something that isn\'t a Client ID', /doesn't look like a Client ID/.test(await shufText(page)));
@@ -167,6 +167,9 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const done = await waitShuf(page, /Done\./);
     check('Shuffle moves the songs, checks the order, and reports done', done && api.puts === moves && api.order.join() !== api.start.join(), `puts ${api.puts}, moves ${moves}`);
     check('Shuffle remembers the earlier order and clears the job', await page.evaluate(() => !window.__store['shuffle:job:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'] && window.__store['shuffle:last:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'].before.length === 30));
+    const qt = await shufText(page), run = await page.evaluate(() => window.__store['shuffle:lastRun']);
+    check('Shuffle has a folded Quota line: units left, the reset time and what the shuffle used', await inShadow(page, r => { const d = r.querySelector('#shufbody details.sdet'); return d && !d.open && /ⓘ Quota: about [0-9,]+ units left today/.test(d.querySelector('summary').textContent); }) && /About [0-9,]+ of 10,000 units left today/.test(qt) && /resets in .*midnight Pacific/.test(qt) &&
+      run && run.complete && run.moves === moves && run.units >= moves * 50 && new RegExp('The last shuffle .* used about ' + run.units.toLocaleString() + ' units').test(qt), qt.slice(-400));
     const orig = await page.evaluate(() => window.__store['shuffle:original:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt']);
     check('The original order is saved before the first shuffle', orig && orig.songs.map(x => x.id).join() === api.start.join() && orig.songs[0].title === 'Song pi0' && orig.songs[0].videoId === 'vpi0');
     await shufClick(page, 'Shuffle again');

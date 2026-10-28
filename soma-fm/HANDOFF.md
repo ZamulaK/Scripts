@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.15.2**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.16.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -95,6 +95,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `shuffle:original:<playlistId>` | `{ at, playlistId, songs: [{ id, videoId, title }] }`: the playlist's order before it was first changed. Saved once, never overwritten; **included in backups** (merge keeps the earliest saved; Replace keeps this device's if the backup has none). |
 | `shuffle:last:<playlistId>` | `{ before, at }`: the order before the last shuffle, for "Show the earlier order". |
 | `shuffle:units` | `{ day, units }`: this script's own estimate of quota used today (Pacific date). |
+| `shuffle:lastRun` | `{ kind, at, units, moves, complete }`: quota used by the last shuffle or put-back, shown under the Quota line. |
 | `filters`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:` keys or the other `shuffle:` keys). |
 
 **Song key** = `Matcher.markKey(artist, title)` = normalized artist + `|` + normalized title (case, accents, punctuation ignored). Marks, dislikes, stats and caches all use it.
@@ -202,7 +203,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 74 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 75 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -240,6 +241,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.13 | Song lengths on cards and in Stats lists: the playlist video's length for "In playlist" songs, otherwise measured (~) from SomaFM's start times to the next song or break (`History.measuredLengths`: median of a song's plays, skipping plays before a gap and spans under 20 s or over 20 min). |
 | 3.15.1 | Fixed freezes of a few seconds about once a minute: the saved matches were thrown away on every playlist check even when nothing changed. No background redraw while a drop-down is open. "Latest play only" renamed "Latest only" to fit the filter row on a tablet. |
 | 3.15.2 | "Latest only" renamed "Latest", since the higher counts in the filter chips pushed it to the next line. |
+| 3.16.0 | Shuffle panel: a folded "ⓘ Quota" line in every view with units left today, time until the midnight-Pacific reset, what the last shuffle used, and a link to Google's own count in the Cloud Console. YouTube gives apps no way to read the quota left, so the count is the script's own, per device. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

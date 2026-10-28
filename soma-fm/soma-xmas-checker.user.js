@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.15.2
+// @version      3.16.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1495,6 +1495,8 @@ function main() {
     .sdet li .nh{min-width:0;overflow-wrap:anywhere}
     a.btn.small{font-size:.72em;padding:.28em .75em;flex:none}
     .snote{color:var(--muted);font-size:.8em}
+    .snote a{color:var(--fg);text-decoration:underline}
+    .qbody{margin-top:.55rem}
     .bar{height:.55rem;border-radius:999px;background:var(--chip);border:1px solid var(--line);overflow:hidden}
     .barwrap{display:grid;gap:.3rem}
     .barhead{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.2rem .75rem}
@@ -2531,7 +2533,7 @@ function main() {
   // (quota, sign-in running out, closing the page) is finished the next time Shuffle opens. Kept for
   // putting things back: the order before the last shuffle, and the playlist's original order (saved
   // before the first shuffle, never overwritten, and carried in backups).
-  const JOBKEY = 'shuffle:job:' + PLAYLIST_ID, LASTKEY = 'shuffle:last:' + PLAYLIST_ID, USEDKEY = 'shuffle:units';
+  const JOBKEY = 'shuffle:job:' + PLAYLIST_ID, LASTKEY = 'shuffle:last:' + PLAYLIST_ID, USEDKEY = 'shuffle:units', RUNKEY = 'shuffle:lastRun';
   const KINDS = {
     shuffle: { head: 'New order', go: 'Shuffle the playlist', run: 'Shuffling your playlist…', name: 'A shuffle',
       done: 'Done. Your playlist is in the new order, and reading it back confirmed it.' },
@@ -2542,10 +2544,10 @@ function main() {
   };
   const rand = n => { const lim = Math.floor(0x100000000 / n) * n, b = new Uint32Array(1); do { crypto.getRandomValues(b); } while (b[0] >= lim); return b[0] % n; };
   const plain = (text, cls, fn) => { const b = el('button', cls, text); b.type = 'button'; b.onclick = fn; return b; };   // no "Working…": these show their own progress
-  let shufToken = null, shufRunning = false, shufStop = false, waitTimer = null, sh = {};
+  let shufToken = null, shufRunning = false, shufStop = false, waitTimer = null, sh = {}, runUnits = 0;
   const validToken = () => { const t = GM_getValue('signin:token', null); return t && t.token && t.exp > Date.now() ? t.token : null; };
   const usedToday = () => { const u = GM_getValue(USEDKEY, null); return u && u.day === Shuffle.quotaDay(Date.now()) ? u.units : 0; };
-  const addUsed = n => GM_setValue(USEDKEY, { day: Shuffle.quotaDay(Date.now()), units: usedToday() + n });
+  const addUsed = n => { runUnits += n; GM_setValue(USEDKEY, { day: Shuffle.quotaDay(Date.now()), units: usedToday() + n }); };
   async function ytCall(method, resource, params, body) {
     const q = new URLSearchParams();
     for (const k in params) if (params[k] !== '' && params[k] != null) q.set(k, String(params[k]));
@@ -2560,14 +2562,40 @@ function main() {
     try { const j = await r.json(); msg = j.error.message || ''; reason = (j.error.errors && j.error.errors[0] && j.error.errors[0].reason) || ''; } catch (e) {}
     throw Object.assign(new Error(msg || 'YouTube returned ' + r.status), { status: r.status, reason });
   }
-  // Local time of the next midnight Pacific, when the quota resets
-  function quotaReset() {
+  // Minutes until midnight Pacific, when the quota resets
+  function resetMins() {
     let h = 0, m = 0;
     for (const p of new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date())) {
       if (p.type === 'hour') h = Number(p.value);
       if (p.type === 'minute') m = Number(p.value);
     }
-    return new Date(Date.now() + (1440 - h * 60 - m) * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return 1440 - h * 60 - m;
+  }
+  // Local time of the next midnight Pacific
+  const quotaReset = () => new Date(Date.now() + resetMins() * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // YouTube doesn't tell an app how much quota is left, so this is the script's own count on this device.
+  // Google's count is in the Cloud Console, a few minutes behind. Folded under one line; stays open once opened.
+  let quotaOpen = false;
+  function quotaInfo(sec) {
+    const used = usedToday(), left = Math.max(0, Shuffle.DAILY_UNITS - used), r = resetMins();
+    const until = r >= 60 ? `${Math.floor(r / 60)} h ${r % 60} min` : `${r} min`;
+    const det = el('details', 'sdet');
+    det.open = quotaOpen;
+    det.addEventListener('toggle', () => { quotaOpen = det.open; });
+    det.append(el('summary', '', `ⓘ Quota: about ${fmt(left)} units left today`));
+    sec.append(det);
+    sec = el('div', 'ssec qbody'); det.append(sec);
+    sec.append(el('div', 'sline',`About ${fmt(left)} of ${fmt(Shuffle.DAILY_UNITS)} units left today (${fmt(used)} used). It resets in ${until}, at midnight Pacific (${quotaReset()} your time).`));
+    const last = GM_getValue(RUNKEY, null);
+    if (last && last.units) {
+      const what = last.kind === 'shuffle' ? 'The last shuffle' : KINDS[last.kind] ? KINDS[last.kind].name : 'The last run';
+      sec.append(el('div', 'sline', `${what} (${when(last.at / 1000)}) used about ${fmt(last.units)} units: ${fmt(last.moves)} move${last.moves === 1 ? '' : 's'} at ${Shuffle.UNITS_PER_MOVE} each, plus reading the playlist.${last.complete ? '' : ' It stopped partway.'}`));
+    }
+    const note = el('div', 'snote', "Counted by this script on this device, so it doesn't include other devices or other apps using the same Google project. ");
+    const a = el('a', '', "Google's own count");
+    a.href = 'https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas'; a.target = '_blank'; a.rel = 'noopener';
+    note.append(a, " is in the Cloud Console (it's a few minutes behind).");
+    sec.append(note);
   }
   function trouble(e) {
     if (e.status === 401) { GM_setValue('signin:token', null); return 'Your Google sign-in has run out (it lasts an hour).'; }
@@ -2690,23 +2718,26 @@ function main() {
     const job = { target: sh.target, before: sh.before, kind: sh.kind, at: sh.resumeOf || Date.now() };
     if (!GM_getValue(OKEY, null)) saveOriginal(sh.before, Date.now());   // first change on this device: keep the order as it was
     GM_setValue(JOBKEY, job);
-    shufRunning = true; shufStop = false;
+    shufRunning = true; shufStop = false; runUnits = 0;
     shufShow('running');
     let res = null, err = null;
     try { res = await Shuffle.run(ytCall, PLAYLIST_ID, sh.items, sh.moves, progress, () => shufStop); }
     catch (e) { err = e; }
     shufRunning = false;
     const n = sh.moves.length;
+    const saveRun = complete => GM_setValue(RUNKEY, { kind: job.kind, at: Date.now(), units: runUnits, moves: err ? err.done || 0 : res.done, complete });
     const after = ' Nothing was lost: every song is still there, partly in the new order. Open Shuffle again to finish.';
+    if (err || res.stopped) saveRun(false);
     if (err) return shufShow('error', `${trouble(err)} ${fmt(err.done || 0)} of ${fmt(n)} moves were made.` + after);
     if (res.stopped) return shufShow('error', `Stopped after ${fmt(res.done)} of ${fmt(n)} moves.` + after);
     shufShow('loading', 'Checking the new order…');
     try {
       const list = await Shuffle.readItems(ytCall, PLAYLIST_ID);
-      if (!Shuffle.matches(Shuffle.idsOf(list), sh.target)) return shufShow('error', 'All the moves were made, but the playlist read back in a different order than planned. Nothing was lost. Open Shuffle again and it will plan the remaining moves.');
+      if (!Shuffle.matches(Shuffle.idsOf(list), sh.target)) return saveRun(true), shufShow('error', 'All the moves were made, but the playlist read back in a different order than planned. Nothing was lost. Open Shuffle again and it will plan the remaining moves.');
+      saveRun(true);
       finished(job);
       shufShow('done');
-    } catch (e) { shufShow('error', `${trouble(e)} The moves were all made, but the new order couldn't be checked. Open Shuffle again to check it.`); }
+    } catch (e) { saveRun(true); shufShow('error', `${trouble(e)} The moves were all made, but the new order couldn't be checked. Open Shuffle again to check it.`); }
   }
   function progress(k, n) {
     const bar = $('#shbar'), t = $('#shprog');
@@ -2754,7 +2785,7 @@ function main() {
         if (sh.kind === 'original' && (sh.added || sh.removed)) sec.append(el('div', 'snote',
           keep([sh.added ? `${fmt(sh.added)} song${sh.added === 1 ? '' : 's'} added since go at the end.` : '', sh.removed ? `${fmt(sh.removed)} removed since ${sh.removed === 1 ? 'is' : 'are'} skipped.` : ''], Boolean).join(' ')));
       }
-      sec.append(el('div', 'snote', `Google allows ${fmt(Shuffle.DAILY_UNITS)} units a day; this script has used about ${fmt(used)} today. Signed in as ${sh.channel}.`));
+      sec.append(el('div', 'snote', `Signed in as ${sh.channel}.`));
       if (used + u > Shuffle.DAILY_UNITS) say1(`That's more than today's quota has left, so it will stop partway. Open Shuffle again after midnight Pacific (${quotaReset()} your time) to finish.`, 'err');
       const ol = el('ol', 'shlist');
       for (let i = 0; i < Math.min(12, n); i++) {
@@ -2832,6 +2863,7 @@ function main() {
       say1(msg, 'err');
       row(plain(validToken() ? 'Try again' : 'Sign in again', 'ctl primary', shufStart));
     }
+    if (!/^(running|waiting|loading)$/.test(view)) { sec = el('div', 'ssec'); body.append(sec); quotaInfo(sec); }
   }
   function openShuffle() {
     const d = $('#shufbox'); if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
