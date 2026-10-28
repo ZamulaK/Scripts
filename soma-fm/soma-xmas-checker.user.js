@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.17.1
+// @version      3.17.2
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1337,6 +1337,7 @@ function main() {
     header .filters{grid-area:filters}
     header .catf{grid-area:catf}
     .catf:empty{display:none}
+    @media (max-width:899px){.catf .wide{display:none}}
     #anote{grid-area:anote} #gonebox{grid-area:gone}
     .lbl-short{display:none}
     header.compact .lbl-full{display:none} header.compact .lbl-short{display:inline}
@@ -1668,8 +1669,8 @@ function main() {
 
   // Categories, also by playlist video id: { c, at }, with c '' once cleared (so a merge doesn't bring it back).
   // Stored by these keys, so the names can change.
-  // Key, name, and the shorter name on the filter chips
-  const CATEGORIES = [['band', 'Band/Swing', 'Swing'], ['classics', 'Classics', 'Classics'], ['dance', 'Dance', 'Dance'], ['jazz', 'Jazz/Piano', 'Jazz'], ['mellow', 'Mellow', 'Mellow'], ['soul', 'Soul/Funk', 'Soul/Funk']];
+  // Key, name, and the shorter name on the filter chips (Soul/Funk's chip is "Funk" below desktop width)
+  const CATEGORIES = [['band', 'Band/Swing', 'Swing'], ['classics', 'Classics', 'Classics'], ['dance', 'Dance', 'Dance'], ['jazz', 'Jazz/Piano', 'Jazz'], ['mellow', 'Mellow', 'Mellow'], ['soul', 'Soul/Funk', 'Funk']];
   const catName = c => { for (const [k, name] of CATEGORIES) if (k === c) return name; return ''; };
   let catCache = null;
   function getCats() {
@@ -2091,7 +2092,10 @@ function main() {
       const n = catCounts();
       for (const [key, , label] of CATEGORIES.concat([['uncat', '', 'None']])) {
         const b = btn('', '', () => toggleCatFilter(key)), c = el('span', 'n', fmt(n.get(key) || 0));
-        b.append(label + ' ', c);
+        const name = el('span', '');   // one flex item, so the button's gap doesn't split "Soul/" from "Funk"
+        if (key === 'soul') name.append(el('span', 'wide', 'Soul/'));
+        name.append(label);
+        b.append(name, c);
         b.setAttribute('aria-pressed', String(catFilters.has(key)));
         catCountEls.set(key, c);
         cf.append(b);

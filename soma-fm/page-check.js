@@ -271,9 +271,12 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('"In playlist" cards have a category drop-down; choosing one saves it', catSet === 'Category…,Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk' && catInfo.saved === 1 && catInfo.shown >= 1 && catInfo.others === 0 && !catInfo.wide, catSet + ' ' + JSON.stringify(catInfo));
   // Category chips (3.17): a second chip row; the count follows a drop-down change without a redraw
   const chips = await inShadow(page, r => { const c = r.querySelector('.catf'), f = r.querySelector('.filters');
-    return { labels: [...c.querySelectorAll('button')].map(b => b.firstChild.textContent.trim()).join(), dance: Number(c.querySelectorAll('button')[2].querySelector('.n').textContent),
+    return { labels: [...c.querySelectorAll('button')].map(b => b.innerText.replace(/[^A-Za-z/]*[0-9,]+$/, '')).join(), wide: innerWidth >= 900, dance: Number(c.querySelectorAll('button')[2].querySelector('.n').textContent),
       below: c.getBoundingClientRect().top >= f.getBoundingClientRect().bottom }; });
-  check('Category chips sit below the status chips, and count the drop-down change', chips.labels === 'Swing,Classics,Dance,Jazz,Mellow,Soul/Funk,None' && chips.dance >= 1 && chips.below, JSON.stringify(chips));
+  check('Category chips sit below the status chips, and count the drop-down change', chips.labels === 'Swing,Classics,Dance,Jazz,Mellow,' + (chips.wide ? 'Soul/Funk' : 'Funk') + ',None' && chips.dance >= 1 && chips.below, JSON.stringify(chips));
+  const vp = page.viewportSize();
+  for (const w of [1000, 360]) { await page.setViewportSize({ width: w, height: vp.height }); await page.waitForTimeout(300); const t = await inShadow(page, r => [...r.querySelectorAll('.catf button')].map(b => b.innerText.replace(/[^A-Za-z/]*[0-9,]+$/, '')).join()); check('The Soul/Funk chip reads "Funk" below desktop width (' + w + 'px)', t.indexOf(w >= 900 ? ',Soul/Funk,' : ',Funk,') >= 0, t); }
+  await page.setViewportSize(vp); await page.waitForTimeout(300);
   await inShadow(page, r => r.querySelectorAll('.catf button')[2].click());
   await settle(page); await page.waitForTimeout(200);
   const onlyDance = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
