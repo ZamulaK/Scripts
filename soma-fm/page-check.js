@@ -269,6 +269,25 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     return { saved: Object.keys(f).filter(k => f[k].c === 'dance').length, shown: r.querySelectorAll('ol > li.have select.cat.set').length,
       others: r.querySelectorAll('ol > li:not(.have) select.cat').length, wide: document.documentElement.scrollWidth > window.innerWidth }; });
   check('"In playlist" cards have a category drop-down; choosing one saves it', catSet === 'Category…,Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk' && catInfo.saved === 1 && catInfo.shown >= 1 && catInfo.others === 0 && !catInfo.wide, catSet + ' ' + JSON.stringify(catInfo));
+  // Category chips (3.17): a second chip row; the count follows a drop-down change without a redraw
+  const chips = await inShadow(page, r => { const c = r.querySelector('.catf'), f = r.querySelector('.filters');
+    return { labels: [...c.querySelectorAll('button')].map(b => b.firstChild.textContent.trim()).join(), dance: Number(c.querySelectorAll('button')[2].querySelector('.n').textContent),
+      below: c.getBoundingClientRect().top >= f.getBoundingClientRect().bottom }; });
+  check('Category chips sit below the status chips, and count the drop-down change', chips.labels === 'Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk,No category' && chips.dance >= 1 && chips.below, JSON.stringify(chips));
+  await inShadow(page, r => r.querySelectorAll('.catf button')[2].click());
+  await settle(page); await page.waitForTimeout(200);
+  const onlyDance = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
+    return { n: cards.length, ok: cards.every(li => li.classList.contains('have') && li.querySelector('select.cat').value === 'dance'), pressed: r.querySelectorAll('.catf button')[2].getAttribute('aria-pressed') }; });
+  check('Tapping a category chip shows only that category', onlyDance.n === chips.dance && onlyDance.ok && onlyDance.pressed === 'true' && await page.evaluate(() => window.__store.catFilters.join() === 'dance'), JSON.stringify(onlyDance));
+  await inShadow(page, r => r.querySelectorAll('.catf button')[6].click());
+  await settle(page); await page.waitForTimeout(200);
+  const both = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
+    return { ok: cards.length > 0 && cards.every(li => li.classList.contains('have') && /^(dance|)$/.test(li.querySelector('select.cat').value)), uncat: cards.filter(li => !li.querySelector('select.cat').value).length }; });
+  check('"No category" adds the songs without one', both.ok && both.uncat > 0, JSON.stringify(both));
+  await inShadow(page, r => { r.querySelectorAll('.catf button')[2].click(); });
+  await settle(page);
+  await inShadow(page, r => { r.querySelectorAll('.catf button')[6].click(); });
+  await settle(page); await page.waitForTimeout(200);
 
   // Latest play only (3.15): one card per song
   const dupCount = () => inShadow(page, r => { const seen = new Set(); let d = 0; for (const li of r.querySelectorAll('#cards > li:not(.gap):not(.empty)')) { const k = li.querySelector('.title').firstChild.textContent + '|' + li.querySelector('.artist').firstChild.textContent; if (seen.has(k)) d++; seen.add(k); } return d; });

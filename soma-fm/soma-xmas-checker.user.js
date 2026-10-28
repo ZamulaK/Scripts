@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.16.0
+// @version      3.17.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1326,15 +1326,17 @@ function main() {
        fit beside the title (full labels, else short ones); otherwise they get their own row ("stacked").
        fitHeader() picks the arrangement from measured widths. */
     header{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:.75rem;row-gap:.6rem;
-      grid-template-areas:"titles stats" "titles btns" "status status" "filters filters" "anote anote" "gone gone";
+      grid-template-areas:"titles stats" "titles btns" "status status" "filters filters" "catf catf" "anote anote" "gone gone";
       padding-bottom:.9rem;border-bottom:1px solid var(--line);margin-bottom:.9rem}
-    header.stacked{grid-template-areas:"titles stats" "btns btns" "status status" "filters filters" "anote anote" "gone gone"}
+    header.stacked{grid-template-areas:"titles stats" "btns btns" "status status" "filters filters" "catf catf" "anote anote" "gone gone"}
     .titles{grid-area:titles;min-width:0}
     #stats{grid-area:stats;justify-self:end;align-self:start}
     header .btns{grid-area:btns;justify-self:end;align-self:start;flex-wrap:nowrap}
     header.stacked .btns{justify-self:start;flex-wrap:wrap}
     header .controls{grid-area:status}
     header .filters{grid-area:filters}
+    header .catf{grid-area:catf}
+    .catf:empty{display:none}
     #anote{grid-area:anote} #gonebox{grid-area:gone}
     .lbl-short{display:none}
     header.compact .lbl-full{display:none} header.compact .lbl-short{display:inline}
@@ -1539,6 +1541,7 @@ function main() {
         <span class="status" role="status"></span>
       </div>
       <div class="filters" role="group" aria-label="Show"></div>
+      <div class="filters catf" role="group" aria-label="Category"></div>
       <div class="warnline" id="anote" hidden></div>
       <details class="gonebox" id="gonebox" hidden><summary id="gonesum"></summary><div class="gonelist" id="gonelist"></div></details>
     </header>
@@ -1686,9 +1689,27 @@ function main() {
     sel.onchange = () => {
       setCat(id, sel.value);
       for (const x of sameVideo('select.cat', id)) { x.value = sel.value; x.classList.toggle('set', !!sel.value); }
+      refreshCatCounts();
     };
     return sel;
   }
+  // Category chips (3.17): only songs in the playlist have a category. None on means no category filter;
+  // 'uncat' is "No category". Remembered on this device.
+  let catFilters = new Set(keep(GM_getValue('catFilters', []) || [], k => k === 'uncat' || !!catName(k)));
+  function toggleCatFilter(key) {
+    if (catFilters.has(key)) catFilters.delete(key); else catFilters.add(key);
+    GM_setValue('catFilters', [...catFilters]);
+    page = 0;
+    render();
+  }
+  // The listed playlist videos, one per card, so the chip counts can follow a category change without a redraw
+  let catRowVids = [], catCountEls = new Map();
+  function catCounts() {
+    const cats = getCats(), n = new Map();
+    for (const v of catRowVids) { const k = catOf(cats, v) || 'uncat'; n.set(k, (n.get(k) || 0) + 1); }
+    return n;
+  }
+  function refreshCatCounts() { const n = catCounts(); for (const [k, e] of catCountEls) e.textContent = fmt(n.get(k) || 0); }
 
   /* ----- Playlist memory: titles of every song seen, so ones that disappear can still be named ----- */
   const AKEY = 'archive:' + PLAYLIST_ID;
@@ -2061,8 +2082,23 @@ function main() {
       one.title = 'One card per song, at its most recent play';
       f.append(one);
     }
+    const cf = $('.catf'), inList = x => x.r.status === 'have' && x.r.item;
+    cf.textContent = '';
+    catRowVids = mapOf(keep(rows, inList), x => x.r.item.id);
+    catCountEls = new Map();
+    if (!playlistError && items.length) {
+      const n = catCounts();
+      for (const [key, label] of CATEGORIES.concat([['uncat', 'No category']])) {
+        const b = btn('', '', () => toggleCatFilter(key)), c = el('span', 'n', fmt(n.get(key) || 0));
+        b.append(label + ' ', c);
+        b.setAttribute('aria-pressed', String(catFilters.has(key)));
+        catCountEls.set(key, c);
+        cf.append(b);
+      }
+    }
 
-    const shownAll = filters.size === 0 || playlistError ? rows : keep(rows, x => filters.has(x.r.status) || (x.r.status === 'gone' && filters.has('none')));
+    let shownAll = filters.size === 0 || playlistError ? rows : keep(rows, x => filters.has(x.r.status) || (x.r.status === 'gone' && filters.has('none')));
+    if (catFilters.size && !playlistError) { const cats = getCats(); shownAll = keep(shownAll, x => inList(x) && catFilters.has(catOf(cats, x.r.item.id) || 'uncat')); }
     const pages = Math.max(1, Math.ceil(shownAll.length / pageSize));
     if (page > pages - 1) page = pages - 1;
     const shown = shownAll.slice(page * pageSize, (page + 1) * pageSize);
