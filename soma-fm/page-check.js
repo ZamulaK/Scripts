@@ -432,6 +432,21 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check('Future plays: no script errors', fp.errors.length === 0, fp.errors.join(' | '));
     await fp.ctx.close();
   }
+
+  // 4. The "None" chip is hidden when every playlist song has a category, unless it's on (3.17.3)
+  {
+    const all = {};
+    for (const it of items) all[it.id] = { c: 'mellow', at: 1 };
+    const noneChip = async store => {
+      const p = await openPage(browser, { width: 600, store });
+      await settle(p.page);
+      const r = await inShadow(p.page, r => { const b = [...r.querySelectorAll('.catf button')].pop(); return { text: b.textContent, shown: b.offsetParent !== null, pressed: b.getAttribute('aria-pressed') }; });
+      await p.ctx.close();
+      return r;
+    };
+    const off = await noneChip({ categories: all }), on = await noneChip({ categories: all, catFilters: ['uncat'] });
+    check('"None" is hidden when every song has a category, and stays while it\'s on', /^None/.test(off.text) && !off.shown && on.shown && on.pressed === 'true', JSON.stringify({ off, on }));
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

@@ -1,6 +1,6 @@
 {
   "name": "soma-xmas-checker",
-  "version": "3.17.2",
+  "version": "3.17.3",
   "private": true,
   "description": "Tampermonkey userscript: SomaFM Christmas Lounge plays vs. the Xmas Mixed YouTube playlist",
   "scripts": {

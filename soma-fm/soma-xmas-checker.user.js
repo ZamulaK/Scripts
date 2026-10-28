@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.17.2
+// @version      3.17.3
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1336,7 +1336,7 @@ function main() {
     header .controls{grid-area:status}
     header .filters{grid-area:filters}
     header .catf{grid-area:catf}
-    .catf:empty{display:none}
+    .catf:empty,.catf button[hidden]{display:none}
     @media (max-width:899px){.catf .wide{display:none}}
     #anote{grid-area:anote} #gonebox{grid-area:gone}
     .lbl-short{display:none}
@@ -1711,7 +1711,12 @@ function main() {
     for (const v of catRowVids) { const k = catOf(cats, v) || 'uncat'; n.set(k, (n.get(k) || 0) + 1); }
     return n;
   }
-  function refreshCatCounts() { const n = catCounts(); for (const [k, e] of catCountEls) e.textContent = fmt(n.get(k) || 0); }
+  // "None" is hidden once every song has a category, unless it's on (else there'd be no way to turn it off)
+  const hideNone = (b, n) => { b.hidden = !n && !catFilters.has('uncat'); };
+  function refreshCatCounts() {
+    const n = catCounts();
+    for (const [k, e] of catCountEls) { e.textContent = fmt(n.get(k) || 0); if (k === 'uncat') hideNone(e.parentNode, n.get(k) || 0); }
+  }
 
   /* ----- Playlist memory: titles of every song seen, so ones that disappear can still be named ----- */
   const AKEY = 'archive:' + PLAYLIST_ID;
@@ -2098,6 +2103,7 @@ function main() {
         b.append(name, c);
         b.setAttribute('aria-pressed', String(catFilters.has(key)));
         catCountEls.set(key, c);
+        if (key === 'uncat') hideNone(b, n.get(key) || 0);
         cf.append(b);
       }
     }
