@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.17.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.17.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -88,7 +88,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `favorites` | Playlist **video id** → `{ on, at }` (3.14). Keyed by video, not song key, so Shuffle can use it and every SomaFM song linked to the video shares the star. Removing keeps `on: false` so a backup merge (newer `at` wins) doesn't bring it back. In backups. |
 | `categories` | Playlist video id → `{ c, at }` (3.15), `c` one of the keys in `CATEGORIES` (band, classics, dance, jazz, mellow, soul; names can change, keys can't), `''` once cleared. Same merge rule as favorites. In backups. |
 | `latestOnly` | "Latest" toggle: one card per song, at its most recent play (per device). |
-| `catFilters` | Category chips that are on (`band` … `soul`, `uncat` for "No category"); none on means no category filter (per device). |
+| `catFilters` | Category chips that are on (`band` … `soul`, `uncat` for "None"); none on means no category filter (per device). |
 | `backup:beforeImport` | `{ at, data }` saved before every import, for "Undo last import". |
 | `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
 | `signin:pending`, `signin:token`, `signin:reopen` | Sign-in in progress (random `state`, popup or same tab); the one-hour access key `{ token, at, exp }`; "reopen Shuffle after a same-tab sign-in". |
@@ -244,6 +244,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.15.2 | "Latest only" renamed "Latest", since the higher counts in the filter chips pushed it to the next line. |
 | 3.16.0 | Shuffle panel: a folded "ⓘ Quota" line in every view with units left today, time until the midnight-Pacific reset, what the last shuffle used, and a link to Google's own count in the Cloud Console. YouTube gives apps no way to read the quota left, so the count is the script's own, per device. |
 | 3.17.0 | Category chips in a second row below the status chips, plus "No category". They narrow the list to playlist songs in the chosen categories and combine with the status chips and Latest. Counts follow a drop-down change in place, without a redraw. |
+| 3.17.1 | Shorter category chip labels: Swing, Jazz and None (the drop-downs keep the full names). |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

@@ -273,7 +273,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const chips = await inShadow(page, r => { const c = r.querySelector('.catf'), f = r.querySelector('.filters');
     return { labels: [...c.querySelectorAll('button')].map(b => b.firstChild.textContent.trim()).join(), dance: Number(c.querySelectorAll('button')[2].querySelector('.n').textContent),
       below: c.getBoundingClientRect().top >= f.getBoundingClientRect().bottom }; });
-  check('Category chips sit below the status chips, and count the drop-down change', chips.labels === 'Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk,No category' && chips.dance >= 1 && chips.below, JSON.stringify(chips));
+  check('Category chips sit below the status chips, and count the drop-down change', chips.labels === 'Swing,Classics,Dance,Jazz,Mellow,Soul/Funk,None' && chips.dance >= 1 && chips.below, JSON.stringify(chips));
   await inShadow(page, r => r.querySelectorAll('.catf button')[2].click());
   await settle(page); await page.waitForTimeout(200);
   const onlyDance = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
@@ -283,7 +283,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await settle(page); await page.waitForTimeout(200);
   const both = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
     return { ok: cards.length > 0 && cards.every(li => li.classList.contains('have') && /^(dance|)$/.test(li.querySelector('select.cat').value)), uncat: cards.filter(li => !li.querySelector('select.cat').value).length }; });
-  check('"No category" adds the songs without one', both.ok && both.uncat > 0, JSON.stringify(both));
+  check('"None" adds the songs without a category', both.ok && both.uncat > 0, JSON.stringify(both));
   await inShadow(page, r => { r.querySelectorAll('.catf button')[2].click(); });
   await settle(page);
   await inShadow(page, r => { r.querySelectorAll('.catf button')[6].click(); });

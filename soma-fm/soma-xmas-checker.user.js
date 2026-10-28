@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.17.0
+// @version      3.17.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1668,7 +1668,8 @@ function main() {
 
   // Categories, also by playlist video id: { c, at }, with c '' once cleared (so a merge doesn't bring it back).
   // Stored by these keys, so the names can change.
-  const CATEGORIES = [['band', 'Band/Swing'], ['classics', 'Classics'], ['dance', 'Dance'], ['jazz', 'Jazz/Piano'], ['mellow', 'Mellow'], ['soul', 'Soul/Funk']];
+  // Key, name, and the shorter name on the filter chips
+  const CATEGORIES = [['band', 'Band/Swing', 'Swing'], ['classics', 'Classics', 'Classics'], ['dance', 'Dance', 'Dance'], ['jazz', 'Jazz/Piano', 'Jazz'], ['mellow', 'Mellow', 'Mellow'], ['soul', 'Soul/Funk', 'Soul/Funk']];
   const catName = c => { for (const [k, name] of CATEGORIES) if (k === c) return name; return ''; };
   let catCache = null;
   function getCats() {
@@ -2088,7 +2089,7 @@ function main() {
     catCountEls = new Map();
     if (!playlistError && items.length) {
       const n = catCounts();
-      for (const [key, label] of CATEGORIES.concat([['uncat', 'No category']])) {
+      for (const [key, , label] of CATEGORIES.concat([['uncat', '', 'None']])) {
         const b = btn('', '', () => toggleCatFilter(key)), c = el('span', 'n', fmt(n.get(key) || 0));
         b.append(label + ' ', c);
         b.setAttribute('aria-pressed', String(catFilters.has(key)));
