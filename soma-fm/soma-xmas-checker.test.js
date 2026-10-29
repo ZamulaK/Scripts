@@ -621,6 +621,10 @@ function backupChecks() {
   check('categories: newer change wins, clearing included', ca.v1.c === '' && ca.v2.c === 'jazz' && B.catCount(ca) === 1);
   const withCat = B.validate(JSON.parse(JSON.stringify(B.build({ history: {}, marks: {}, dislikes: {}, categories: { v1: { c: 'soul', at: 5 }, bad: { c: 3 } }, archive: {} }))));
   check('categories: a backup carries them; damaged ones skipped; older backups have none', withCat.data.categories.v1.c === 'soul' && withCat.skipped === 1 && Object.keys(v.data.categories).length === 0 && B.preview({ history: {} }, withCat.data).categories === 1);
+  const na = B.mergeNotes({ k1: { t: 'old', at: 100 }, k3: { t: 'keep', at: 1 } }, { k1: { t: '', at: 200 }, k2: { t: 'no Soma version on YouTube', at: 5 } });
+  check('notes: newer change wins, deleting included', na.k1.t === '' && na.k2.t === 'no Soma version on YouTube' && na.k3.t === 'keep' && B.noteCount(na) === 2);
+  const withNote = B.validate(JSON.parse(JSON.stringify(B.build({ history: {}, marks: {}, dislikes: {}, notes: { 'a|b': { t: 'hi', at: 5 }, bad: { t: 3, at: 1 } }, archive: {} }))));
+  check('notes: a backup carries them; damaged ones skipped; older backups have none', withNote.data.notes['a|b'].t === 'hi' && withNote.skipped === 1 && Object.keys(v.data.notes).length === 0 && B.preview({ history: {} }, withNote.data).notes === 1);
   check('preview: counts favorites that are on', B.preview({ history: {} }, withFav.data).favorites === 1);
 
   console.log('--- backup and restore ---');
@@ -692,6 +696,17 @@ async function shuffleChecks() {
     check(`half the songs in one category: never more than ${cap} in a row (longest ${longest('dance')})`, longest('dance') <= cap && longest('mellow') <= 3);
     let pairs = 0; for (let i = 0; i < 136; i++) if (catOf('v' + c.ids[i].slice(1)) === 'dance' && catOf('v' + c.ids[(i + 1) % 136].slice(1)) === 'dance') pairs++;
     check(`categories may still repeat in a row (${pairs} dance pairs)`, pairs > 5);
+    // A favorite is one of the first three songs, whatever the shuffle, even with only one favorite
+    let first3 = true;
+    for (let t = 0; t < 12 && first3; t++) {
+      const one = t % 2 ? new Set(['v77']) : fav;
+      const d = S.arrange(items, () => null, v => one.has(v), rand);
+      first3 = one.has('v' + d.ids[0].slice(1)) || one.has('v' + d.ids[1].slice(1)) || one.has('v' + d.ids[2].slice(1));
+    }
+    check('a favorite is among the first three songs of every shuffle', first3);
+    let favFirst = 0;
+    for (let t = 0; t < 30; t++) { const d = S.arrange(items, () => null, v => fav.has(v), rand); if (fav.has('v' + d.ids[0].slice(1))) favFirst++; }
+    check(`the favorite's place in the first three varies (${favFirst} of 30 shuffles start with one)`, favFirst > 3 && favFirst < 27);
     const plain = S.arrange(items.slice(50, 60), () => null, () => false, rand);
     check('nothing to spread: a plain shuffle', plain.groups.length === 0 && S.sameSongs(plain.ids, S.idsOf(items.slice(50, 60))));
   }

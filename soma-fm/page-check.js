@@ -151,7 +151,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   // Shuffle, put back, and the sign-in return, against a fake YouTube API (Google is never contacted)
   {
     const api = fakeApi(30);
-    const { ctx, page, errors } = await openPage(browser, { width: 600, scheme: 'dark', store: signedIn(), api });
+    const { ctx, page, errors } = await openPage(browser, { width: 600, scheme: 'dark', store: Object.assign(signedIn(), { favorites: { vpi7: { on: true, at: 1 }, vpi21: { on: true, at: 1 } } }), api });
     await inShadow(page, r => r.querySelector('#shuffle').click());
     const ready = await waitShuf(page, /New order/);
     const early = await page.evaluate(() => window.__store['shuffle:original:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt']);
@@ -166,6 +166,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     await shufClick(page, 'Tap again to start');
     const done = await waitShuf(page, /Done\./);
     check('Shuffle moves the songs, checks the order, and reports done', done && api.puts === moves && api.order.join() !== api.start.join(), `puts ${api.puts}, moves ${moves}`);
+    check('A favorite is one of the first three songs, and Shuffle says so', /^(pi7|pi21)$/.test(api.order.slice(0, 3).filter(x => x === 'pi7' || x === 'pi21')[0] || '') && /A favorite is one of the first three songs/.test(t), api.order.slice(0, 3).join());
     check('Shuffle remembers the earlier order and clears the job', await page.evaluate(() => !window.__store['shuffle:job:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'] && window.__store['shuffle:last:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'].before.length === 30));
     const qt = await shufText(page), run = await page.evaluate(() => window.__store['shuffle:lastRun']);
     check('Shuffle has a folded Quota line: units left, the reset time and what the shuffle used', await inShadow(page, r => { const d = r.querySelector('#shufbody details.sdet'); return d && !d.open && /ⓘ Quota: about [0-9,]+ units left today/.test(d.querySelector('summary').textContent); }) && /About [0-9,]+ of 10,000 units left today/.test(qt) && /resets in .*midnight Pacific/.test(qt) &&
@@ -255,6 +256,31 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Tapping ☆ on an "In playlist" card makes it a favorite (⭐), saved', star === 'false' && fav.on >= 1 && fav.text === '⭐' && saved === 1, JSON.stringify(fav) + ' saved ' + saved);
   check('Only songs in the playlist have a star', fav.others === 0, String(fav.others));
 
+  // Notes (3.18): 📝 on every card opens an editor at the bottom of the card; the note shows on each of the song's cards
+  const noteFor = await inShadow(page, r => { const li = r.querySelector('ol > li.none, ol > li.disliked, ol > li.other'); const b = li && li.querySelector('.title button.notebtn');
+    if (!b) return null; const name = li.querySelector('.title').firstChild.textContent; b.click(); return { name, all: r.querySelectorAll('ol > li:not(.gap):not(.empty)').length, btns: r.querySelectorAll('ol > li .title button.notebtn').length }; });
+  await settle(page); await page.waitForTimeout(200);
+  const ed = await inShadow(page, r => ({ eds: r.querySelectorAll('.noteed').length, focused: r.activeElement && r.activeElement.id === 'xm-note',
+    inCard: !!(r.querySelector('#xm-note') && r.querySelector('#xm-note').closest('li')) }));
+  check('Every card has a note button; it opens one editor in the card, ready to type', noteFor && noteFor.btns === noteFor.all && ed.eds === 1 && ed.focused && ed.inCard, JSON.stringify([noteFor, ed]));
+  await page.locator('#xm-note').fill("Can't find the SomaFM version on YouTube");
+  await inShadow(page, r => [...r.querySelectorAll('.noteed button')].find(b => b.textContent === 'Save').click());
+  await settle(page); await page.waitForTimeout(200);
+  const nt = await page.evaluate(name => { const r = document.getElementById('xm-host').shadowRoot, n = window.__store.notes || {};
+    const cards = [...r.querySelectorAll('ol > li')].filter(li => li.querySelector('.title') && li.querySelector('.title').firstChild.textContent === name);
+    return { saved: Object.keys(n).map(k => n[k].t).join(), cards: cards.length, shown: cards.filter(li => li.lastElementChild.className === 'unote' && li.lastElementChild.textContent === "Can't find the SomaFM version on YouTube").length,
+      pressed: cards.filter(li => li.querySelector('button.notebtn').getAttribute('aria-pressed') === 'true').length, open: r.querySelectorAll('.noteed').length,
+      otherPressed: r.querySelectorAll('button.notebtn[aria-pressed="true"]').length, wide: document.documentElement.scrollWidth > window.innerWidth }; }, noteFor && noteFor.name);
+  check('Saving a note keeps it, and shows it at the bottom of each of the song\'s cards', nt.saved === "Can't find the SomaFM version on YouTube" && nt.cards >= 1 && nt.shown === nt.cards && nt.pressed === nt.cards && nt.otherPressed === nt.cards && nt.open === 0 && !nt.wide, JSON.stringify(nt));
+  await inShadow(page, r => r.querySelector('button.notebtn[aria-pressed="true"]').click());
+  await settle(page); await page.waitForTimeout(200);
+  const pre = await inShadow(page, r => r.querySelector('#xm-note').value);
+  await inShadow(page, r => [...r.querySelectorAll('.noteed button')].find(b => b.textContent === 'Delete').click());
+  await settle(page); await page.waitForTimeout(200);
+  const gone = await page.evaluate(() => { const r = document.getElementById('xm-host').shadowRoot, n = window.__store.notes || {};
+    return { kept: Object.keys(n).map(k => JSON.stringify(n[k].t)).join(), shown: r.querySelectorAll('.unote').length, pressed: r.querySelectorAll('button.notebtn[aria-pressed="true"]').length }; });
+  check('Editing starts from the note; Delete removes it (kept as empty, for backup merges)', pre === "Can't find the SomaFM version on YouTube" && gone.kept === '""' && gone.shown === 0 && gone.pressed === 0, pre + ' ' + JSON.stringify(gone));
+
   // Categories (3.15): a drop-down beside the buttons of "In playlist" cards, saved by video id
   const catSet = await page.evaluate(() => {
     const r = document.getElementById('xm-host').shadowRoot;
@@ -319,11 +345,12 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const stats = await inShadow(page, r => {
     const d = r.querySelector('#statsbox');
     const shares = [...r.querySelectorAll('.tile.share .v')].map(x => parseInt(x.textContent));
-    return { open: d.open, overflow: d.scrollWidth > d.clientWidth + 1, sections: r.querySelectorAll('.ssec').length, shareSum: shares.reduce((a, b) => a + b, 0), shareCount: shares.length,
+    return { open: d.open, overflow: d.scrollWidth > d.clientWidth + 1, sections: r.querySelectorAll('.ssec').length, shareSum: shares.reduce((a, b) => a + b, 0), shareCount: shares.length, otherTile: !!r.querySelector('.tile.share.other'), otherSongs: !!r.querySelector('#statsbox .sline .chip.other'),
       headline: [...r.querySelectorAll('.sline')].map(x => x.textContent).find(x => /comes back about every/.test(x)) || '' };
   });
   check('Stats opens without overflow', stats.open && !stats.overflow && stats.sections >= 6, JSON.stringify(stats));
-  check('Stats shares add up to about 100%', stats.shareCount === 4 && Math.abs(stats.shareSum - 100) <= 2, String(stats.shareSum));
+  check('Stats shares add up to about 100%', stats.shareCount === (stats.otherSongs ? 4 : 3) && Math.abs(stats.shareSum - 100) <= 2, String(stats.shareSum));
+  check('The "another version" share shows only while some song has another version', stats.otherTile === stats.otherSongs, JSON.stringify(stats));
   check('Stats shows the replay headline', /\d/.test(stats.headline), stats.headline);
   const statLens = await inShadow(page, r => r.querySelectorAll('#statsbox .slist .nm small .len').length);
   check('Stats song lists show song lengths', statLens > 5, String(statLens));
@@ -446,6 +473,28 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     };
     const off = await noneChip({ categories: all }), on = await noneChip({ categories: all, catFilters: ['uncat'] });
     check('"None" is hidden when every song has a category, and stays while it\'s on', /^None/.test(off.text) && !off.shown && on.shown && on.pressed === 'true', JSON.stringify({ off, on }));
+  }
+
+  // 5. Once every "other version" is marked, Stats leaves out the "another version" share (3.18)
+  {
+    const p = await openPage(browser, { width: 600 });
+    await settle(p.page);
+    let had = 0;
+    for (let i = 0; i < 40; i++) {
+      const left = await inShadow(p.page, r => { const b = r.querySelector('ol > li.other button.marknot'); if (b) b.click(); return !!b; });
+      if (!left) {
+        // Not on this page of cards: show only "Other version" cards
+        const more = await inShadow(p.page, r => { const f = [...r.querySelectorAll('.filters button')].find(b => /^Other version/.test(b.textContent)); const n = f ? Number(f.querySelector('.n').textContent) : 0; if (n && f.getAttribute('aria-pressed') !== 'true') { f.click(); return true; } return false; });
+        if (!more) break;
+      } else had++;
+      await settle(p.page); await p.page.waitForTimeout(150);
+    }
+    await inShadow(p.page, r => r.querySelector('#stats').click());
+    await p.page.waitForTimeout(500);
+    const s = await inShadow(p.page, r => ({ tiles: r.querySelectorAll('.tile.share').length, other: !!r.querySelector('.tile.share.other') }));
+    check('With no other versions left, Stats leaves out the "another version" share', had > 0 && s.tiles === 3 && !s.other, JSON.stringify(Object.assign({ marked: had }, s)));
+    check('Marking other versions: no script errors', p.errors.length === 0, p.errors.join(' | '));
+    await p.ctx.close();
   }
   await browser.close();
 

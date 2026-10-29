@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.17.3**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.18.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -88,6 +88,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `favorites` | Playlist **video id** → `{ on, at }` (3.14). Keyed by video, not song key, so Shuffle can use it and every SomaFM song linked to the video shares the star. Removing keeps `on: false` so a backup merge (newer `at` wins) doesn't bring it back. In backups. |
 | `categories` | Playlist video id → `{ c, at }` (3.15), `c` one of the keys in `CATEGORIES` (band, classics, dance, jazz, mellow, soul; names can change, keys can't), `''` once cleared. Same merge rule as favorites. In backups. |
 | `latestOnly` | "Latest" toggle: one card per song, at its most recent play (per device). |
+| `notes` | Song key (same as marks and dislikes) → `{ t, at }` (3.18), a free-text note on any song, e.g. why a disliked song can't be added (no SomaFM version on YouTube). Dan preferred a note over more playlist statuses. Deleting keeps `t: ''`; same merge rule as favorites. In backups. |
 | `catFilters` | Category chips that are on (`band` … `soul`, `uncat` for "None"); none on means no category filter (per device). |
 | `backup:beforeImport` | `{ at, data }` saved before every import, for "Undo last import". |
 | `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
@@ -193,6 +194,8 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
   max 12" penalty. Categories (3.15) aren't spaced: only runs longer than `maxRun` (3, or up to 5 for a category that's a big share: `ceil(share × 12)`) cost. Artist/title/album come from SomaFM's plays of that video (`somaInfo`), else the video title and channel: a side of
   "A - B" that matches an artist or channel name anywhere in the playlist (`nameWords`) is the artist, otherwise both sides count as titles.
   Swaps that don't change the cost are kept, so the rest of the order stays random. The rules are meant to be rough, not exact.
+  A favorite is one of the first three songs (3.18, Dan asked for it): every rule counts around the end, so `arrange` just turns the
+  finished order round to put a random favorite at position 0, 1 or 2, which leaves all spacing exactly as it was.
 - **Original order (3.12.1, Dan asked for it):** saved when Shuffle first reads the playlist on a device (3.12.2; 3.12.1 waited for the first change), never overwritten, carried in backups,
   and downloadable as a CSV (position, title, video link). Putting it back keeps songs added since at the end and skips removed ones.
   A device with none saved says so, and suggests bringing in the other device's backup before shuffling there; otherwise that
@@ -204,7 +207,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 81 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 88 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -247,6 +250,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.17.1 | Shorter category chip labels: Swing, Jazz and None (the drop-downs keep the full names). |
 | 3.17.2 | The Soul/Funk chip reads "Funk" below 900px (tablets and phones). |
 | 3.17.3 | The "None" chip is hidden when every playlist song has a category, unless it is on (so it can still be turned off). It hides in place when the last song gets a category. |
+| 3.18.0 | 📝 Notes on any song: a button beside the title opens an editor at the bottom of the card; the note shows at the bottom of each of the song's cards. In backups. Shuffle puts a favorite among the first three songs. Stats leaves out the "another version" share when no song has another version. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

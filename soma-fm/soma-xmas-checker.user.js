@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.17.3
+// @version      3.18.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -512,7 +512,7 @@ const Archive = (() => {
 })();
 
 /* ---------- Backup and restore (pure; tested by soma-xmas-checker.test.js) ---------- */
-// One file holds everything worth keeping: play history (per channel), marks and links, dislikes, favorites, categories,
+// One file holds everything worth keeping: play history (per channel), marks and links, dislikes, favorites, categories, notes,
 // and the remembered playlist titles. Settings stay with each device.
 const Backup = (() => {
   const APP = 'soma-xmas-checker', FORMAT = 1;
@@ -567,6 +567,12 @@ const Backup = (() => {
       const f = d.categories[id];
       if (isObj(f) && typeof f.c === 'string' && typeof f.at === 'number') categories[id] = { c: f.c, at: f.at }; else skipped++;
     }
+    // Notes: song key -> { t, at }; t is '' once deleted, for the same reason
+    const notes = {};
+    for (const k of Object.keys(isObj(d.notes) ? d.notes : {})) {
+      const f = d.notes[k];
+      if (isObj(f) && typeof f.t === 'string' && typeof f.at === 'number') notes[k] = { t: f.t, at: f.at }; else skipped++;
+    }
     const archive = {};
     for (const id of Object.keys(isObj(d.archive) ? d.archive : {})) {
       const e = d.archive[id];
@@ -583,7 +589,7 @@ const Backup = (() => {
       }
       if (songs.length) original = { at: o.at, playlistId: typeof o.playlistId === 'string' ? o.playlistId : '', songs };
     } else if (o) skipped++;
-    return { data: { history, marks, dislikes, favorites, categories, archive, original }, skipped, exportedAt: obj.exportedAt };
+    return { data: { history, marks, dislikes, favorites, categories, notes, archive, original }, skipped, exportedAt: obj.exportedAt };
   }
 
   // Union of two newest-first play lists; the same play recorded on both devices is kept once.
@@ -617,13 +623,14 @@ const Backup = (() => {
     for (const k of Object.keys(b || {})) out[k] = Math.max(out[k] || 0, b[k]);
     return out;
   }
-  // Favorites and categories: the more recent change wins, whether it added, changed or removed one
+  // Favorites, categories and notes: the more recent change wins, whether it added, changed or removed one
   function mergeFavorites(a, b) {
     const out = Object.assign({}, a);
     for (const k of Object.keys(b || {})) if (!(k in out) || b[k].at > out[k].at) out[k] = b[k];
     return out;
   }
-  const mergeCategories = mergeFavorites;
+  const mergeCategories = mergeFavorites, mergeNotes = mergeFavorites;
+  const noteCount = f => { let n = 0; for (const k of Object.keys(f || {})) if (f[k] && f[k].t) n++; return n; };
   const catCount = f => { let n = 0; for (const k of Object.keys(f || {})) if (f[k] && f[k].c) n++; return n; };
   const favCount = f => { let n = 0; for (const k of Object.keys(f || {})) if (f[k] && f[k].on) n++; return n; };
   // Remembered playlist songs: newest sighting wins; "gone" only if marked gone after its last sighting anywhere
@@ -665,11 +672,11 @@ const Backup = (() => {
       newPlays[ch] = n; added += n;
     }
     return { plays: total, newPlays: added, perChannel: newPlays, first, last,
-      marks: Object.keys(incoming.marks).length, dislikes: Object.keys(incoming.dislikes).length, favorites: favCount(incoming.favorites), categories: catCount(incoming.categories), songs: Object.keys(incoming.archive).length,
+      marks: Object.keys(incoming.marks).length, dislikes: Object.keys(incoming.dislikes).length, favorites: favCount(incoming.favorites), categories: catCount(incoming.categories), notes: noteCount(incoming.notes), songs: Object.keys(incoming.archive).length,
       original: incoming.original ? incoming.original.at : 0 };
   }
 
-  return { build, validate, mergeHistory, mergeMarks, mergeDislikes, mergeFavorites, favCount, mergeCategories, catCount, mergeArchive, mergeOriginal, preview };
+  return { build, validate, mergeHistory, mergeMarks, mergeDislikes, mergeFavorites, favCount, mergeCategories, catCount, mergeNotes, noteCount, mergeArchive, mergeOriginal, preview };
 })();
 
 /* ---------- Stats panel numbers (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -972,7 +979,7 @@ const Shuffle = (() => {
   /* A shuffle that keeps like songs apart. Favorites, and the versions of a song, are spread about evenly
      (counting around the end, for a playlist that repeats); songs by the same artist, from the same album or
      posted by the same channel just aren't put close together. A category may repeat, but not too many in a row. Starting from a plain shuffle, songs are
-     swapped while that makes the spacing better, so the rest of the order stays random. */
+     swapped while that makes the spacing better, so the rest of the order stays random. A favorite is among the first three. */
 
   // What a playlist video is, for spreading: soma is SomaFM's { artist, title, album } when it has played
   // this video, otherwise it's worked out from the video's title and channel ("Artist - Topic").
@@ -1113,8 +1120,17 @@ const Shuffle = (() => {
   function arrange(items, somaOf, isFav, rand, catOf) {
     const names = nameWords(items, it => somaOf(it.videoId));
     const descs = mapOf(items, it => describe(it, somaOf(it.videoId), names));
-    const groups = spreadGroups(descs, mapOf(items, it => !!isFav(it.videoId)), catOf ? mapOf(items, it => catOf(it.videoId) || '') : null);
-    const at = spread(items.length, groups, rand);
+    const favs = mapOf(items, it => !!isFav(it.videoId));
+    const groups = spreadGroups(descs, favs, catOf ? mapOf(items, it => catOf(it.videoId) || '') : null);
+    let at = spread(items.length, groups, rand);
+    // Every spacing rule counts around the end, so turning the order round keeps it just as spread out.
+    // Turn it so a favorite is one of the first three songs.
+    const favAt = [];
+    for (let p = 0; p < at.length; p++) if (favs[at[p]]) favAt.push(p);
+    if (favAt.length && at.length > 3) {
+      const shift = (favAt[rand(favAt.length)] - rand(3) + at.length) % at.length;
+      at = at.slice(shift).concat(at.slice(0, shift));
+    }
     return { ids: mapOf(at, i => items[i].id), groups };
   }
 
@@ -1392,6 +1408,12 @@ function main() {
     .artist{margin-top:.1rem;overflow-wrap:anywhere}
     button.fav{background:none;border:0;padding:.05em .3em;font-size:1.1em;line-height:1;color:var(--muted);vertical-align:baseline;font-weight:400}
     button.fav[aria-pressed="true"]{color:var(--now)}
+    button.notebtn{background:none;border:0;padding:.05em .25em;font-size:.95em;line-height:1;vertical-align:baseline;filter:grayscale(1);opacity:.45}
+    button.notebtn[aria-pressed="true"]{filter:none;opacity:1}
+    .unote{grid-column:2;margin-top:.45rem;padding:.4em .65em;border-left:3px solid var(--now);border-radius:6px;background:var(--chip);font-size:.85em;white-space:pre-wrap;overflow-wrap:anywhere}
+    .noteed{grid-column:2;margin-top:.55rem;display:grid;gap:.5rem}
+    .noteed textarea{font:inherit;font-size:.9em;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:.5em .7em;width:100%;box-sizing:border-box;resize:vertical}
+    .noteed textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
     select.cat{font:inherit;font-size:.82em;font-weight:650;border-radius:999px;padding:.38em .7em;background:var(--chip);color:var(--muted);border:1px dashed var(--line);max-width:100%}
     select.cat.set{color:var(--fg);border-style:solid}
     .len{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -1525,7 +1547,7 @@ function main() {
       li.flash{animation:xmflash 1.6s ease-out}
       @keyframes xmflash{0%{box-shadow:0 0 0 4px var(--mark)}100%{box-shadow:0 0 0 0 transparent}}
     }
-    @media (max-width:420px){.picker{grid-column:1}}
+    @media (max-width:420px){.picker,.unote,.noteed{grid-column:1}}
     @media (max-width:420px){li{grid-template-columns:minmax(0,1fr)}.state,.note{grid-column:1}.time{display:flex;gap:.6em;padding:0}.time .live,.time .date{display:inline}}
     @media (prefers-reduced-motion:no-preference){li{transition:border-color .2s}}
   </style>
@@ -1569,7 +1591,7 @@ function main() {
     <div id="backupbody">
       <div class="ssec">
         <h3>Save a backup</h3>
-        <div class="snote">One file with your play history, "I have it" / "Not this one" marks and links, dislikes, favorites, categories, the remembered playlist songs, and the playlist's original order. Settings stay with each device.</div>
+        <div class="snote">One file with your play history, "I have it" / "Not this one" marks and links, dislikes, favorites, categories, notes, the remembered playlist songs, and the playlist's original order. Settings stay with each device.</div>
         <div class="brow"><button type="button" class="ctl primary" id="bkdown">Download backup</button><button type="button" class="ctl" id="bkcopy">Copy backup</button></div>
         <div class="bmsg" id="bkoutmsg" role="status"></div>
       </div>
@@ -1695,6 +1717,52 @@ function main() {
     };
     return sel;
   }
+  // Notes, by song (the same key as marks and dislikes), so any song can have one, in the playlist or not.
+  // { t, at }, with t '' once deleted, so a backup merge doesn't bring it back.
+  let noteCache = null;
+  function getNotes() {
+    if (!noteCache) { const f = GM_getValue('notes', {}); noteCache = f && typeof f === 'object' && !Array.isArray(f) ? f : {}; }
+    return noteCache;
+  }
+  const noteOf = (notes, key) => (notes[key] && typeof notes[key].t === 'string' ? notes[key].t : '');
+  function setNote(key, t) { const f = Object.assign({}, getNotes()); f[key] = { t, at: Date.now() }; noteCache = f; GM_setValue('notes', f); }
+  // The card being noted, and what's typed so far (kept through a redraw)
+  let noteKey = null, noteDraft = '', noteShown = false;
+  function noteBtn(key, title, has) {
+    const b = el('button', 'notebtn', '📝'); b.type = 'button';
+    b.setAttribute('aria-pressed', String(has));
+    b.setAttribute('aria-label', (has ? 'Edit note: ' : 'Add a note: ') + title);
+    b.title = has ? 'Edit note' : 'Add a note';
+    b.onclick = () => {
+      if (noteKey === key) { noteKey = null; render(); return; }
+      noteKey = key; noteDraft = noteOf(getNotes(), key); pickerKey = null;
+      render();
+      const ta = $('#xm-note');
+      if (ta) { ta.focus({ preventScroll: true }); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    };
+    return b;
+  }
+  function noteEditor(key, title) {
+    const box = el('div', 'noteed');
+    const ta = document.createElement('textarea');
+    ta.id = 'xm-note'; ta.rows = 3; ta.maxLength = 2000; ta.value = noteDraft;
+    ta.placeholder = 'A note about this song';
+    ta.setAttribute('aria-label', 'Note: ' + title);
+    ta.addEventListener('input', () => { noteDraft = ta.value; });
+    const close = () => { noteKey = null; noteDraft = ''; render(); };
+    const save = () => { const t = ta.value.trim(); if (t !== noteOf(getNotes(), key)) setNote(key, t); close(); };
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+    });
+    const btns = el('div', 'pbtns');
+    btns.append(btn('Save', 'ctl primary', save));
+    if (noteOf(getNotes(), key)) btns.append(btn('Delete', 'ctl', () => { setNote(key, ''); close(); }));
+    btns.append(btn('Cancel', 'ctl', close));
+    box.append(ta, btns);
+    return box;
+  }
+
   // Category chips (3.17): only songs in the playlist have a category. None on means no category filter;
   // 'uncat' is "No category". Remembered on this device.
   let catFilters = new Set(keep(GM_getValue('catFilters', []) || [], k => k === 'uncat' || !!catName(k)));
@@ -2026,7 +2094,7 @@ function main() {
     const statsOpen = $('#statsbox').open || $('#backupbox').open || $('#shufbox').open;
     // Not while a category drop-down is open or focused either: redrawing would close it
     const choosing = root.activeElement && root.activeElement.tagName === 'SELECT';
-    if (pickerKey || statsOpen || choosing) { renderPending = true; return; }
+    if (pickerKey || noteKey || statsOpen || choosing) { renderPending = true; return; }
     render();
   }
 
@@ -2046,7 +2114,7 @@ function main() {
   }
 
   function render() {
-    const marks = getMarks(), dislikes = getDislikes();
+    const marks = getMarks(), dislikes = getDislikes(), notes = getNotes();
     const base = baseRows();
     let rows = mapOf(base, s => ({ s, r: statusOf(s, marks, dislikes) }));
     if (latestOnly) { const seen = new Set(); rows = keep(rows, x => { if (seen.has(x.s.key)) return false; seen.add(x.s.key); return true; }); }
@@ -2116,7 +2184,7 @@ function main() {
 
     const ol = $('ol');
     ol.textContent = '';
-    pickerShown = false;
+    pickerShown = false; noteShown = false;
     if (!shown.length) ol.append(el('li', 'empty', base.length ? 'No songs in this group.' : 'No recently played songs found.'));
     for (let i = 0; i < shown.length; i++) {
       const { s, r } = shown[i];
@@ -2147,6 +2215,8 @@ function main() {
       const ttl = el('div', 'title', s.title);
       // A star for songs in your playlist: it marks the playlist video, which Shuffle spreads out
       if (r.status === 'have' && r.item) ttl.append(' ', favBtn(r.item.id, s.title));
+      const note = noteOf(notes, s.key);
+      ttl.append(' ', noteBtn(s.key, s.title, !!note));
       names.append(ttl, artist);
       song.append(names);
       // "Open" always sits beside the song name: your matching video, or the version you have, to compare
@@ -2202,6 +2272,9 @@ function main() {
         const { times, gapTimes } = Stats.songTimes(history, s.key);
         li.append(playLogBox('plog cardlog', times, gapTimes, s.at));
       }
+      // The song's note, at the bottom of each of its cards; the first one opens the editor
+      if (noteKey === s.key && !noteShown) { noteShown = true; li.append(noteEditor(s.key, s.title)); }
+      else if (note) li.append(el('div', 'unote', note));
       ol.append(li);
       // The page wasn't open between this play and the one below it
       if (s.gap && !latestOnly) ol.append(el('li', 'gap', 'Not recording here — plays in this stretch were missed'));
@@ -2362,6 +2435,7 @@ function main() {
       const g = el('div', 'tiles');
       for (const [k, label, cls] of [['have', 'in your playlist', 'have'], ['other', 'another version in your playlist', 'other'],
         ['missing', 'not in your playlist', 'none'], ['disliked', 'disliked', 'disliked']]) {
+        if (k === 'other' && !sh.other.songs) continue;   // left out once every other version is sorted out
         const t = el('div', 'tile share ' + cls);
         t.append(el('div', 'v', pc(sh[k].playPct)), el('div', 'k', `of plays ${label}`), el('div', 'k2', `${pc(sh[k].songPct)} of songs (${fmt(sh[k].songs)})`));
         g.append(t);
@@ -2453,14 +2527,14 @@ function main() {
   function snapshot() {
     const h = {};
     for (const k of historyKeys()) h[k.slice(8)] = GM_getValue(k, []);
-    return { history: h, marks: getMarks(), dislikes: getDislikes(), favorites: getFavs(), categories: getCats(), archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null) };
+    return { history: h, marks: getMarks(), dislikes: getDislikes(), favorites: getFavs(), categories: getCats(), notes: getNotes(), archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null) };
   }
   function backupText() { return JSON.stringify(Backup.build(snapshot(), { playlistId: PLAYLIST_ID, scriptVersion: (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '' })); }
   function reloadState() {
     history = GM_getValue(HKEY, []); if (!Array.isArray(history)) history = [];
     clearFuture();
     archive = GM_getValue(AKEY, {}); if (!archive || typeof archive !== 'object' || Array.isArray(archive)) archive = {};
-    rowBase = null; measured = null; goneCache = null; favCache = null; catCache = null; statusCache.clear(); openLogs.clear();
+    rowBase = null; measured = null; goneCache = null; favCache = null; catCache = null; noteCache = null; statusCache.clear(); openLogs.clear();
   }
   const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; };
   const say = (id, text, cls) => { const m = $(id); m.className = 'bmsg' + (cls ? ' ' + cls : ''); m.textContent = text; };
@@ -2511,7 +2585,7 @@ function main() {
     const box = el('div', 'bpreview');
     const ul = el('ul', '');
     ul.append(el('li', '', pv.plays ? `${fmt(pv.plays)} plays, ${when(pv.first)} to ${when(pv.last)}; ${fmt(pv.newPlays)} of them aren't on this device yet` : 'No plays'),
-      el('li', '', `${fmt(pv.marks)} marks, ${fmt(pv.dislikes)} dislikes, ${fmt(pv.favorites)} favorites, ${fmt(pv.categories)} categories, ${fmt(pv.songs)} remembered playlist songs`));
+      el('li', '', `${fmt(pv.marks)} marks, ${fmt(pv.dislikes)} dislikes, ${fmt(pv.favorites)} favorites, ${fmt(pv.categories)} categories, ${fmt(pv.notes)} notes, ${fmt(pv.songs)} remembered playlist songs`));
     if (pv.original) ul.append(el('li', '', `The playlist's original order, saved ${when(pv.original / 1000)}`));
     if (v.exportedAt) ul.append(el('li', '', `Backed up ${when(v.exportedAt / 1000)}`));
     if (v.skipped) ul.append(el('li', '', `${fmt(v.skipped)} damaged entr${v.skipped === 1 ? 'y' : 'ies'} will be skipped`));
@@ -2541,6 +2615,7 @@ function main() {
     GM_setValue('dislikes', mode === 'merge' ? Backup.mergeDislikes(before.dislikes, inc.dislikes) : inc.dislikes);
     GM_setValue('favorites', mode === 'merge' ? Backup.mergeFavorites(before.favorites, inc.favorites) : inc.favorites);
     GM_setValue('categories', mode === 'merge' ? Backup.mergeCategories(before.categories, inc.categories) : inc.categories);
+    GM_setValue('notes', mode === 'merge' ? Backup.mergeNotes(before.notes, inc.notes) : inc.notes);
     GM_setValue(AKEY, mode === 'merge' ? Backup.mergeArchive(before.archive, inc.archive) : inc.archive);
     // The original playlist order can't be recreated, so even Replace keeps this device's when the backup has none
     GM_setValue(OKEY, mode === 'merge' ? Backup.mergeOriginal(before.original, inc.original) : inc.original || before.original || null);
@@ -2568,6 +2643,7 @@ function main() {
     if ('original' in d) GM_setValue(OKEY, d.original || null);   // undo snapshots from before 3.12.1 don't have it
     if ('favorites' in d) GM_setValue('favorites', d.favorites || {});   // nor favorites before 3.14
     if ('categories' in d) GM_setValue('categories', d.categories || {});   // nor categories before 3.15
+    if ('notes' in d) GM_setValue('notes', d.notes || {});   // nor notes before 3.18
     GM_setValue(PREKEY, null);
     reloadState();
     say('#bkinmsg', `Import undone. ${fmt(history.length)} plays saved here, as before.`, 'ok');
@@ -2849,9 +2925,10 @@ function main() {
         if (sc.favorites) parts.push(`your ${fmt(sc.favorites)} favorites`);
         if (sc.versions) parts.push(`the versions of ${fmt(sc.versions)} song${sc.versions === 1 ? '' : 's'} you have more than once`);
         sec.append(el('div', 'snote', (parts.length ? 'Spread out evenly: ' + parts.join(' and ') + '. ' : '') +
+          (sh.favIds.size ? 'A favorite is one of the first three songs. ' : '') +
           'Songs by the same artist, from the same album or posted by the same channel are kept apart. ' +
           (sc.runs.length ? `Most in a row from one category: ${sc.runs.join(', ')}. ` : '') + 'The rest is random.' +
-          (sc.favorites ? '' : ' Tap ☆ on a song to make it a favorite.')));
+          (sh.favIds.size ? '' : ' Tap ☆ on a song to make it a favorite.')));
       }
       const label = sh.resumeOf ? 'Finish it' : K.go;
       let armed = null;
