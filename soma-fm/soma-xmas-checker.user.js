@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.18.2
+// @version      3.18.3
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1804,6 +1804,22 @@ function main() {
     };
     return b;
   }
+  // The on-screen keyboard can cover the note box as it opens, and the browser doesn't always scroll for it.
+  // The visible area (visualViewport) shrinks when the keyboard opens, so the box is fitted again then.
+  function keepInView(box) {
+    const fit = () => {
+      if (!box.isConnected) return;
+      const vv = window.visualViewport, top = vv ? vv.offsetTop : 0, bottom = top + (vv ? vv.height : innerHeight);
+      const r = box.getBoundingClientRect();
+      let dy = r.bottom > bottom - 8 ? r.bottom - bottom + 12 : 0;
+      if (r.top - dy < top + 8) dy = r.top - top - 8;   // a box taller than the space keeps its top in view
+      if (Math.abs(dy) > 1) window.scrollBy(0, dy);
+    };
+    fit();
+    const vv = window.visualViewport;
+    if (vv) { vv.addEventListener('resize', fit); setTimeout(() => vv.removeEventListener('resize', fit), 1500); }
+    setTimeout(fit, 400);
+  }
   function noteEditor(key, title) {
     const box = el('div', 'noteed');
     const ta = document.createElement('textarea');
@@ -1811,6 +1827,7 @@ function main() {
     ta.placeholder = 'A note about this song';
     ta.setAttribute('aria-label', 'Note: ' + title);
     ta.addEventListener('input', () => { noteDraft = ta.value; });
+    ta.addEventListener('focus', () => keepInView(box));
     const close = () => { noteKey = null; noteDraft = ''; render(); };
     const save = () => { const t = ta.value.trim(); if (t !== noteOf(getNotes(), key)) setNote(key, t); close(); };
     ta.addEventListener('keydown', e => {

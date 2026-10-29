@@ -263,6 +263,21 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const ed = await inShadow(page, r => ({ eds: r.querySelectorAll('.noteed').length, focused: r.activeElement && r.activeElement.id === 'xm-note',
     inCard: !!(r.querySelector('#xm-note') && r.querySelector('#xm-note').closest('li')) }));
   check('Every card has a note button (✏️ until there is a note); it opens one editor in the card, ready to type', noteFor && noteFor.btns === noteFor.all && noteFor.pencil && ed.eds === 1 && ed.focused && ed.inCard, JSON.stringify([noteFor, ed]));
+  // 3.18.3: the box stays in sight when the on-screen keyboard opens (here: the viewport gets shorter)
+  await inShadow(page, r => [...r.querySelectorAll('.noteed button')].find(b => b.textContent === 'Cancel').click());
+  await settle(page); await page.waitForTimeout(200);
+  const vh = page.viewportSize();
+  await inShadow(page, r => { const b = [...r.querySelectorAll('ol > li .title button.notebtn')][3]; window.scrollBy(0, b.getBoundingClientRect().bottom - innerHeight + 10); b.click(); });
+  await page.waitForTimeout(150);
+  await page.setViewportSize({ width: vh.width, height: Math.round(vh.height * 0.55) });
+  await page.waitForTimeout(600);
+  const kb = await inShadow(page, r => { const x = r.querySelector('.noteed').getBoundingClientRect(); return { top: Math.round(x.top), bottom: Math.round(x.bottom), h: innerHeight }; });
+  check('With the keyboard open, the note box is scrolled into sight', kb.top >= 0 && kb.bottom <= kb.h, JSON.stringify(kb));
+  await page.setViewportSize(vh); await page.waitForTimeout(300);
+  await inShadow(page, r => [...r.querySelectorAll('.noteed button')].find(b => b.textContent === 'Cancel').click());
+  await settle(page); await page.waitForTimeout(200);
+  await inShadow(page, r => { const li = r.querySelector('ol > li.none, ol > li.disliked, ol > li.other'); li.querySelector('.title button.notebtn').click(); });
+  await settle(page); await page.waitForTimeout(200);
   await page.locator('#xm-note').fill("Can't find the SomaFM version on YouTube");
   await inShadow(page, r => [...r.querySelectorAll('.noteed button')].find(b => b.textContent === 'Save').click());
   await settle(page); await page.waitForTimeout(200);
