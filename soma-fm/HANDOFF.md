@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.18.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.18.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -251,6 +251,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.17.2 | The Soul/Funk chip reads "Funk" below 900px (tablets and phones). |
 | 3.17.3 | The "None" chip is hidden when every playlist song has a category, unless it is on (so it can still be turned off). It hides in place when the last song gets a category. |
 | 3.18.0 | 📝 Notes on any song: a button beside the title opens an editor at the bottom of the card; the note shows at the bottom of each of the song's cards. In backups. Shuffle puts a favorite among the first three songs. Stats leaves out the "another version" share when no song has another version. |
+| 3.18.1 | The note button is a colored ✏️ until a song has a note (then 📝), instead of a faded 📝 that looked disabled. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

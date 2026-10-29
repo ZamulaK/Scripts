@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.18.0
+// @version      3.18.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1408,8 +1408,7 @@ function main() {
     .artist{margin-top:.1rem;overflow-wrap:anywhere}
     button.fav{background:none;border:0;padding:.05em .3em;font-size:1.1em;line-height:1;color:var(--muted);vertical-align:baseline;font-weight:400}
     button.fav[aria-pressed="true"]{color:var(--now)}
-    button.notebtn{background:none;border:0;padding:.05em .25em;font-size:.95em;line-height:1;vertical-align:baseline;filter:grayscale(1);opacity:.45}
-    button.notebtn[aria-pressed="true"]{filter:none;opacity:1}
+    button.notebtn{background:none;border:0;padding:.05em .25em;font-size:.95em;line-height:1;vertical-align:baseline}
     .unote{grid-column:2;margin-top:.45rem;padding:.4em .65em;border-left:3px solid var(--now);border-radius:6px;background:var(--chip);font-size:.85em;white-space:pre-wrap;overflow-wrap:anywhere}
     .noteed{grid-column:2;margin-top:.55rem;display:grid;gap:.5rem}
     .noteed textarea{font:inherit;font-size:.9em;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:.5em .7em;width:100%;box-sizing:border-box;resize:vertical}
@@ -1728,8 +1727,9 @@ function main() {
   function setNote(key, t) { const f = Object.assign({}, getNotes()); f[key] = { t, at: Date.now() }; noteCache = f; GM_setValue('notes', f); }
   // The card being noted, and what's typed so far (kept through a redraw)
   let noteKey = null, noteDraft = '', noteShown = false;
+  // ✏️ to add a note, 📝 once there is one; both in color, so it reads as a button either way
   function noteBtn(key, title, has) {
-    const b = el('button', 'notebtn', '📝'); b.type = 'button';
+    const b = el('button', 'notebtn', has ? '📝' : '✏️'); b.type = 'button';
     b.setAttribute('aria-pressed', String(has));
     b.setAttribute('aria-label', (has ? 'Edit note: ' : 'Add a note: ') + title);
     b.title = has ? 'Edit note' : 'Add a note';
