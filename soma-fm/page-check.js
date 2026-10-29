@@ -281,20 +281,30 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     return { kept: Object.keys(n).map(k => JSON.stringify(n[k].t)).join(), shown: r.querySelectorAll('.unote').length, pressed: r.querySelectorAll('button.notebtn[aria-pressed="true"]').length }; });
   check('Editing starts from the note; Delete removes it (kept as empty, for backup merges)', pre === "Can't find the SomaFM version on YouTube" && gone.kept === '""' && gone.shown === 0 && gone.pressed === 0, pre + ' ' + JSON.stringify(gone));
 
-  // Categories (3.15): a drop-down beside the buttons of "In playlist" cards, saved by video id
-  const catSet = await page.evaluate(() => {
-    const r = document.getElementById('xm-host').shadowRoot;
-    const sel = r.querySelector('ol > li.have .state select.cat');
-    if (!sel) return null;
-    const opts = [...sel.options].map(o => o.textContent).join();
-    sel.value = 'dance'; sel.dispatchEvent(new Event('change'));
-    return opts;
-  });
+  // Categories (3.15): a menu button beside the buttons of "In playlist" cards, saved by video id. 3.18.2: a menu in the page's colors, not a system drop-down
+  await inShadow(page, r => r.querySelector('ol > li.have .state button.cat').click());
+  await page.waitForTimeout(150);
+  const menu = await inShadow(page, r => { const m = r.querySelector('.catmenu'), b = r.querySelector('ol > li.have .state button.cat'); if (!m) return null;
+    const mr = m.getBoundingClientRect(), br = b.getBoundingClientRect(), bg = getComputedStyle(m).backgroundColor, card = getComputedStyle(r.querySelector('ol > li.have')).backgroundColor;
+    return { opts: [...m.querySelectorAll('.catopt')].map(o => o.textContent).join(), below: mr.top >= br.bottom, inView: mr.left >= 0 && mr.right <= innerWidth && mr.bottom <= innerHeight,
+      themed: bg !== 'rgba(0, 0, 0, 0)' && bg !== 'rgb(255, 255, 255)' || matchMedia('(prefers-color-scheme: light)').matches, expanded: b.getAttribute('aria-expanded'), focus: r.activeElement && r.activeElement.className, n: r.querySelectorAll('.catmenu').length, card }; });
+  check('The category button opens a themed menu under it, focused, with the six categories', menu && menu.opts === 'Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk' && menu.below && menu.inView && menu.themed && menu.expanded === 'true' && /catopt/.test(menu.focus) && menu.n === 1, JSON.stringify(menu));
+  await page.keyboard.press('Escape');
+  const esc = await inShadow(page, r => ({ n: r.querySelectorAll('.catmenu').length, focus: r.activeElement && r.activeElement.className, expanded: r.querySelector('ol > li.have .state button.cat').getAttribute('aria-expanded') }));
+  check('Escape closes the menu and returns to its button', esc.n === 0 && esc.focus === 'cat' && esc.expanded === 'false', JSON.stringify(esc));
+  await inShadow(page, r => r.querySelector('ol > li.have .state button.cat').click());
+  await page.mouse.click(5, 5);
+  check('Tapping elsewhere closes the menu', await inShadow(page, r => r.querySelectorAll('.catmenu').length === 0));
+  await inShadow(page, r => r.querySelector('ol > li.have .state button.cat').click());
+  await inShadow(page, r => [...r.querySelectorAll('.catmenu .catopt')].find(o => o.dataset.value === 'dance').click());
   await settle(page); await page.waitForTimeout(200);
-  const catInfo = await page.evaluate(() => { const r = document.getElementById('xm-host').shadowRoot; const f = window.__store.categories || {};
-    return { saved: Object.keys(f).filter(k => f[k].c === 'dance').length, shown: r.querySelectorAll('ol > li.have select.cat.set').length,
-      others: r.querySelectorAll('ol > li:not(.have) select.cat').length, wide: document.documentElement.scrollWidth > window.innerWidth }; });
-  check('"In playlist" cards have a category drop-down; choosing one saves it', catSet === 'Category…,Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk' && catInfo.saved === 1 && catInfo.shown >= 1 && catInfo.others === 0 && !catInfo.wide, catSet + ' ' + JSON.stringify(catInfo));
+  const catInfo = await page.evaluate(() => { const r = document.getElementById('xm-host').shadowRoot; const f = window.__store.categories || {}, b = r.querySelector('ol > li.have .state button.cat');
+    return { saved: Object.keys(f).filter(k => f[k].c === 'dance').length, shown: r.querySelectorAll('ol > li.have button.cat.set').length, label: b.textContent, open: r.querySelectorAll('.catmenu').length,
+      others: r.querySelectorAll('ol > li:not(.have) button.cat').length, wide: document.documentElement.scrollWidth > window.innerWidth }; });
+  check('Choosing a category saves it and shows it on the button', catInfo.saved === 1 && catInfo.shown >= 1 && catInfo.label === 'Dance▾' && catInfo.open === 0 && catInfo.others === 0 && !catInfo.wide, JSON.stringify(catInfo));
+  await inShadow(page, r => r.querySelector('ol > li.have .state button.cat.set').click());
+  const clear = await inShadow(page, r => { const m = r.querySelector('.catmenu'); const s = m.querySelector('[aria-selected="true"]'); const out = { sel: s && s.dataset.value, last: m.lastElementChild.textContent }; r.querySelector('ol > li.have .state button.cat.set').click(); return out; });
+  check('A set category is ticked, and the menu offers "No category"', clear.sel === 'dance' && clear.last === 'No category', JSON.stringify(clear));
   // Category chips (3.17): a second chip row; the count follows a drop-down change without a redraw
   const chips = await inShadow(page, r => { const c = r.querySelector('.catf'), f = r.querySelector('.filters');
     return { labels: [...c.querySelectorAll('button')].map(b => b.innerText.replace(/[^A-Za-z/]*[0-9,]+$/, '')).join(), wide: innerWidth >= 900, dance: Number(c.querySelectorAll('button')[2].querySelector('.n').textContent),
@@ -306,12 +316,12 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await inShadow(page, r => r.querySelectorAll('.catf button')[2].click());
   await settle(page); await page.waitForTimeout(200);
   const onlyDance = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
-    return { n: cards.length, ok: cards.every(li => li.classList.contains('have') && li.querySelector('select.cat').value === 'dance'), pressed: r.querySelectorAll('.catf button')[2].getAttribute('aria-pressed') }; });
+    return { n: cards.length, ok: cards.every(li => li.classList.contains('have') && li.querySelector('button.cat').dataset.value === 'dance'), pressed: r.querySelectorAll('.catf button')[2].getAttribute('aria-pressed') }; });
   check('Tapping a category chip shows only that category', onlyDance.n === chips.dance && onlyDance.ok && onlyDance.pressed === 'true' && await page.evaluate(() => window.__store.catFilters.join() === 'dance'), JSON.stringify(onlyDance));
   await inShadow(page, r => r.querySelectorAll('.catf button')[6].click());
   await settle(page); await page.waitForTimeout(200);
   const both = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
-    return { ok: cards.length > 0 && cards.every(li => li.classList.contains('have') && /^(dance|)$/.test(li.querySelector('select.cat').value)), uncat: cards.filter(li => !li.querySelector('select.cat').value).length }; });
+    return { ok: cards.length > 0 && cards.every(li => li.classList.contains('have') && /^(dance|)$/.test(li.querySelector('button.cat').dataset.value)), uncat: cards.filter(li => !li.querySelector('button.cat').dataset.value).length }; });
   check('"None" adds the songs without a category', both.ok && both.uncat > 0, JSON.stringify(both));
   await inShadow(page, r => { r.querySelectorAll('.catf button')[2].click(); });
   await settle(page);
@@ -362,7 +372,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await settle(page); await page.waitForTimeout(200);
   const sAfter = await page.evaluate(() => { const f = window.__store.favorites || {}; return Object.keys(f).filter(k => f[k].on).length; });
   const sCats = await inShadow(page, r => ({ line: [...r.querySelectorAll('#statsbox .sline')].map(x => x.textContent).find(x => /^Categories:/.test(x)) || '',
-    none: [...r.querySelectorAll('#statsbox .sdet summary')].map(x => x.textContent).find(x => /No category yet/.test(x)) || '', sels: r.querySelectorAll('#statsbox .sdet select.cat').length }));
+    none: [...r.querySelectorAll('#statsbox .sdet summary')].map(x => x.textContent).find(x => /No category yet/.test(x)) || '', sels: r.querySelectorAll('#statsbox .sdet button.cat').length }));
   check('Stats counts categories and lists songs without one', /Dance 1/.test(sCats.line) && /No category yet: [0-9]+/.test(sCats.none) && sCats.sels > 10, JSON.stringify(sCats));
   check('Stats has stars for playlist songs, and tapping one updates it in place', sStars > 3 && sOn >= 1 && sAfter === 1, `${sStars} stars, ${sOn} on, ${sAfter} saved`);
   await inShadow(page, r => [...r.querySelectorAll('.seg button')].find(b => b.textContent === 'Most recent').click());

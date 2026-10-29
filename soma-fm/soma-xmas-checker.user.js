@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.18.1
+// @version      3.18.2
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1413,8 +1413,16 @@ function main() {
     .noteed{grid-column:2;margin-top:.55rem;display:grid;gap:.5rem}
     .noteed textarea{font:inherit;font-size:.9em;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:.5em .7em;width:100%;box-sizing:border-box;resize:vertical}
     .noteed textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-    select.cat{font:inherit;font-size:.82em;font-weight:650;border-radius:999px;padding:.38em .7em;background:var(--chip);color:var(--muted);border:1px dashed var(--line);max-width:100%}
-    select.cat.set{color:var(--fg);border-style:solid}
+    button.cat{padding:.38em .7em;background:var(--chip);color:var(--muted);border:1px dashed var(--line);max-width:100%}
+    button.cat.set{color:var(--fg);border-style:solid}
+    button.cat .caret{font-size:.8em;opacity:.75}
+    .catmenu{position:fixed;z-index:2147483000;display:grid;gap:.1rem;padding:.3rem;min-width:10rem;font-size:1rem;background:var(--card);color:var(--fg);
+      border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.3)}
+    .catopt{display:flex;width:100%;justify-content:flex-start;background:none;color:var(--fg);border-radius:8px;padding:.6em .85em;font-size:.9em;font-weight:600}
+    .catopt:hover,.catopt:focus-visible{background:var(--chip);outline:none}
+    .catopt[aria-selected="true"]{background:var(--have-bg);color:var(--have-fg)}
+    .catopt .tick{width:1em}
+    .catopt.clear{color:var(--muted);font-weight:500}
     .len{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
     .album{color:var(--muted);font-size:.82em;margin-top:.1rem;overflow-wrap:anywhere}
     .state{grid-column:2;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.45rem}
@@ -1700,21 +1708,75 @@ function main() {
   }
   const catOf = (cats, id) => (id && cats[id] && catName(cats[id].c) ? cats[id].c : '');
   function setCat(id, c) { const f = Object.assign({}, getCats()); f[id] = { c, at: Date.now() }; catCache = f; GM_setValue('categories', f); }
+  // The category button opens a menu in the page's colors (3.18.2); a system drop-down can't be themed, and on a
+  // tablet it opens as a plain full-screen list. The button keeps the chosen key in data-value.
+  function showCat(b, c) {
+    b.dataset.value = c;
+    b.classList.toggle('set', !!c);
+    b.textContent = '';
+    b.append(el('span', '', c ? catName(c) : 'Category…'), el('span', 'caret', '▾'));
+    b.setAttribute('aria-label', 'Category: ' + b.dataset.name + (c ? ', ' + catName(c) : ', none'));
+  }
   function catSelect(id, title) {
-    const sel = el('select', 'cat');
-    sel.append(Object.assign(document.createElement('option'), { value: '', textContent: 'Category…' }));
-    for (const [k, name] of CATEGORIES) sel.append(Object.assign(document.createElement('option'), { value: k, textContent: name }));
-    sel.value = catOf(getCats(), id);
-    sel.classList.toggle('set', !!sel.value);
-    sel.setAttribute('aria-label', 'Category: ' + title);
-    sel.dataset.vid = id;
-    sel.onblur = () => { if (renderPending && !pickerKey && !$('#statsbox').open) { renderPending = false; setTimeout(render, 50); } };
-    sel.onchange = () => {
-      setCat(id, sel.value);
-      for (const x of sameVideo('select.cat', id)) { x.value = sel.value; x.classList.toggle('set', !!sel.value); }
-      refreshCatCounts();
-    };
-    return sel;
+    const b = el('button', 'cat'); b.type = 'button';
+    b.dataset.vid = id; b.dataset.name = title;
+    b.setAttribute('aria-haspopup', 'listbox'); b.setAttribute('aria-expanded', 'false');
+    showCat(b, catOf(getCats(), id));
+    b.onclick = () => { const was = catMenu && catMenu.btn === b; closeCatMenu(); if (!was) openCatMenu(b, id); };
+    b.onkeydown = e => { if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !catMenu) { e.preventDefault(); openCatMenu(b, id); } };
+    return b;
+  }
+  function chooseCat(id, c) {
+    setCat(id, c);
+    for (const x of sameVideo('button.cat', id)) showCat(x, c);
+    refreshCatCounts();
+  }
+  // One menu at a time, under its button (above it when there's no room below). Inside an open dialog it goes in
+  // the dialog, since the rest of the page can't be tapped then. Tapping elsewhere, scrolling or Escape closes it.
+  let catMenu = null;
+  function openCatMenu(b, id) {
+    const cur = catOf(getCats(), id), box = el('div', 'catmenu');
+    box.setAttribute('role', 'listbox'); box.setAttribute('aria-label', 'Category: ' + b.dataset.name);
+    const opts = mapOf(CATEGORIES, c => [c[0], c[1]]);
+    if (cur) opts.push(['', 'No category']);
+    for (const [k, name] of opts) {
+      const o = el('button', 'catopt' + (k ? '' : ' clear')); o.type = 'button';
+      o.setAttribute('role', 'option'); o.setAttribute('aria-selected', String(k === cur)); o.dataset.value = k;
+      o.append(el('span', 'tick', k === cur ? '✓' : ''), name);
+      o.onclick = () => { closeCatMenu(true); if (k !== cur) chooseCat(id, k); };
+      box.append(o);
+    }
+    box.addEventListener('keydown', e => {
+      const list = [...box.querySelectorAll('.catopt')], i = list.indexOf(root.activeElement);
+      const go = j => { e.preventDefault(); list[(j + list.length) % list.length].focus(); };
+      if (e.key === 'ArrowDown') go(i + 1); else if (e.key === 'ArrowUp') go(i - 1);
+      else if (e.key === 'Home') go(0); else if (e.key === 'End') go(list.length - 1);
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCatMenu(true); }
+      else if (e.key === 'Tab') closeCatMenu();
+    });
+    (b.closest('dialog') || root).append(box);
+    const r = b.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+    let top = r.bottom + 4;
+    if (top + h > innerHeight - 8 && r.top - h - 4 >= 8) top = r.top - h - 4;
+    box.style.top = Math.round(top) + 'px';
+    box.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8))) + 'px';
+    const away = e => { const path = e.composedPath ? e.composedPath() : []; if (path.indexOf(box) < 0 && path.indexOf(b) < 0) closeCatMenu(); };
+    const gone = e => { if (!e || !e.target || !box.contains(e.target)) closeCatMenu(); };
+    document.addEventListener('pointerdown', away, true);
+    window.addEventListener('scroll', gone, true); window.addEventListener('resize', gone);
+    catMenu = { btn: b, box, away, gone };
+    b.setAttribute('aria-expanded', 'true');
+    (box.querySelector('[aria-selected="true"]') || box.querySelector('.catopt')).focus({ preventScroll: true });
+  }
+  function closeCatMenu(refocus) {
+    if (!catMenu) return;
+    const m = catMenu; catMenu = null;
+    m.box.remove();
+    document.removeEventListener('pointerdown', m.away, true);
+    window.removeEventListener('scroll', m.gone, true); window.removeEventListener('resize', m.gone);
+    m.btn.setAttribute('aria-expanded', 'false');
+    if (refocus && m.btn.isConnected) m.btn.focus({ preventScroll: true });
+    if (renderPending) { renderPending = false; setTimeout(quietRender, 50); }   // catch up on a refresh held while it was open
   }
   // Notes, by song (the same key as marks and dislikes), so any song can have one, in the playlist or not.
   // { t, at }, with t '' once deleted, so a backup merge doesn't bring it back.
@@ -2092,8 +2154,8 @@ function main() {
   let renderPending = false;
   function quietRender() {
     const statsOpen = $('#statsbox').open || $('#backupbox').open || $('#shufbox').open;
-    // Not while a category drop-down is open or focused either: redrawing would close it
-    const choosing = root.activeElement && root.activeElement.tagName === 'SELECT';
+    // Not while a category menu or a drop-down is open either: redrawing would close it
+    const choosing = catMenu || (root.activeElement && root.activeElement.tagName === 'SELECT');
     if (pickerKey || noteKey || statsOpen || choosing) { renderPending = true; return; }
     render();
   }
@@ -2114,6 +2176,7 @@ function main() {
   }
 
   function render() {
+    if (catMenu) { const held = renderPending; renderPending = false; closeCatMenu(); renderPending = held; }   // this is the redraw
     const marks = getMarks(), dislikes = getDislikes(), notes = getNotes();
     const base = baseRows();
     let rows = mapOf(base, s => ({ s, r: statusOf(s, marks, dislikes) }));
