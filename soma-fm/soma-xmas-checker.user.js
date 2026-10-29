@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.18.3
+// @version      3.18.4
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -26,7 +26,7 @@ const CACHE_MINUTES = 15;          // re-read the playlist at most this often (R
 const CACHE_SCHEMA = 3;            // bump when the saved playlist's meaning changes, so old copies are re-read
 const LIVE_SECONDS = 60;           // when live updates are on, re-check the song history this often
 const HISTORY_MAX = 10000;         // plays kept on this device (about 3½ weeks of round-the-clock listening, ~1 MB)
-const PAGE_SIZES = [25, 50, 100, 200];
+const PAGE_SIZES = [25, 50, 100, 250];
 // Shuffling the real playlist: Google sends sign-ins back here. It must match the OAuth client's redirect URI exactly.
 const SIGNIN_RETURN = 'https://somafm.com/christmas/songhistory.html';
 const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';   // manage your YouTube playlists
@@ -1413,9 +1413,9 @@ function main() {
     .noteed{grid-column:2;margin-top:.55rem;display:grid;gap:.5rem}
     .noteed textarea{font:inherit;font-size:.9em;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:.5em .7em;width:100%;box-sizing:border-box;resize:vertical}
     .noteed textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-    button.cat{padding:.38em .7em;background:var(--chip);color:var(--muted);border:1px dashed var(--line);max-width:100%}
-    button.cat.set{color:var(--fg);border-style:solid}
-    button.cat .caret{font-size:.8em;opacity:.75}
+    button.menubtn{padding:.38em .7em;background:var(--chip);color:var(--muted);border:1px dashed var(--line);max-width:100%}
+    button.menubtn.set{color:var(--fg);border-style:solid}
+    button.menubtn .caret{font-size:.8em;opacity:.75}
     .catmenu{position:fixed;z-index:2147483000;display:grid;gap:.1rem;padding:.3rem;min-width:10rem;font-size:1rem;background:var(--card);color:var(--fg);
       border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.3)}
     .catopt{display:flex;width:100%;justify-content:flex-start;background:none;color:var(--fg);border-radius:8px;padding:.6em .85em;font-size:.9em;font-weight:600}
@@ -1445,7 +1445,7 @@ function main() {
     .pager .pos{color:var(--muted);font-size:.85em;font-variant-numeric:tabular-nums}
     .ctl:disabled{opacity:.45;cursor:default}
     select{font:inherit;font-size:.82em;color:var(--fg);background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:.38em .7em}
-    label.per{color:var(--muted);font-size:.85em;display:inline-flex;align-items:center;gap:.4em}
+    .per{color:var(--muted);font-size:.85em;display:inline-flex;align-items:center;gap:.4em}
     .rec{flex-basis:100%;color:var(--muted);font-size:.8em}
     .working{position:fixed;z-index:20;left:50%;top:calc(env(safe-area-inset-top,0px) + .6rem);transform:translateX(-50%);
       display:flex;align-items:center;gap:.5rem;padding:.4rem .85rem;border-radius:999px;background:var(--fg);color:var(--bg);
@@ -1581,7 +1581,7 @@ function main() {
         <button type="button" class="ctl" id="prev">‹ Newer</button>
         <span class="pos" id="pos"></span>
         <button type="button" class="ctl" id="next">Older ›</button>
-        <label class="per">Per page <select id="per"></select></label>
+        <span class="per">Per page <button type="button" id="per" class="menubtn set" aria-haspopup="listbox" aria-expanded="false"></button></span>
       </div>
       <div class="tools">
         <button type="button" class="ctl" id="csv">Export CSV</button>
@@ -1649,6 +1649,7 @@ function main() {
   let latestOnly = GM_getValue('latestOnly', false) === true;   // one card per song: its most recent play
   let live = GM_getValue('live', true);
   let pageSize = GM_getValue('pageSize', 50);
+  if (pageSize === 200) pageSize = 250;   // 200 became 250 in 3.18.4 (room for every different song on one page)
   if (PAGE_SIZES.indexOf(pageSize) < 0) pageSize = 50;
   let page = 0;
 
@@ -1708,8 +1709,8 @@ function main() {
   }
   const catOf = (cats, id) => (id && cats[id] && catName(cats[id].c) ? cats[id].c : '');
   function setCat(id, c) { const f = Object.assign({}, getCats()); f[id] = { c, at: Date.now() }; catCache = f; GM_setValue('categories', f); }
-  // The category button opens a menu in the page's colors (3.18.2); a system drop-down can't be themed, and on a
-  // tablet it opens as a plain full-screen list. The button keeps the chosen key in data-value.
+  // Category and Per page buttons open a menu in the page's colors (3.18.2, 3.18.4); a system drop-down can't be themed,
+  // and on a tablet it opens as a plain full-screen list. The button keeps the chosen value in data-value.
   function showCat(b, c) {
     b.dataset.value = c;
     b.classList.toggle('set', !!c);
@@ -1717,13 +1718,21 @@ function main() {
     b.append(el('span', '', c ? catName(c) : 'Category…'), el('span', 'caret', '▾'));
     b.setAttribute('aria-label', 'Category: ' + b.dataset.name + (c ? ', ' + catName(c) : ', none'));
   }
+  // open(b) opens b's menu; a second tap closes it, and the arrow keys open it too
+  function menuButton(b, open) {
+    b.onclick = () => { const was = menu && menu.btn === b; closeMenu(); if (!was) open(b); };
+    b.onkeydown = e => { if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !menu) { e.preventDefault(); open(b); } };
+  }
   function catSelect(id, title) {
-    const b = el('button', 'cat'); b.type = 'button';
+    const b = el('button', 'menubtn cat'); b.type = 'button';
     b.dataset.vid = id; b.dataset.name = title;
     b.setAttribute('aria-haspopup', 'listbox'); b.setAttribute('aria-expanded', 'false');
     showCat(b, catOf(getCats(), id));
-    b.onclick = () => { const was = catMenu && catMenu.btn === b; closeCatMenu(); if (!was) openCatMenu(b, id); };
-    b.onkeydown = e => { if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !catMenu) { e.preventDefault(); openCatMenu(b, id); } };
+    menuButton(b, () => {
+      const cur = catOf(getCats(), id), opts = mapOf(CATEGORIES, c => [c[0], c[1]]);
+      if (cur) opts.push(['', 'No category', 'clear']);
+      openMenu(b, 'Category: ' + title, opts, cur, k => chooseCat(id, k));
+    });
     return b;
   }
   function chooseCat(id, c) {
@@ -1732,18 +1741,17 @@ function main() {
     refreshCatCounts();
   }
   // One menu at a time, under its button (above it when there's no room below). Inside an open dialog it goes in
-  // the dialog, since the rest of the page can't be tapped then. Tapping elsewhere, scrolling or Escape closes it.
-  let catMenu = null;
-  function openCatMenu(b, id) {
-    const cur = catOf(getCats(), id), box = el('div', 'catmenu');
-    box.setAttribute('role', 'listbox'); box.setAttribute('aria-label', 'Category: ' + b.dataset.name);
-    const opts = mapOf(CATEGORIES, c => [c[0], c[1]]);
-    if (cur) opts.push(['', 'No category']);
-    for (const [k, name] of opts) {
-      const o = el('button', 'catopt' + (k ? '' : ' clear')); o.type = 'button';
+  // the dialog, since the rest of the page can't be tapped then. Tapping elsewhere or Escape closes it; it follows its button when the page scrolls.
+  // opts: [value, name, extra class]; choose(value) runs when a different one is picked.
+  let menu = null;
+  function openMenu(b, label, opts, cur, choose) {
+    const box = el('div', 'catmenu');
+    box.setAttribute('role', 'listbox'); box.setAttribute('aria-label', label);
+    for (const [k, name, cls] of opts) {
+      const o = el('button', 'catopt' + (cls ? ' ' + cls : '')); o.type = 'button';
       o.setAttribute('role', 'option'); o.setAttribute('aria-selected', String(k === cur)); o.dataset.value = k;
       o.append(el('span', 'tick', k === cur ? '✓' : ''), name);
-      o.onclick = () => { closeCatMenu(true); if (k !== cur) chooseCat(id, k); };
+      o.onclick = () => { closeMenu(true); if (k !== cur) choose(k); };
       box.append(o);
     }
     box.addEventListener('keydown', e => {
@@ -1751,26 +1759,32 @@ function main() {
       const go = j => { e.preventDefault(); list[(j + list.length) % list.length].focus(); };
       if (e.key === 'ArrowDown') go(i + 1); else if (e.key === 'ArrowUp') go(i - 1);
       else if (e.key === 'Home') go(0); else if (e.key === 'End') go(list.length - 1);
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCatMenu(true); }
-      else if (e.key === 'Tab') closeCatMenu();
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
+      else if (e.key === 'Tab') closeMenu();
     });
     (b.closest('dialog') || root).append(box);
-    const r = b.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
-    let top = r.bottom + 4;
-    if (top + h > innerHeight - 8 && r.top - h - 4 >= 8) top = r.top - h - 4;
-    box.style.top = Math.round(top) + 'px';
-    box.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8))) + 'px';
-    const away = e => { const path = e.composedPath ? e.composedPath() : []; if (path.indexOf(box) < 0 && path.indexOf(b) < 0) closeCatMenu(); };
-    const gone = e => { if (!e || !e.target || !box.contains(e.target)) closeCatMenu(); };
+    // Placed again when the page scrolls or resizes (a scroll still settling as the menu opens shouldn't close it);
+    // closed once its button is out of sight
+    const place = () => {
+      const r = b.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+      if (r.bottom < 0 || r.top > innerHeight) { closeMenu(); return; }
+      let top = r.bottom + 4;
+      if (top + h > innerHeight - 8 && r.top - h - 4 >= 8) top = r.top - h - 4;
+      box.style.top = Math.round(top) + 'px';
+      box.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8))) + 'px';
+    };
+    place();
+    const away = e => { const path = e.composedPath ? e.composedPath() : []; if (path.indexOf(box) < 0 && path.indexOf(b) < 0) closeMenu(); };
+    const gone = e => { if (!e || !e.target || !box.contains(e.target)) place(); };
     document.addEventListener('pointerdown', away, true);
     window.addEventListener('scroll', gone, true); window.addEventListener('resize', gone);
-    catMenu = { btn: b, box, away, gone };
+    menu = { btn: b, box, away, gone };
     b.setAttribute('aria-expanded', 'true');
     (box.querySelector('[aria-selected="true"]') || box.querySelector('.catopt')).focus({ preventScroll: true });
   }
-  function closeCatMenu(refocus) {
-    if (!catMenu) return;
-    const m = catMenu; catMenu = null;
+  function closeMenu(refocus) {
+    if (!menu) return;
+    const m = menu; menu = null;
     m.box.remove();
     document.removeEventListener('pointerdown', m.away, true);
     window.removeEventListener('scroll', m.gone, true); window.removeEventListener('resize', m.gone);
@@ -2172,7 +2186,7 @@ function main() {
   function quietRender() {
     const statsOpen = $('#statsbox').open || $('#backupbox').open || $('#shufbox').open;
     // Not while a category menu or a drop-down is open either: redrawing would close it
-    const choosing = catMenu || (root.activeElement && root.activeElement.tagName === 'SELECT');
+    const choosing = menu || (root.activeElement && root.activeElement.tagName === 'SELECT');
     if (pickerKey || noteKey || statsOpen || choosing) { renderPending = true; return; }
     render();
   }
@@ -2193,7 +2207,7 @@ function main() {
   }
 
   function render() {
-    if (catMenu) { const held = renderPending; renderPending = false; closeCatMenu(); renderPending = held; }   // this is the redraw
+    if (menu) { const held = renderPending; renderPending = false; closeMenu(); renderPending = held; }   // this is the redraw
     const marks = getMarks(), dislikes = getDislikes(), notes = getNotes();
     const base = baseRows();
     let rows = mapOf(base, s => ({ s, r: statusOf(s, marks, dislikes) }));
@@ -2389,8 +2403,8 @@ function main() {
     $('#prev').disabled = page === 0;
     $('#next').disabled = page >= pages - 1;
     const per = $('#per');
-    if (!per.options.length) for (const n of PAGE_SIZES) per.append(Object.assign(document.createElement('option'), { value: String(n), textContent: String(n) }));
-    per.value = String(pageSize);
+    per.textContent = ''; per.append(el('span', '', String(pageSize)), el('span', 'caret', '▾'));
+    per.dataset.value = String(pageSize); per.setAttribute('aria-label', 'Per page: ' + pageSize);
     $('#csv').disabled = $('#copy').disabled = !history.length;
     const rec = $('#rec');
     if (!history.length) rec.textContent = songsFrom === 'live' ? 'Starting to record plays…' : 'Not recording: the live feed is unavailable.';
@@ -3110,7 +3124,8 @@ function main() {
   $('#prev').onclick = e => runBusy(() => { if (page > 0) { page--; render(); root.host.scrollIntoView(); } }, e);
   $('#next').onclick = e => runBusy(() => { page++; render(); root.host.scrollIntoView(); }, e);
   // Read the element itself: inside the shadow root, the event's target is cleared once the action is delayed for "Working…"
-  $('#per').onchange = e => runBusy(() => { pageSize = Number($('#per').value); GM_setValue('pageSize', pageSize); page = 0; render(); }, e);
+  menuButton($('#per'), b => openMenu(b, 'Songs per page', mapOf(PAGE_SIZES, n => [n, String(n)]), pageSize,
+    n => runBusy(() => { pageSize = n; GM_setValue('pageSize', pageSize); page = 0; render(); })));
 
   /* ----- Controls and timers ----- */
   $('#refresh').onclick = e => runBusy(async () => { loading = true; playlistError = ''; render(); await loadPlaylist(true); loading = false; render(); }, e);

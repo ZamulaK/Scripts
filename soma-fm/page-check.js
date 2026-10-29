@@ -232,10 +232,16 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const { ctx, page, errors } = await openPage(browser, { width: 600, scheme: 'dark' });
 
   // Per page (broke in 3.9.0: event target cleared inside a delayed action)
-  await page.locator('#xm-host #per').selectOption('25');
+  // 3.18.4: a themed menu like the category one, with 250 in place of 200
+  await inShadow(page, r => { r.querySelector('#per').scrollIntoView({ block: 'end' }); r.querySelector('#per').click(); });
+  await page.waitForTimeout(150);
+  const perMenu = await inShadow(page, r => { const m = r.querySelector('.catmenu'), b = r.querySelector('#per'); if (!m) return null; const mr = m.getBoundingClientRect();
+    return { opts: [...m.querySelectorAll('.catopt')].map(o => o.textContent).join(), sel: (m.querySelector('[aria-selected="true"]') || {}).textContent, inView: mr.top >= 0 && mr.bottom <= innerHeight && mr.right <= innerWidth, label: b.textContent }; });
+  check('Per page opens a themed menu: 25, 50, 100, 250, the current one ticked', perMenu && perMenu.opts === '25,✓50,100,250' && perMenu.sel === '✓50' && perMenu.inView && perMenu.label === '50▾', JSON.stringify(perMenu));
+  await inShadow(page, r => [...r.querySelectorAll('.catmenu .catopt')].find(o => o.textContent === '25').click());
   await settle(page); await page.waitForTimeout(200);
-  const pos = await inShadow(page, r => r.querySelector('#pos').textContent);
-  check('Per page 25 shows 25 cards', /^1–25 of/.test(pos), pos);
+  const pos = await inShadow(page, r => r.querySelector('#pos').textContent + ' ' + r.querySelector('#per').textContent);
+  check('Per page 25 shows 25 cards, saved', /^1–25 of .* 25▾$/.test(pos) && await page.evaluate(() => window.__store.pageSize === 25), pos);
 
   // Song lengths (3.13): the playlist video's for "In playlist" songs, measured (~) for the rest
   const lens = await inShadow(page, r => {
@@ -306,7 +312,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('The category button opens a themed menu under it, focused, with the six categories', menu && menu.opts === 'Band/Swing,Classics,Dance,Jazz/Piano,Mellow,Soul/Funk' && menu.below && menu.inView && menu.themed && menu.expanded === 'true' && /catopt/.test(menu.focus) && menu.n === 1, JSON.stringify(menu));
   await page.keyboard.press('Escape');
   const esc = await inShadow(page, r => ({ n: r.querySelectorAll('.catmenu').length, focus: r.activeElement && r.activeElement.className, expanded: r.querySelector('ol > li.have .state button.cat').getAttribute('aria-expanded') }));
-  check('Escape closes the menu and returns to its button', esc.n === 0 && esc.focus === 'cat' && esc.expanded === 'false', JSON.stringify(esc));
+  check('Escape closes the menu and returns to its button', esc.n === 0 && esc.focus === 'menubtn cat' && esc.expanded === 'false', JSON.stringify(esc));
   await inShadow(page, r => r.querySelector('ol > li.have .state button.cat').click());
   await page.mouse.click(5, 5);
   check('Tapping elsewhere closes the menu', await inShadow(page, r => r.querySelectorAll('.catmenu').length === 0));
@@ -483,6 +489,15 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check('A play dated a day ahead is removed from the saved history', ahead === 0 && after.length >= h.length, JSON.stringify({ ahead, n: after.length, was: h.length + 1 }));
     check('Future plays: no script errors', fp.errors.length === 0, fp.errors.join(' | '));
     await fp.ctx.close();
+  }
+
+  // 4a. A saved Per page of 200 becomes 250 (3.18.4)
+  {
+    const p = await openPage(browser, { width: 600, store: { pageSize: 200 } });
+    await settle(p.page);
+    const t = await inShadow(p.page, r => r.querySelector('#per').textContent + ' ' + r.querySelector('#pos').textContent);
+    check('A saved Per page of 200 shows as 250', /^250▾ 1–250 of/.test(t), t);
+    await p.ctx.close();
   }
 
   // 4. The "None" chip is hidden when every playlist song has a category, unless it's on (3.17.3)
