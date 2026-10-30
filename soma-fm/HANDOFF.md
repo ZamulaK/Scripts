@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.20.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.20.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -164,7 +164,7 @@ Mommy…" played 9:47 PM, then not until 2:48 PM. Dan's view: SomaFM probably pl
 ## 8. UI notes
 
 - **Header:** title left, 📊 Stats always top right. Refresh / Live / Awake sit under Stats when they fit beside the title. `fitHeader()` **measures** (full labels → short labels "Refresh / Live: On / Awake: On" → own row) and re-runs on resize and label changes. Dan explicitly asked for this arrangement at 600 px portrait.
-- **Chips** toggle multi-select, All resets, and all-on = All. "Not in playlist" includes gone songs. The ⭐ chip (3.20, first on the category row) shows only favorites, together with any category chips; its count, like theirs, is cards and follows a star tap without a redraw.
+- **Chips** toggle multi-select, All resets, and all-on = All. "Not in playlist" includes gone songs. The ⭐ chip (3.20, first on the category row) shows only favorites, together with any category chips; its count, like theirs, is cards and follows a star tap without a redraw. **Each chip row fits on one line at 600 px** (Dan asked, 3.20.1): below desktop width the chips are tighter and two status chips use short names ("Not in list", "In list"; the aria-label keeps the full one), and `fitChips()` measures each row and shrinks its text up to 15% if it would wrap, since the counts grow with the play history.
 - **Cards:** shading = slate on not-in-playlist, lighter slate on other version, plain on matches, dashed on disliked. Every row of buttons must fit on **one line at tablet portrait width** (Dan's requirement).
 - **"Working…"** pill shows after 150 ms for slow actions (`runBusy`). Dialogs are `<dialog>` with `showModal`, and tap outside closes.
 - **Colors** are tokens in `:host` with a dark set under `prefers-color-scheme: dark`. Check contrast (white-on-button ≥ 4.5:1) when adding buttons.
@@ -207,7 +207,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 100 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 102 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -259,6 +259,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.19.0 | Shuffle tries a failed YouTube request again (dropped connection, 5xx, 409, 429, rate limits) after 2, 5, 15 and 30 s instead of stopping; the read-back looks twice more before reporting a different order. Dan had "Couldn't talk to YouTube" near the end of a shuffle (twice). |
 | 3.19.1 | YouTube API requests use `cache: 'no-store'`. After Dan finished a shuffle that had stopped partway, the read-back said the order differed, but opening Shuffle again found it exactly as planned; it happened only when finishing, so most likely a stored or "not modified" answer from the read just before. |
 | 3.20.0 | ⭐ filter chip: only favorites (Dan asked for it), first on the category row, combines with category chips, remembered per device (`favOnly`). A menu that fits neither below nor above its button scrolls the page so it fits below (the category menu was cut off on a short screen). |
+| 3.20.1 | Each filter chip row fits on one line at 600 px: tighter chips below desktop width, "Not in list" / "In list" there, and `fitChips()` shrinks a row's text up to 15% rather than wrapping as counts grow. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

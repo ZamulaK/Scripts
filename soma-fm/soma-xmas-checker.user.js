@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.20.0
+// @version      3.20.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1375,7 +1375,9 @@ function main() {
     header .filters{grid-area:filters}
     header .catf{grid-area:catf}
     .catf:empty,.catf button[hidden]{display:none}
-    @media (max-width:899px){.catf .wide{display:none}}
+    /* Tighter chips below desktop width, so each row fits on one line on Dan's tablet (600 px portrait, 3.20.1) */
+    .filters .narrow{display:none}
+    @media (max-width:899px){.filters{gap:.2rem}.filters button{padding:.4em .45em;font-size:.75em;gap:.22em}.filters .n{font-size:.9em}.filters .wide{display:none}.filters .narrow{display:inline}}
     #anote{grid-area:anote} #gonebox{grid-area:gone}
     .lbl-short{display:none}
     header.compact .lbl-full{display:none} header.compact .lbl-short{display:inline}
@@ -1655,7 +1657,8 @@ function main() {
   $('h1').textContent = stationName;
 
   /* ----- State ----- */
-  const FILTERS = [['all', 'All'], ['none', 'Not in playlist'], ['other', 'Other version'], ['have', 'In playlist'], ['disliked', 'Disliked']];
+  // Key, name, and the shorter name below desktop width (3.20.1, so the row fits on one line on Dan's tablet)
+  const FILTERS = [['all', 'All'], ['none', 'Not in playlist', 'Not in list'], ['other', 'Other version'], ['have', 'In playlist', 'In list'], ['disliked', 'Disliked']];
   let songsFrom = 'page', items = [], hiddenCount = 0, playlistAt = 0, playlistError = '', loading = true, nowAt = null;
   // Status chips toggle; an empty set means "All". Remembered on this device.
   const STATUS_KEYS = ['none', 'other', 'have', 'disliked'];
@@ -1893,6 +1896,7 @@ function main() {
     if (!favCountEl) return;
     const favs = getFavs();
     favCountEl.textContent = fmt(keep(catRowVids, v => isFav(favs, v)).length);
+    fitChips();
   }
   function toggleCatFilter(key) {
     if (catFilters.has(key)) catFilters.delete(key); else catFilters.add(key);
@@ -1912,6 +1916,7 @@ function main() {
   function refreshCatCounts() {
     const n = catCounts();
     for (const [k, e] of catCountEls) { e.textContent = fmt(n.get(k) || 0); if (k === 'uncat') hideNone(e.parentNode, n.get(k) || 0); }
+    fitChips();
   }
 
   /* ----- Playlist memory: titles of every song seen, so ones that disappear can still be named ----- */
@@ -2133,7 +2138,18 @@ function main() {
     queueFit();
   }
   let fitQueued = false;
-  function queueFit() { if (!fitQueued) { fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fitHeader(); }); } }
+  function queueFit() { if (!fitQueued) { fitQueued = true; requestAnimationFrame(() => { fitQueued = false; fitHeader(); fitChips(); }); } }
+  // Each chip row stays on one line when it can (3.20.1): a row that would wrap gets slightly smaller text, down to 85%.
+  // The counts grow with the play history, so a fixed size that fits today would wrap later.
+  function fitChips() {
+    for (const row of root.querySelectorAll('header .filters')) {
+      row.style.fontSize = '';
+      if (!row.clientWidth) continue;
+      row.style.flexWrap = 'nowrap';
+      for (let k = 1; k <= 5 && row.scrollWidth > row.clientWidth; k++) row.style.fontSize = (1 - k * 0.03) + 'em';
+      row.style.flexWrap = '';
+    }
+  }
   // Natural (one-line) width of an element's content
   function natural(elm) { const r = document.createRange(); r.selectNodeContents(elm); return r.getBoundingClientRect().width; }
   function fitHeader() {
@@ -2274,10 +2290,12 @@ function main() {
     const f = $('.filters');
     f.textContent = '';
     if (!playlistError && items.length) {
-      for (const [key, label] of FILTERS) {
+      for (const [key, label, short] of FILTERS) {
         const n = key === 'all' ? rows.length : keep(rows, x => inGroup(x.r.status, key)).length;
-        const b = btn('', '', () => toggleFilter(key));
-        b.append(label + ' ', el('span', 'n', fmt(n)));
+        const b = btn('', '', () => toggleFilter(key)), name = el('span', '');
+        if (short) name.append(el('span', 'wide', label), el('span', 'narrow', short)); else name.append(label);
+        b.append(name, el('span', 'n', fmt(n)));
+        if (short) b.setAttribute('aria-label', label + ' ' + fmt(n));
         b.setAttribute('aria-pressed', String(key === 'all' ? filters.size === 0 : filters.has(key)));
         f.append(b);
       }
@@ -2313,6 +2331,7 @@ function main() {
       }
     }
 
+    fitChips();
     let shownAll = filters.size === 0 || playlistError ? rows : keep(rows, x => filters.has(x.r.status) || (x.r.status === 'gone' && filters.has('none')));
     if (catFilters.size && !playlistError) { const cats = getCats(); shownAll = keep(shownAll, x => inList(x) && catFilters.has(catOf(cats, x.r.item.id) || 'uncat')); }
     if (favOnly && !playlistError) { const favs = getFavs(); shownAll = keep(shownAll, x => inList(x) && isFav(favs, x.r.item.id)); }

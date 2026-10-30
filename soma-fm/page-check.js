@@ -372,8 +372,8 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Tapping ⭐ shows only favorites', favOnly.ok && favOnly.n === Math.min(fav1, favOnly.per) && favOnly.pressed === 'true' && await page.evaluate(() => window.__store.favOnly === true), JSON.stringify([favOnly, fav1]));
   await inShadow(page, r => r.querySelector('.catf .favf').click());
   await settle(page); await page.waitForTimeout(200);
-  const favOff = await inShadow(page, r => ({ n: r.querySelectorAll('#cards > li:not(.gap):not(.empty)').length, pressed: r.querySelector('.catf .favf').getAttribute('aria-pressed') }));
-  check('Tapping ⭐ again shows every song', favOff.n > favOnly.n && favOff.pressed === 'false' && await page.evaluate(() => window.__store.favOnly === false), JSON.stringify([favOff, favOnly.n]));
+  const favOff = await inShadow(page, r => ({ n: r.querySelectorAll('#cards > li:not(.gap):not(.empty)').length, others: [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')].filter(li => !li.querySelector('button.fav[aria-pressed="true"]')).length, pressed: r.querySelector('.catf .favf').getAttribute('aria-pressed') }));
+  check('Tapping ⭐ again shows every song', favOff.others > 0 && favOff.pressed === 'false' && await page.evaluate(() => window.__store.favOnly === false), JSON.stringify([favOff, favOnly.n]));
   await inShadow(page, (r, v) => r.querySelector('#cards button.fav[data-vid="' + v + '"]').click(), starred);   // as it was, for the checks below
   await settle(page);
 
@@ -517,6 +517,24 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check('A play dated a day ahead is removed from the saved history', ahead === 0 && after.length >= h.length, JSON.stringify({ ahead, n: after.length, was: h.length + 1 }));
     check('Future plays: no script errors', fp.errors.length === 0, fp.errors.join(' | '));
     await fp.ctx.close();
+  }
+
+  // 4b. At 600 px (Dan's tablet) each chip row fits on one line, with a favorite count and every category in use (3.20.1)
+  {
+    const cats = {}, favs = {}, keys = ['band', 'classics', 'dance', 'jazz', 'mellow', 'soul'];
+    for (let i = 0; i < items.length; i++) { cats[items[i].id] = { c: keys[i % 6], at: 1 }; if (i % 3 === 0) favs[items[i].id] = { on: true, at: 1 }; }
+    const p = await openPage(browser, { width: 600, store: { categories: cats, favorites: favs, catFilters: ['uncat'] } });
+    await settle(p.page);
+    const lines = () => inShadow(p.page, r => [...r.querySelectorAll('header .filters')].map(f => { const b = [...f.querySelectorAll('button')].filter(x => x.offsetParent);
+      const g = parseFloat(getComputedStyle(f).columnGap); return Math.round(b.reduce((t, x) => t + x.getBoundingClientRect().width + g, -g)) + '/' + f.clientWidth + 'px, ' + b.length + ' chips on ' + new Set(b.map(x => x.offsetTop)).size + ' line(s): ' + b.map(x => x.innerText.replace(/\s+/g, ' ')).join(' | '); }));
+    const rows = await lines();
+    check('600px: each chip row fits on one line', rows.length === 2 && rows.every(t => / on 1 line/.test(t)), rows.join(' // '));
+    // Counts grow with the play history: with 999 in every chip, the rows get slightly smaller text instead of wrapping
+    await inShadow(p.page, r => { for (const n of r.querySelectorAll('header .filters .n')) n.textContent = '999'; });
+    await p.page.setViewportSize({ width: 601, height: 900 }); await p.page.waitForTimeout(200); await p.page.setViewportSize({ width: 600, height: 900 }); await p.page.waitForTimeout(300);
+    const big = await lines();
+    check('600px: with three-digit counts everywhere, each chip row still fits on one line', big.every(t => / on 1 line/.test(t)), big.join(' // '));
+    await p.ctx.close();
   }
 
   // 4a. A saved Per page of 200 becomes 250 (3.18.4)
