@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.19.0
+// @version      3.19.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -2800,7 +2800,9 @@ function main() {
     const headers = { Authorization: 'Bearer ' + shufToken };
     if (body) headers['Content-Type'] = 'application/json';
     let r;
-    try { r = await fetch(`https://www.googleapis.com/youtube/v3/${resource}?${q}`, { method, headers, body: body ? JSON.stringify(body) : undefined }); }
+    // no-store (3.19.1): reading the playlist again soon after an earlier read (finishing a shuffle) must not get a stored
+    // or "not modified" answer with the old order
+    try { r = await fetch(`https://www.googleapis.com/youtube/v3/${resource}?${q}`, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }); }
     catch (e) { throw Object.assign(new Error('network error'), { status: 0, reason: 'network' }); }
     addUsed(method === 'GET' ? 1 : Shuffle.UNITS_PER_MOVE);
     if (r.ok) return r.json();

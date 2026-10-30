@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.19.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.19.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -257,6 +257,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.18.4 | Per page uses the same themed menu as categories (`openMenu`, shared). Its 200 option is now 250, enough for every different song on one page with Latest on; a saved 200 becomes 250. |
 | 3.18.5 | Per page button text matches the pager buttons beside it (it had inherited the smaller "Per page" label size). |
 | 3.19.0 | Shuffle tries a failed YouTube request again (dropped connection, 5xx, 409, 429, rate limits) after 2, 5, 15 and 30 s instead of stopping; the read-back looks twice more before reporting a different order. Dan had "Couldn't talk to YouTube" near the end of a shuffle (twice). |
+| 3.19.1 | YouTube API requests use `cache: 'no-store'`. After Dan finished a shuffle that had stopped partway, the read-back said the order differed, but opening Shuffle again found it exactly as planned; it happened only when finishing, so most likely a stored or "not modified" answer from the read just before. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

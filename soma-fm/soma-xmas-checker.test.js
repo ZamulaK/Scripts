@@ -883,6 +883,11 @@ function sourceChecks() {
   if (!ok) fail++;
   console.log('--- source checks ---');
   console.log(`${ok ? 'PASS' : 'FAIL'}  no event target read inside a delayed action${ok ? '' : ' (lines ' + bad.join(', ') + ')'}`);
+  // 3.19.1: after finishing a shuffle, the read-back once said the order was wrong when it wasn't (an old answer reused)
+  const apiFetches = src.match(/fetch\(`https:\/\/www\.googleapis\.com[^\n]*/g) || [];
+  const fresh = apiFetches.length > 0 && apiFetches.filter(l => !/cache: 'no-store'/.test(l)).length === 0;
+  if (!fresh) fail++;
+  console.log(`${fresh ? 'PASS' : 'FAIL'}  YouTube API requests are never answered from a stored copy`);
 
   // Tampermonkey auto-updates from the repo copy: both URLs must point at this file there,
   // and package.json must carry the same version so a bump isn't half done.

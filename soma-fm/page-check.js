@@ -272,9 +272,9 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Tapping ☆ on an "In playlist" card makes it a favorite (⭐), saved', star === 'false' && fav.on >= 1 && fav.text === '⭐' && saved === 1, JSON.stringify(fav) + ' saved ' + saved);
   check('Only songs in the playlist have a star', fav.others === 0, String(fav.others));
 
-  // Notes (3.18): 📝 on every card opens an editor at the bottom of the card; the note shows on each of the song's cards
+  // Notes (3.18): 📝 on every card (a song's cards are found by title and artist: two songs can share a title) opens an editor at the bottom of the card; the note shows on each of the song's cards
   const noteFor = await inShadow(page, r => { const li = r.querySelector('ol > li.none, ol > li.disliked, ol > li.other'); const b = li && li.querySelector('.title button.notebtn');
-    if (!b) return null; const name = li.querySelector('.title').firstChild.textContent; b.click(); return { name, pencil: b.textContent === '✏️', all: r.querySelectorAll('ol > li:not(.gap):not(.empty)').length, btns: r.querySelectorAll('ol > li .title button.notebtn').length }; });
+    if (!b) return null; const name = li.querySelector('.title').firstChild.textContent + ' | ' + li.querySelector('.artist').textContent; b.click(); return { name, pencil: b.textContent === '✏️', all: r.querySelectorAll('ol > li:not(.gap):not(.empty)').length, btns: r.querySelectorAll('ol > li .title button.notebtn').length }; });
   await settle(page); await page.waitForTimeout(200);
   const ed = await inShadow(page, r => ({ eds: r.querySelectorAll('.noteed').length, focused: r.activeElement && r.activeElement.id === 'xm-note',
     inCard: !!(r.querySelector('#xm-note') && r.querySelector('#xm-note').closest('li')) }));
@@ -298,7 +298,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await inShadow(page, r => [...r.querySelectorAll('.noteed button')].find(b => b.textContent === 'Save').click());
   await settle(page); await page.waitForTimeout(200);
   const nt = await page.evaluate(name => { const r = document.getElementById('xm-host').shadowRoot, n = window.__store.notes || {};
-    const cards = [...r.querySelectorAll('ol > li')].filter(li => li.querySelector('.title') && li.querySelector('.title').firstChild.textContent === name);
+    const cards = [...r.querySelectorAll('ol > li')].filter(li => li.querySelector('.title') && li.querySelector('.title').firstChild.textContent + ' | ' + li.querySelector('.artist').textContent === name);
     return { saved: Object.keys(n).map(k => n[k].t).join(), cards: cards.length, shown: cards.filter(li => li.lastElementChild.className === 'unote' && li.lastElementChild.textContent === "Can't find the SomaFM version on YouTube").length,
       pressed: cards.filter(li => li.querySelector('button.notebtn').getAttribute('aria-pressed') === 'true' && li.querySelector('button.notebtn').textContent === '📝').length, open: r.querySelectorAll('.noteed').length,
       otherPressed: r.querySelectorAll('button.notebtn[aria-pressed="true"]').length, wide: document.documentElement.scrollWidth > window.innerWidth }; }, noteFor && noteFor.name);
