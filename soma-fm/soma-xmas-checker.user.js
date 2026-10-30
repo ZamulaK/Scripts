@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.18.4
+// @version      3.18.5
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1446,6 +1446,7 @@ function main() {
     .ctl:disabled{opacity:.45;cursor:default}
     select{font:inherit;font-size:.82em;color:var(--fg);background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:.38em .7em}
     .per{color:var(--muted);font-size:.85em;display:inline-flex;align-items:center;gap:.4em}
+    .per button.menubtn{font-size:calc(.82em / .85)}   /* undo the smaller label text, so it matches the buttons beside it */
     .rec{flex-basis:100%;color:var(--muted);font-size:.8em}
     .working{position:fixed;z-index:20;left:50%;top:calc(env(safe-area-inset-top,0px) + .6rem);transform:translateX(-50%);
       display:flex;align-items:center;gap:.5rem;padding:.4rem .85rem;border-radius:999px;background:var(--fg);color:var(--bg);

@@ -241,6 +241,8 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   await inShadow(page, r => [...r.querySelectorAll('.catmenu .catopt')].find(o => o.textContent === '25').click());
   await settle(page); await page.waitForTimeout(200);
   const pos = await inShadow(page, r => r.querySelector('#pos').textContent + ' ' + r.querySelector('#per').textContent);
+  const perFont = await inShadow(page, r => [getComputedStyle(r.querySelector('#per')).fontSize, getComputedStyle(r.querySelector('#prev')).fontSize]);
+  check('Per page button text is the same size as the pager buttons', Math.abs(parseFloat(perFont[0]) - parseFloat(perFont[1])) < 0.2, perFont.join(' vs '));
   check('Per page 25 shows 25 cards, saved', /^1–25 of .* 25▾$/.test(pos) && await page.evaluate(() => window.__store.pageSize === 25), pos);
 
   // Song lengths (3.13): the playlist video's for "In playlist" songs, measured (~) for the rest
