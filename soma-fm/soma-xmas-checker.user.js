@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.19.1
+// @version      3.20.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1715,6 +1715,7 @@ function main() {
       const on = !isFav(getFavs(), id);
       setFav(id, on);
       for (const x of sameVideo('button.fav', id)) showFav(x, on);
+      refreshFavCount();
     };
     showFav(b, isFav(getFavs(), id));
     return b;
@@ -1797,6 +1798,9 @@ function main() {
       box.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8))) + 'px';
     };
     place();
+    // Room neither below nor above (a button mid-screen on a short screen): scroll so the menu fits below its button
+    const over = box.getBoundingClientRect().bottom - (innerHeight - 8), br = b.getBoundingClientRect();
+    if (over > 0 && box.getBoundingClientRect().top > br.top) { window.scrollBy(0, Math.min(over, br.top - 8)); place(); }
     const away = e => { const path = e.composedPath ? e.composedPath() : []; if (path.indexOf(box) < 0 && path.indexOf(b) < 0) closeMenu(); };
     const gone = e => { if (!e || !e.target || !box.contains(e.target)) place(); };
     document.addEventListener('pointerdown', away, true);
@@ -1882,6 +1886,14 @@ function main() {
   // Category chips (3.17): only songs in the playlist have a category. None on means no category filter;
   // 'uncat' is "No category". Remembered on this device.
   let catFilters = new Set(keep(GM_getValue('catFilters', []) || [], k => k === 'uncat' || !!catName(k)));
+  // ⭐ chip (3.20): only favorites, together with any category chips
+  let favOnly = GM_getValue('favOnly', false) === true, favCountEl = null;
+  function toggleFavOnly() { favOnly = !favOnly; GM_setValue('favOnly', favOnly); page = 0; render(); }
+  function refreshFavCount() {
+    if (!favCountEl) return;
+    const favs = getFavs();
+    favCountEl.textContent = fmt(keep(catRowVids, v => isFav(favs, v)).length);
+  }
   function toggleCatFilter(key) {
     if (catFilters.has(key)) catFilters.delete(key); else catFilters.add(key);
     GM_setValue('catFilters', [...catFilters]);
@@ -2277,8 +2289,16 @@ function main() {
     const cf = $('.catf'), inList = x => x.r.status === 'have' && x.r.item;
     cf.textContent = '';
     catRowVids = mapOf(keep(rows, inList), x => x.r.item.id);
-    catCountEls = new Map();
+    catCountEls = new Map(); favCountEl = null;
     if (!playlistError && items.length) {
+      const fb = btn('', 'favf', toggleFavOnly);
+      favCountEl = el('span', 'n', '');
+      fb.append(el('span', '', '⭐'), favCountEl);
+      fb.setAttribute('aria-pressed', String(favOnly));
+      fb.setAttribute('aria-label', 'Favorites only');
+      fb.title = 'Only favorites';
+      cf.append(fb);
+      refreshFavCount();
       const n = catCounts();
       for (const [key, , label] of CATEGORIES.concat([['uncat', '', 'None']])) {
         const b = btn('', '', () => toggleCatFilter(key)), c = el('span', 'n', fmt(n.get(key) || 0));
@@ -2295,6 +2315,7 @@ function main() {
 
     let shownAll = filters.size === 0 || playlistError ? rows : keep(rows, x => filters.has(x.r.status) || (x.r.status === 'gone' && filters.has('none')));
     if (catFilters.size && !playlistError) { const cats = getCats(); shownAll = keep(shownAll, x => inList(x) && catFilters.has(catOf(cats, x.r.item.id) || 'uncat')); }
+    if (favOnly && !playlistError) { const favs = getFavs(); shownAll = keep(shownAll, x => inList(x) && isFav(favs, x.r.item.id)); }
     const pages = Math.max(1, Math.ceil(shownAll.length / pageSize));
     if (page > pages - 1) page = pages - 1;
     const shown = shownAll.slice(page * pageSize, (page + 1) * pageSize);

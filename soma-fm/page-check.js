@@ -338,26 +338,44 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('A set category is ticked, and the menu offers "No category"', clear.sel === 'dance' && clear.last === 'No category', JSON.stringify(clear));
   // Category chips (3.17): a second chip row; the count follows a drop-down change without a redraw
   const chips = await inShadow(page, r => { const c = r.querySelector('.catf'), f = r.querySelector('.filters');
-    return { labels: [...c.querySelectorAll('button')].map(b => b.innerText.replace(/[^A-Za-z/]*[0-9,]+$/, '')).join(), wide: innerWidth >= 900, dance: Number(c.querySelectorAll('button')[2].querySelector('.n').textContent),
+    return { labels: [...c.querySelectorAll('button:not(.favf)')].map(b => b.innerText.replace(/[^A-Za-z/]*[0-9,]+$/, '')).join(), wide: innerWidth >= 900, dance: Number(c.querySelectorAll('button:not(.favf)')[2].querySelector('.n').textContent),
       below: c.getBoundingClientRect().top >= f.getBoundingClientRect().bottom }; });
   check('Category chips sit below the status chips, and count the drop-down change', chips.labels === 'Swing,Classics,Dance,Jazz,Mellow,' + (chips.wide ? 'Soul/Funk' : 'Funk') + ',None' && chips.dance >= 1 && chips.below, JSON.stringify(chips));
   const vp = page.viewportSize();
-  for (const w of [1000, 360]) { await page.setViewportSize({ width: w, height: vp.height }); await page.waitForTimeout(300); const t = await inShadow(page, r => [...r.querySelectorAll('.catf button')].map(b => b.innerText.replace(/[^A-Za-z/]*[0-9,]+$/, '')).join()); check('The Soul/Funk chip reads "Funk" below desktop width (' + w + 'px)', t.indexOf(w >= 900 ? ',Soul/Funk,' : ',Funk,') >= 0, t); }
+  for (const w of [1000, 360]) { await page.setViewportSize({ width: w, height: vp.height }); await page.waitForTimeout(300); const t = await inShadow(page, r => [...r.querySelectorAll('.catf button:not(.favf)')].map(b => b.innerText.replace(/[^A-Za-z/]*[0-9,]+$/, '')).join()); check('The Soul/Funk chip reads "Funk" below desktop width (' + w + 'px)', t.indexOf(w >= 900 ? ',Soul/Funk,' : ',Funk,') >= 0, t); }
   await page.setViewportSize(vp); await page.waitForTimeout(300);
-  await inShadow(page, r => r.querySelectorAll('.catf button')[2].click());
+  await inShadow(page, r => r.querySelectorAll('.catf button:not(.favf)')[2].click());
   await settle(page); await page.waitForTimeout(200);
   const onlyDance = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
-    return { n: cards.length, ok: cards.every(li => li.classList.contains('have') && li.querySelector('button.cat').dataset.value === 'dance'), pressed: r.querySelectorAll('.catf button')[2].getAttribute('aria-pressed') }; });
+    return { n: cards.length, ok: cards.every(li => li.classList.contains('have') && li.querySelector('button.cat').dataset.value === 'dance'), pressed: r.querySelectorAll('.catf button:not(.favf)')[2].getAttribute('aria-pressed') }; });
   check('Tapping a category chip shows only that category', onlyDance.n === chips.dance && onlyDance.ok && onlyDance.pressed === 'true' && await page.evaluate(() => window.__store.catFilters.join() === 'dance'), JSON.stringify(onlyDance));
-  await inShadow(page, r => r.querySelectorAll('.catf button')[6].click());
+  await inShadow(page, r => r.querySelectorAll('.catf button:not(.favf)')[6].click());
   await settle(page); await page.waitForTimeout(200);
   const both = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
     return { ok: cards.length > 0 && cards.every(li => li.classList.contains('have') && /^(dance|)$/.test(li.querySelector('button.cat').dataset.value)), uncat: cards.filter(li => !li.querySelector('button.cat').dataset.value).length }; });
   check('"None" adds the songs without a category', both.ok && both.uncat > 0, JSON.stringify(both));
-  await inShadow(page, r => { r.querySelectorAll('.catf button')[2].click(); });
+  await inShadow(page, r => { r.querySelectorAll('.catf button:not(.favf)')[2].click(); });
   await settle(page);
-  await inShadow(page, r => { r.querySelectorAll('.catf button')[6].click(); });
+  await inShadow(page, r => { r.querySelectorAll('.catf button:not(.favf)')[6].click(); });
   await settle(page); await page.waitForTimeout(200);
+
+  // ⭐ chip (3.20): first on the category row; only favorites; its count follows a star tap without a redraw
+  const fav0 = await inShadow(page, r => { const b = r.querySelector('.catf button'); return { first: b.classList.contains('favf'), n: Number(b.querySelector('.n').textContent), pressed: b.getAttribute('aria-pressed') }; });
+  const starred = await inShadow(page, r => { for (const b of r.querySelectorAll('#cards > li.have button.fav')) if (b.getAttribute('aria-pressed') === 'false') { b.click(); return b.dataset.vid; } });
+  await settle(page); await page.waitForTimeout(200);
+  const fav1 = await inShadow(page, r => Number(r.querySelector('.catf .favf .n').textContent));
+  check('The ⭐ chip leads the category row and counts a new favorite', fav0.first && fav0.pressed === 'false' && fav1 >= fav0.n + 1, JSON.stringify([fav0, fav1]));
+  await inShadow(page, r => r.querySelector('.catf .favf').click());
+  await settle(page); await page.waitForTimeout(200);
+  const favOnly = await inShadow(page, r => { const cards = [...r.querySelectorAll('#cards > li:not(.gap):not(.empty)')];
+    return { per: Number(r.querySelector('#per').dataset.value), n: cards.length, ok: cards.length > 0 && cards.every(li => li.classList.contains('have') && li.querySelector('button.fav').getAttribute('aria-pressed') === 'true'), pressed: r.querySelector('.catf .favf').getAttribute('aria-pressed') }; });
+  check('Tapping ⭐ shows only favorites', favOnly.ok && favOnly.n === Math.min(fav1, favOnly.per) && favOnly.pressed === 'true' && await page.evaluate(() => window.__store.favOnly === true), JSON.stringify([favOnly, fav1]));
+  await inShadow(page, r => r.querySelector('.catf .favf').click());
+  await settle(page); await page.waitForTimeout(200);
+  const favOff = await inShadow(page, r => ({ n: r.querySelectorAll('#cards > li:not(.gap):not(.empty)').length, pressed: r.querySelector('.catf .favf').getAttribute('aria-pressed') }));
+  check('Tapping ⭐ again shows every song', favOff.n > favOnly.n && favOff.pressed === 'false' && await page.evaluate(() => window.__store.favOnly === false), JSON.stringify([favOff, favOnly.n]));
+  await inShadow(page, (r, v) => r.querySelector('#cards button.fav[data-vid="' + v + '"]').click(), starred);   // as it was, for the checks below
+  await settle(page);
 
   // Latest play only (3.15): one card per song
   const dupCount = () => inShadow(page, r => { const seen = new Set(); let d = 0; for (const li of r.querySelectorAll('#cards > li:not(.gap):not(.empty)')) { const k = li.querySelector('.title').firstChild.textContent + '|' + li.querySelector('.artist').firstChild.textContent; if (seen.has(k)) d++; seen.add(k); } return d; });
@@ -517,7 +535,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const noneChip = async store => {
       const p = await openPage(browser, { width: 600, store });
       await settle(p.page);
-      const r = await inShadow(p.page, r => { const b = [...r.querySelectorAll('.catf button')].pop(); return { text: b.textContent, shown: b.offsetParent !== null, pressed: b.getAttribute('aria-pressed') }; });
+      const r = await inShadow(p.page, r => { const b = [...r.querySelectorAll('.catf button:not(.favf)')].pop(); return { text: b.textContent, shown: b.offsetParent !== null, pressed: b.getAttribute('aria-pressed') }; });
       await p.ctx.close();
       return r;
     };
