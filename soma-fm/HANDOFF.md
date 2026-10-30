@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.18.5**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.19.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -185,7 +185,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
   `Shuffle.plan` keeps the longest group of songs already in the right relative order (longest increasing subsequence)
   and moves each other song straight after its new predecessor. That's about 95 moves for 116 songs, not 116 (about 4,750 units).
 - **Safety:** checks that the signed-in channel owns the playlist; songs are only moved, never added or removed; two taps to
-  start; the job is saved first, so a run cut short by quota, expiry, Stop or closing the page is finished next time; the playlist
+  start; a dropped connection or a busy YouTube (5xx, 409, 429, rate limits) is tried again after 2, 5, 15 and 30 s (3.19, `Shuffle.retrying`; never a used-up quota, sign-in or refusal; a move names its position, so resending one whose reply was lost is harmless); the read-back looks twice more (5 s, 15 s) before saying the order differs; the job is saved first, so a run cut short by quota, expiry, Stop or closing the page is finished next time; the playlist
   is read back and compared before it says Done; the order before the last change can be put back.
 - **Spreading (3.14, Dan asked for it: "avoid 5 heads in a row"; distance = song positions, not time):** `Shuffle.arrange`
   starts from Fisher-Yates and then swaps songs (simulated annealing, 300 × n tries, about 0.2 s for 136 songs on a desktop) to lower
@@ -207,7 +207,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 96 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 97 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -256,6 +256,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.18.3 | The note box is scrolled into sight when the on-screen keyboard opens (`keepInView`: fits the box to `visualViewport` on focus and as the keyboard resizes it), since the keyboard sometimes covered it. |
 | 3.18.4 | Per page uses the same themed menu as categories (`openMenu`, shared). Its 200 option is now 250, enough for every different song on one page with Latest on; a saved 200 becomes 250. |
 | 3.18.5 | Per page button text matches the pager buttons beside it (it had inherited the smaller "Per page" label size). |
+| 3.19.0 | Shuffle tries a failed YouTube request again (dropped connection, 5xx, 409, 429, rate limits) after 2, 5, 15 and 30 s instead of stopping; the read-back looks twice more before reporting a different order. Dan had "Couldn't talk to YouTube" near the end of a shuffle (twice). |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

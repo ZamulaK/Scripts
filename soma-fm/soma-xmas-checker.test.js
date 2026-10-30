@@ -761,10 +761,15 @@ async function shuffleChecks() {
         return start + params.maxResults < yt.order.length ? { items: out, nextPageToken: String(start + params.maxResults) } : { items: out };
       }
       if (method === 'PUT' && resource === 'playlistItems') {
+        // flaky: put numbers that fail with a dropped connection, before the move ('lost') or after it ('late': made, but no reply)
+        const f = opts.flaky && opts.flaky[yt.tries = (yt.tries || 0) + 1];
+        if (f === 'lost') throw Object.assign(new Error('network error'), { status: 0, reason: 'network' });
         if (yt.puts >= yt.quotaAfter) throw Object.assign(new Error('The request cannot be completed because you have exceeded your quota.'), { status: 403, reason: 'quotaExceeded' });
         if (body.snippet.playlistId !== 'PL1' || body.snippet.resourceId.videoId !== 'v' + body.id) throw Object.assign(new Error('bad request'), { status: 400, reason: 'badRequest' });
         yt.puts++;
         yt.order = S.applyMove(yt.order, body.id, body.snippet.position);
+        if (f === 'late') throw Object.assign(new Error('network error'), { status: 0, reason: 'network' });
+        if (f === 'busy') throw Object.assign(new Error('The service is currently unavailable.'), { status: 409, reason: 'SERVICE_UNAVAILABLE' });
         return {};
       }
       throw new Error('unexpected call ' + method + ' ' + resource);
@@ -797,6 +802,31 @@ async function shuffleChecks() {
   const list2b = await S.readItems(yt2.call, 'PL1');
   await S.run(yt2.call, 'PL1', list2b, rest, null, null);
   check('finishing next time completes the same new order', S.matches(S.idsOf(await S.readItems(yt2.call, 'PL1')), target2));
+
+  // 3.19: a dropped connection or a busy YouTube is tried again, even when the move was made but the reply was lost
+  const yt5 = fakeYT(60, { flaky: { 5: 'lost', 6: 'lost', 20: 'late', 33: 'busy', 40: 'late', 41: 'lost' } });
+  const list5 = await S.readItems(yt5.call, 'PL1');
+  const target5 = S.order(S.idsOf(list5), rand), moves5 = S.plan(S.idsOf(list5), target5);
+  const waited = [];
+  const call5 = S.retrying(yt5.call, [2, 5, 15], async ms => { waited.push(ms); }, null);
+  const r5 = await S.run(call5, 'PL1', list5, moves5, null, null);
+  check('failed moves are tried again and the run still ends in the planned order',
+    r5.done === moves5.length && S.matches(S.idsOf(await S.readItems(yt5.call, 'PL1')), target5) && waited.join() === '2,5,2,2,2,5', waited.join());
+  const yt6 = fakeYT(30, { flaky: { 3: 'lost', 4: 'lost', 5: 'lost', 6: 'lost' } });
+  const list6 = await S.readItems(yt6.call, 'PL1');
+  err = null;
+  try { await S.run(S.retrying(yt6.call, [2, 5, 15], async () => {}, null), 'PL1', list6, S.plan(S.idsOf(list6), S.order(S.idsOf(list6), rand)), null, null); } catch (e) { err = e; }
+  check('it gives up after the last wait and says how many moves were made', err && err.status === 0 && err.done === 2);
+  const yt7 = fakeYT(30, { quotaAfter: 3 });
+  const list7 = await S.readItems(yt7.call, 'PL1');
+  let retried = 0;
+  err = null;
+  try { await S.run(S.retrying(yt7.call, [2, 5], async () => {}, () => retried++), 'PL1', list7, S.plan(S.idsOf(list7), S.order(S.idsOf(list7), rand)), null, null); } catch (e) { err = e; }
+  check('a used-up quota is not tried again', err && err.reason === 'quotaExceeded' && retried === 0 && yt7.calls === 1 + 4);
+  const cr = (status, reason, message) => S.canRetry(Object.assign(new Error(message || 'x'), { status, reason }));
+  check('which failures are tried again', cr(0, 'network') && cr(500, 'backendError') && cr(503, '') && cr(409, 'SERVICE_UNAVAILABLE') && cr(429, 'rateLimitExceeded') &&
+    cr(403, 'userRateLimitExceeded') && !cr(403, 'quotaExceeded') && !cr(403, 'dailyLimitExceeded') && !cr(401, 'authError') && !cr(403, 'forbidden') &&
+    !cr(400, 'badRequest') && !cr(404, 'playlistItemNotFound'));
 
   // Stop between moves
   const yt3 = fakeYT(20);

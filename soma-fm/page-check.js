@@ -63,7 +63,7 @@ async function openPage(browser, { width, height = 1000, scheme = 'light', store
 }
 // Fake YouTube Data API for the Shuffle panel: a playlist owned by the signed-in channel
 function fakeApi(n) {
-  const api = { order: [], puts: 0 };
+  const api = { order: [], puts: 0, tries: 0, flaky: {} };
   for (let i = 0; i < n; i++) api.order.push('pi' + i);
   api.start = api.order.slice();
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,PUT,OPTIONS' };
@@ -81,6 +81,10 @@ function fakeApi(n) {
     }
     if (res === 'playlistItems' && req.method() === 'PUT') {
       const b = JSON.parse(req.postData());
+      // flaky: PUT tries that fail, as a dropped connection or a busy YouTube
+      const f = api.flaky[++api.tries];
+      if (f === 'abort') return route.abort('connectionreset');
+      if (f) return json(route, { error: { code: f, message: 'Backend Error', errors: [{ reason: 'backendError' }] } }, f);
       api.puts++;
       api.order.splice(api.order.indexOf(b.id), 1);
       api.order.splice(b.snippet.position, 0, b.id);
@@ -163,9 +167,13 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check('600px: Shuffle panel has no sideways scrolling', await inShadow(page, r => { const d = r.querySelector('#shufbox'); return d.scrollWidth <= d.clientWidth + 1; }));
     await shufClick(page, 'Shuffle the playlist');
     check('Shuffle asks for a second tap before changing anything', /Tap again/.test(await shufText(page)) && api.puts === 0);
+    api.flaky = { 4: 'abort', 9: 503 };
     await shufClick(page, 'Tap again to start');
+    await page.waitForTimeout(400);
+    const retryMsg = await shufText(page);
     const done = await waitShuf(page, /Done\./);
     check('Shuffle moves the songs, checks the order, and reports done', done && api.puts === moves && api.order.join() !== api.start.join(), `puts ${api.puts}, moves ${moves}`);
+    check('A dropped connection and a busy YouTube are tried again (3.19)', api.tries === moves + 2 && /didn't answer.*Trying again in 2 s/.test(retryMsg), `tries ${api.tries} ${retryMsg.slice(0, 160)}`);
     check('A favorite is one of the first three songs, and Shuffle says so', /^(pi7|pi21)$/.test(api.order.slice(0, 3).filter(x => x === 'pi7' || x === 'pi21')[0] || '') && /A favorite is one of the first three songs/.test(t), api.order.slice(0, 3).join());
     check('Shuffle remembers the earlier order and clears the job', await page.evaluate(() => !window.__store['shuffle:job:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'] && window.__store['shuffle:last:PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'].before.length === 30));
     const qt = await shufText(page), run = await page.evaluate(() => window.__store['shuffle:lastRun']);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.18.5
+// @version      3.19.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1243,6 +1243,28 @@ const Shuffle = (() => {
     return { done: moves.length, stopped: false };
   }
 
+  // A dropped connection or YouTube having a moment (5xx, 409 "service unavailable", 429 "too many requests") is worth
+  // another try; quota, sign-in and refusals are not. A move names its position outright, so sending it again after
+  // a lost answer (the move was made, but the reply never arrived) puts the song in the same place.
+  function canRetry(e) {
+    if (!e || /quota|dailyLimit/i.test(e.reason || '') || /quota/i.test(e.message || '')) return false;
+    const s = e.status;
+    return s === 0 || s === undefined || s === 409 || s === 429 || s >= 500 || /rateLimit|backendError/i.test(e.reason || '');
+  }
+  // call, wrapped: a failure worth another try is tried again after each wait. onRetry(error, wait) before each wait.
+  function retrying(call, waits, sleep, onRetry) {
+    return async (...args) => {
+      for (let i = 0; ; i++) {
+        try { return await call(...args); }
+        catch (e) {
+          if (i >= waits.length || !canRetry(e)) throw e;
+          if (onRetry) onRetry(e, waits[i]);
+          await sleep(waits[i]);
+        }
+      }
+    };
+  }
+
   // Same order? (after reading the playlist back)
   function matches(list, target) {
     if (list.length !== target.length) return false;
@@ -1253,7 +1275,7 @@ const Shuffle = (() => {
   // The quota day runs midnight to midnight Pacific time
   const quotaDay = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });
 
-  return { order, describe, nameWords, maxRun, spreadGroups, groupCost, spread, arrange, longestRun, plan, applyMove, units, restoreOrder, readItems, idsOf, readUnits, checkOwner, run, matches, sameSongs, quotaDay,
+  return { order, describe, nameWords, maxRun, spreadGroups, groupCost, spread, arrange, longestRun, plan, applyMove, units, restoreOrder, readItems, idsOf, readUnits, checkOwner, run, canRetry, retrying, matches, sameSongs, quotaDay,
     UNITS_PER_MOVE, DAILY_UNITS };
 })();
 
@@ -2766,6 +2788,12 @@ function main() {
   const validToken = () => { const t = GM_getValue('signin:token', null); return t && t.token && t.exp > Date.now() ? t.token : null; };
   const usedToday = () => { const u = GM_getValue(USEDKEY, null); return u && u.day === Shuffle.quotaDay(Date.now()) ? u.units : 0; };
   const addUsed = n => { runUnits += n; GM_setValue(USEDKEY, { day: Shuffle.quotaDay(Date.now()), units: usedToday() + n }); };
+  // Waits (ms) before trying a YouTube request again (3.19): Dan had "Couldn't talk to YouTube" near the end of a shuffle
+  const API_WAITS = [2000, 5000, 15000, 30000], READBACK_WAITS = [5000, 15000];
+  const ytTry = Shuffle.retrying((...a) => ytCall(...a), API_WAITS, ms => sleep(ms), (e, wait) => {
+    const t = $('#shprog');
+    if (t) t.textContent = `YouTube didn't answer (${e.message}). Trying again in ${Math.round(wait / 1000)} s…`;
+  });
   async function ytCall(method, resource, params, body) {
     const q = new URLSearchParams();
     for (const k in params) if (params[k] !== '' && params[k] != null) q.set(k, String(params[k]));
@@ -2868,8 +2896,8 @@ function main() {
     if (!shufToken) return shufShow('signin');
     shufShow('loading', 'Reading your playlist…');
     try {
-      const who = await Shuffle.checkOwner(ytCall, PLAYLIST_ID);
-      const list = await Shuffle.readItems(ytCall, PLAYLIST_ID);
+      const who = await Shuffle.checkOwner(ytTry, PLAYLIST_ID);
+      const list = await Shuffle.readItems(ytTry, PLAYLIST_ID);
       sh = { channel: who.channel, items: list, current: Shuffle.idsOf(list), titles: new Map(), note: '' };
       for (const it of list) sh.titles.set(it.id, it.title);
       // No original order saved on this device yet: save it now, before anything can change. If this device
@@ -2939,7 +2967,7 @@ function main() {
     shufRunning = true; shufStop = false; runUnits = 0;
     shufShow('running');
     let res = null, err = null;
-    try { res = await Shuffle.run(ytCall, PLAYLIST_ID, sh.items, sh.moves, progress, () => shufStop); }
+    try { res = await Shuffle.run(ytTry, PLAYLIST_ID, sh.items, sh.moves, progress, () => shufStop); }
     catch (e) { err = e; }
     shufRunning = false;
     const n = sh.moves.length;
@@ -2950,7 +2978,12 @@ function main() {
     if (res.stopped) return shufShow('error', `Stopped after ${fmt(res.done)} of ${fmt(n)} moves.` + after);
     shufShow('loading', 'Checking the new order…');
     try {
-      const list = await Shuffle.readItems(ytCall, PLAYLIST_ID);
+      // Right after the last move, a read can still show an older order for a moment, so look twice more before saying so
+      let list = await Shuffle.readItems(ytTry, PLAYLIST_ID);
+      for (let i = 0; i < READBACK_WAITS.length && !Shuffle.matches(Shuffle.idsOf(list), sh.target); i++) {
+        await sleep(READBACK_WAITS[i]);
+        list = await Shuffle.readItems(ytTry, PLAYLIST_ID);
+      }
       if (!Shuffle.matches(Shuffle.idsOf(list), sh.target)) return saveRun(true), shufShow('error', 'All the moves were made, but the playlist read back in a different order than planned. Nothing was lost. Open Shuffle again and it will plan the remaining moves.');
       saveRun(true);
       finished(job);
@@ -2960,7 +2993,7 @@ function main() {
   function progress(k, n) {
     const bar = $('#shbar'), t = $('#shprog');
     if (bar) { bar.firstChild.style.width = (k / n * 100) + '%'; bar.setAttribute('aria-valuenow', String(k)); }
-    if (t) t.textContent = `Moved ${fmt(k)} of ${fmt(n)}`;
+    if (t) t.textContent = `Moved ${fmt(k)} of ${fmt(n)}` + (shufStop ? ' — stopping…' : '');
   }
 
   function shufShow(view, msg) {
