@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.23.1
+// @version      3.24.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1692,6 +1692,7 @@ function main() {
     .tile.share{border-left-width:4px}
     .tile.share.have{border-left-color:var(--have-fg)} .tile.share.other{border-left-color:var(--other-fg)}
     .tile.share.none{border-left-color:var(--none-fg)} .tile.share.disliked{border-left-color:var(--dislike)}
+    .tile.back{border-left:4px solid var(--accent)}
     .sline{font-size:.9em}
     .sline b{font-variant-numeric:tabular-nums}
     .slist{margin:0;padding:0;list-style:none;display:grid;gap:.35rem;counter-reset:n}
@@ -2963,6 +2964,13 @@ function main() {
         if (k === 'missing' && !sh.missing.songs) continue;   // and once every song played is in the playlist or disliked
         const t = el('div', 'tile share ' + cls);
         t.append(el('div', 'v', pc(sh[k].playPct)), el('div', 'k', `of plays ${label}`), el('div', 'k2', `${pc(sh[k].songPct)} of songs (${fmt(sh[k].songs)})`));
+        g.append(t);
+      }
+      // The spot "not in your playlist" leaves goes to how long until a song comes back (Dan asked; see SomaFM rotation)
+      if (!sh.missing.songs && st.rateRepeatSecs) {
+        const t = el('div', 'tile back');
+        const secs = st.rateRepeatSecs;   // in hours with a decimal, so it fits on one line like the percentages
+        t.append(el('div', 'v', secs < 3600 ? Stats.formatSpan(secs) : (secs / 3600).toFixed(1) + ' h'), el('div', 'k', 'until a song comes back'), el('div', 'k2', 'of listening, on average'));
         g.append(t);
       }
       share.append(g, el('div', 'snote', '"Of plays" counts every play, so often-played songs weigh more; "of songs" counts each different song once.' + (sh.missing.songs ? ' "Not in your playlist" includes songs gone from it.' : '')));

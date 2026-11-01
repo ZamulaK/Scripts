@@ -49,13 +49,14 @@ const STUBS = `
 const results = [];
 const check = (label, ok, detail) => { results.push({ label, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${!ok && detail ? '  — ' + detail : ''}`); };
 
-async function openPage(browser, { width, height = 1000, scheme = 'light', store = {}, hash = '', api = null, recorder = null }) {
+async function openPage(browser, { width, height = 1000, scheme = 'light', store = {}, hash = '', api = null, recorder = null, noFeed = false }) {
   const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, timezoneId: 'America/New_York', acceptDownloads: true });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   if (api) await page.route('https://www.googleapis.com/**', api.handle);
   if (recorder) await page.route('https://rec.test.workers.dev/**', recorder);
+  if (noFeed) await page.route('**/songs/christmas.json', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"songs":[]}' }));   // only the seeded plays
   await page.goto(URL + hash, { waitUntil: 'load' });
   await page.evaluate(s => { window.__store = s; }, Object.assign({ playlist: { schema: 3, at: Date.now(), items, hidden: 0 }, 'history:christmas': seedHistory(), live: false }, store));
   await page.addScriptTag({ content: STUBS + script });
@@ -120,6 +121,28 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check(`${width}px ${scheme}: Stats beside the title, buttons ${expected}, one row`, info.statsBesideTitle && info.mode === expected && info.buttonsOneRow, JSON.stringify(info));
     check(`${width}px ${scheme}: cards render with no "undefined"/"NaN"`, info.cards > 0 && !info.undefinedText);
     check(`${width}px ${scheme}: no script errors`, errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
+  // Every song played is in the playlist or disliked: "not in your playlist" gives its spot to how long until a song comes back
+  {
+    const { markKey } = require('./soma-xmas-checker.user.js');
+    const dislikes = {};
+    for (const p of seedHistory()) dislikes[markKey(p[1], p[2])] = Date.now();
+    const { ctx, page, errors } = await openPage(browser, { width: 600, scheme: 'light', store: { dislikes }, noFeed: true });
+    await inShadow(page, r => r.querySelector('#stats').click());
+    await page.waitForTimeout(500);
+    const row = await inShadow(page, r => {
+      const g = r.querySelector('.tile.share').parentNode, back = g.querySelector('.tile.back');
+      const headline = [...r.querySelectorAll('.sline')].map(x => x.textContent).find(x => /comes back about every/.test(x)) || '';
+      const tops = [...g.children].map(x => Math.round(x.getBoundingClientRect().top));
+      const m = /every (?:(\d+) h)? ?(?:(\d+) min)?/.exec(headline) || [];
+      const v = back && back.querySelector('.v');
+      return { hours: (Number(m[1]) || 0) + (Number(m[2]) || 0) / 60, valueOneLine: !!v && v.getBoundingClientRect().height < parseFloat(getComputedStyle(v).lineHeight) * 1.5, tiles: [...g.children].map(x => x.className).join(), back: back ? back.querySelector('.v').textContent : null, headline, oneRow: new Set(tops).size === 1 };
+    });
+    check('All songs in the playlist or disliked: the "comes back" card takes the "not in your playlist" spot, in hours matching the rotation line, on one line, in one row at 600px',
+      !/none/.test(row.tiles) && /^\d+\.\d h$/.test(row.back) && Math.abs(parseFloat(row.back) - row.hours) < 0.06 && row.oneRow && row.valueOneLine, JSON.stringify(row));
+    check('"Comes back" card: no script errors', errors.length === 0, errors.join(' | '));
     await ctx.close();
   }
 
@@ -415,12 +438,13 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const stats = await inShadow(page, r => {
     const d = r.querySelector('#statsbox');
     const shares = [...r.querySelectorAll('.tile.share .v')].map(x => parseInt(x.textContent));
-    return { open: d.open, overflow: d.scrollWidth > d.clientWidth + 1, sections: r.querySelectorAll('.ssec').length, shareSum: shares.reduce((a, b) => a + b, 0), shareCount: shares.length, otherTile: !!r.querySelector('.tile.share.other'), otherSongs: !!r.querySelector('#statsbox .sline .chip.other'), noneTile: !!r.querySelector('.tile.share.none'), noneSongs: !!r.querySelector('#statsbox .sline .chip.none, #statsbox .sline .chip.gone'),
+    return { open: d.open, overflow: d.scrollWidth > d.clientWidth + 1, sections: r.querySelectorAll('.ssec').length, shareSum: shares.reduce((a, b) => a + b, 0), shareCount: shares.length, otherTile: !!r.querySelector('.tile.share.other'), otherSongs: !!r.querySelector('#statsbox .sline .chip.other'), noneTile: !!r.querySelector('.tile.share.none'), noneSongs: !!r.querySelector('#statsbox .sline .chip.none, #statsbox .sline .chip.gone'), backTile: !!r.querySelector('.tile.back'),
       headline: [...r.querySelectorAll('.sline')].map(x => x.textContent).find(x => /comes back about every/.test(x)) || '' };
   });
   check('Stats opens without overflow', stats.open && !stats.overflow && stats.sections >= 6, JSON.stringify(stats));
   check('Stats shares add up to about 100%', stats.shareCount === 2 + (stats.otherSongs ? 1 : 0) + (stats.noneSongs ? 1 : 0) && Math.abs(stats.shareSum - 100) <= 2, String(stats.shareSum));
   check('The "not in your playlist" share shows only while some song played isn\'t in it', stats.noneTile === stats.noneSongs, JSON.stringify(stats));
+  check('With it showing, there is no "comes back" card in that row', stats.noneTile && !stats.backTile, JSON.stringify(stats));
   check('The "another version" share shows only while some song has another version', stats.otherTile === stats.otherSongs, JSON.stringify(stats));
   check('Stats shows the replay headline', /\d/.test(stats.headline), stats.headline);
   const statLens = await inShadow(page, r => r.querySelectorAll('#statsbox .slist .nm small .len').length);

@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.23.1**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.24.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -240,7 +240,7 @@ all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 117 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 120 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`). The page check fakes the recorder with `page.route`.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
@@ -298,6 +298,7 @@ all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account
 | 3.22.0 | Cloud recorder, part 2: devices send their plays and sync marks, dislikes, favorites, categories, notes, remembered songs and original order through the recorder (`Sync`, `/state` with version check, `removed` for cleared marks and dislikes). Every 2 minutes and 3 s after a change. Live database migrated (`migrate-3.22.sql`). Spacing fixed in the Cloud recorder section. |
 | 3.23.0 | Daylight saving fix: a feed dated an hour off is moved back (`History.feedShift`, device and recorder), and what the Nov 1 glitch saved is repaired (`History.repair`). Replays across a gap count in the averages when in line with the song's others; one measured average instead of two. Play logs read down each column. |
 | 3.23.1 | The "not in your playlist" share tile is hidden while no song played is missing (Dan asked; it had been stuck at 0%), like "another version". |
+| 3.24.0 | In its place, a card with how long until a song comes back: the rotation headline in decimal hours (14.7 h) so it fits on one line at 600 px. Dan finds it one of the most interesting numbers. Page check serves an empty feed (`noFeed`) so only the seeded plays count. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |
