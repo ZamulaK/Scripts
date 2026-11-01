@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.25.2**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.25.3**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -323,6 +323,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 | 3.25.0 | Christmas Lounge site (§8c): the same file runs as a web page on Cloudflare in site mode, behind Cloudflare Access, with the YouTube key and Client ID built in. Playlist read with YouTube's API there. |
 | 3.25.1 | Keep screen on (Awake) removed: the recorder records around the clock, so no device has to stay awake (Dan asked). |
 | 3.25.2 | A "not" mark made before the exactly matching video joined the playlist no longer hides it (`applyMark` `firstSeen`, from the remembered songs). A safeguard found while chasing two Billy Paul Williams songs on the site (they turned out to be the next item). |
+| 3.25.3 | 3.25.2 undone: it overrode a deliberate "not" mark and dislike. Lou Rawls's "[Away Team Reamix]" came back green on the plain version Dan added later, counting 152 songs in a 151-song playlist. A mark always stands again. "Reamix" (SomaFM's spelling) now counts as a remix, so that song is amber on its own. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

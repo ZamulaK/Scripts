@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.25.2
+// @version      3.25.3
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -42,7 +42,7 @@ const Matcher = (() => {
     'extended', 'radio', 'club', 'the', 'a', 'and', 'of', 'feat', 'ft', 'featuring', 'vs']);
   const ENSEMBLE = new Set(['trio', 'quartet', 'quintet', 'sextet', 'septet', 'octet', 'orchestra', 'band', 'group',
     'ensemble', 'combo', 'singers', 'chorus', 'choir', 'his', 'her', 'their']);
-  const MIX_RE = /\b(re)?mix\b|\bedit\b|\bdub\b|\brework/i;
+  const MIX_RE = /\b(re|rea)?mix\b|\bedit\b|\bdub\b|\brework/i;   // "Reamix": SomaFM's spelling for Lou Rawls's Away Team remix
 
   // Plain loops instead of Array.from / some / every / map / find: SomaFM's page loads
   // prototype.js, which replaces those built-ins (Array.from with a broken version).
@@ -208,14 +208,9 @@ const Matcher = (() => {
   // A "have" mark can be linked to a specific playlist video (stored.id). The link wins over the
   // automatic match; if that video has left the playlist, the card says so (linkMissing) instead of
   // pointing at something else.
-  // "Not this one" / "Not in playlist" was said about the playlist as it was then. When the song now matches exactly
-  // (green) a video that joined the playlist after that mark, the match wins: you've added it since. firstSeen(id)
-  // gives when a video was first seen in the playlist (ms), or 0 when unknown, which keeps the mark.
-  function applyMark(result, stored, disliked, items, firstSeen) {
-    let v = markValue(stored);
+  function applyMark(result, stored, disliked, items) {
+    const v = markValue(stored);
     let r = result;
-    const markAt = typeof stored === 'number' ? stored : (stored && stored.at) || 0;
-    if (v === 'not' && r.status === 'have' && r.item && firstSeen && markAt && firstSeen(r.item.id) > markAt) v = null;
     const linkId = v === 'have' && stored && typeof stored === 'object' && stored.id ? String(stored.id) : '';
     if (linkId) {
       let found = null;
@@ -2493,12 +2488,11 @@ function main() {
 
   // Each distinct song is matched once; cleared when the playlist or your marks change
   const statusCache = new Map();
-  const firstSeen = id => (archive[id] && archive[id].first) || 0;   // when a playlist video was first seen (Archive)
   function statusOf(row, marks, dislikes) {
     if (playlistError || !items.length) return { status: 'unknown' };
     let r = statusCache.get(row.key);
     if (!r) {
-      r = Matcher.applyMark(Matcher.check(row.artist, row.title, items), marks[row.key], !!dislikes[row.key], items, firstSeen);
+      r = Matcher.applyMark(Matcher.check(row.artist, row.title, items), marks[row.key], !!dislikes[row.key], items);
       r = Archive.applyGone(r, row.artist, row.title, goneItems());
       statusCache.set(row.key, r);
     }
