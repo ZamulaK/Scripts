@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.25.1
+// @version      3.25.2
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -208,9 +208,14 @@ const Matcher = (() => {
   // A "have" mark can be linked to a specific playlist video (stored.id). The link wins over the
   // automatic match; if that video has left the playlist, the card says so (linkMissing) instead of
   // pointing at something else.
-  function applyMark(result, stored, disliked, items) {
-    const v = markValue(stored);
+  // "Not this one" / "Not in playlist" was said about the playlist as it was then. When the song now matches exactly
+  // (green) a video that joined the playlist after that mark, the match wins: you've added it since. firstSeen(id)
+  // gives when a video was first seen in the playlist (ms), or 0 when unknown, which keeps the mark.
+  function applyMark(result, stored, disliked, items, firstSeen) {
+    let v = markValue(stored);
     let r = result;
+    const markAt = typeof stored === 'number' ? stored : (stored && stored.at) || 0;
+    if (v === 'not' && r.status === 'have' && r.item && firstSeen && markAt && firstSeen(r.item.id) > markAt) v = null;
     const linkId = v === 'have' && stored && typeof stored === 'object' && stored.id ? String(stored.id) : '';
     if (linkId) {
       let found = null;
@@ -2488,11 +2493,12 @@ function main() {
 
   // Each distinct song is matched once; cleared when the playlist or your marks change
   const statusCache = new Map();
+  const firstSeen = id => (archive[id] && archive[id].first) || 0;   // when a playlist video was first seen (Archive)
   function statusOf(row, marks, dislikes) {
     if (playlistError || !items.length) return { status: 'unknown' };
     let r = statusCache.get(row.key);
     if (!r) {
-      r = Matcher.applyMark(Matcher.check(row.artist, row.title, items), marks[row.key], !!dislikes[row.key], items);
+      r = Matcher.applyMark(Matcher.check(row.artist, row.title, items), marks[row.key], !!dislikes[row.key], items, firstSeen);
       r = Archive.applyGone(r, row.artist, row.title, goneItems());
       statusCache.set(row.key, r);
     }

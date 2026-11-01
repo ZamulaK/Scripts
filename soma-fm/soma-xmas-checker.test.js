@@ -106,6 +106,12 @@ function markChecks() {
     ['dislike ignored once in playlist', M.applyMark(have, undefined, true), r => r.status === 'have' && !r.disliked],
     ['dislike ignored on amber', M.applyMark(other, undefined, true), r => r.status === 'other' && !r.disliked],
     ['"I have it" beats a dislike', M.applyMark(none, { v: 'have' }, true), r => r.status === 'have' && !r.disliked],
+    // Nov 1: Billy Paul Williams songs marked "not" before Dan added their videos stayed "Not in playlist" on every device
+    ['"not" made before the matching video joined the playlist: the match wins', M.applyMark(have, { v: 'not', at: 1000 }, false, [], id => id === 'y' ? 2000 : 0), r => r.status === 'have' && !r.marked],
+    ['... and a dislike from then no longer applies', M.applyMark(have, { v: 'not', at: 1000 }, true, [], () => 2000), r => r.status === 'have' && !r.disliked],
+    ['"not" made after the video joined (a wrong automatic match): the mark stays', M.applyMark(have, { v: 'not', at: 3000 }, false, [], () => 2000), r => r.status === 'none' && r.marked === 'not'],
+    ['"not" when it isn\'t known when the video joined: the mark stays', M.applyMark(have, { v: 'not', at: 1000 }, false, [], () => 0), r => r.status === 'none' && r.marked === 'not'],
+    ['"not" on an amber match stays, however new the video', M.applyMark(other, { v: 'not', at: 1000 }, false, [], () => 2000), r => r.status === 'none' && r.marked === 'not'],
   ];
   console.log('--- hand-mark overrides ---');
   for (const [label, r, ok] of cases) { const pass = ok(r); if (!pass) fail++; console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}`); }
