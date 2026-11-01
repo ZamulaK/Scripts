@@ -250,7 +250,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 - **`/api`** (`worker/src/site.js`, a Pages Function in `site/functions/api/[[path]].js`): checks the Cloudflare Access token
   (`worker/src/access.js`, RS256 against the team's certs, audience and issuer) on every request and refuses without it, so preview
   addresses get nothing. `/feed` reads SomaFM now and records those plays (`record`). `/playlist` uses the YouTube Data API
-  (`worker/src/youtube.js`, `YT_KEY` secret): every page, lengths, and deleted, private or US-blocked videos counted as hidden.
+  (`worker/src/youtube.js`, `YT_KEY` secret): every page, lengths, and deleted, private or US-blocked videos counted as hidden. The API gives the uploader channel, which for auto-generated music videos can differ from the artist the playlist page shows ("Billy Paul - Topic" vs Billy Paul Williams, so two songs fell to amber on Nov 1); `creditedArtists` takes the artist from their description ("Title · Artist") instead.
   `/plays` and `/state` are the recorder's handlers on the same D1 database.
 - **Sign-in:** Cloudflare Access with Google as the login method, allowing only Dan's account.
 - **Secrets** (not in the repo): `YT_KEY`, `GOOGLE_CLIENT_ID`, `ACCESS_TEAM`, `ACCESS_AUD`.
@@ -321,7 +321,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 | 3.24.1 | "Another version" and "not in your playlist" cards show only with at least 2 songs or 1% of plays (Dan: one song is better seen through its filter chip). Page check `feed` option serves a made-up live list. |
 | 3.25.0 | Christmas Lounge site (§8c): the same file runs as a web page on Cloudflare in site mode, behind Cloudflare Access, with the YouTube key and Client ID built in. Playlist read with YouTube's API there. |
 | 3.25.1 | Keep screen on (Awake) removed: the recorder records around the clock, so no device has to stay awake (Dan asked). |
-| 3.25.2 | A "not" mark made before the exactly matching video joined the playlist no longer hides it (`applyMark` `firstSeen`, from the remembered songs). Two Billy Paul Williams songs stayed "Not in playlist" after Dan added their videos, even after a backup import. |
+| 3.25.2 | A "not" mark made before the exactly matching video joined the playlist no longer hides it (`applyMark` `firstSeen`, from the remembered songs). A safeguard found while chasing two Billy Paul Williams songs on the site (they turned out to be the next item). |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

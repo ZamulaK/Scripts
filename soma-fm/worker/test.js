@@ -5,7 +5,7 @@ import { fromFeed } from './src/core.js';
 import worker, { record, handle } from './src/index.js';
 import { siteApi } from './src/site.js';
 import { accessEmail, forgetAccessKeys } from './src/access.js';
-import { isoSeconds } from './src/youtube.js';
+import { isoSeconds, creditedArtists } from './src/youtube.js';
 
 let fail = 0;
 const check = (label, ok, detail) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${ok || detail === undefined ? '' : '  — ' + detail}`); if (!ok) fail++; };
@@ -150,10 +150,10 @@ const siteFetch = async (u) => {
   if (u.startsWith('https://somafm.com/songs/christmas.json')) return new Response(JSON.stringify({ songs: feed([[now + 30000, 'Site', 'Through The Site']]) }), { headers: { Date: new Date((now + 30050) * 1000).toUTCString() } });
   if (u.includes('/youtube/v3/playlistItems')) {
     const page = new URL(u).searchParams.get('pageToken') ? 2 : 1;
-    const it = (id, title, ch, privacy = 'public') => ({ snippet: { title, videoOwnerChannelTitle: ch }, contentDetails: { videoId: id }, status: { privacyStatus: privacy } });
+    const it = (id, title, ch, privacy = 'public', description = '') => ({ snippet: { title, videoOwnerChannelTitle: ch, description }, contentDetails: { videoId: id }, status: { privacyStatus: privacy } });
     return new Response(JSON.stringify(page === 1
       ? { pageInfo: { totalResults: 5 }, nextPageToken: 'p2', items: [it('v1', 'Song One', 'Artist - Topic'), it('v2', 'Private video', '', 'private'), it('v3', 'Blocked Song', 'B')] }
-      : { pageInfo: { totalResults: 5 }, items: [it('v4', 'Song Four', 'Four'), it('v5', 'Deleted video', '')] }));
+      : { pageInfo: { totalResults: 5 }, items: [it('v4', 'The Holly And The Ivy', 'Billy Paul - Topic', 'public', 'Provided to YouTube by Kriztal Entertainment Group, Inc.\n\nThe Holly And The Ivy · Billy Paul Williams\n\nThe Reindeer Room II'), it('v5', 'Deleted video', '')] }));
   }
   if (u.includes('/youtube/v3/videos')) return new Response(JSON.stringify({ items: [
     { id: 'v1', contentDetails: { duration: 'PT3M25S' } }, { id: 'v3', contentDetails: { duration: 'PT2M', regionRestriction: { blocked: ['US', 'DE'] } } },
@@ -181,13 +181,16 @@ check('site: only recorded stations', (await site('/feed?channel=groovesalad')).
 res = await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt');
 body = await res.json();
 check('site: the playlist through YouTube\'s API, every page; private, deleted and US-blocked videos counted as hidden',
-  res.status === 200 && body.items.map(i => i.id).join() === 'v1,v4' && body.items[0].ch === 'Artist - Topic' && body.items[0].secs === 205 && body.items[1].secs === 3601
+  res.status === 200 && body.items.map(i => i.id).join() === 'v1,v4' && body.items[0].ch === 'Artist - Topic' && body.items[1].ch === 'Billy Paul Williams' && body.items[0].secs === 205 && body.items[1].secs === 3601
   && body.hidden === 3 && body.complete && body.read === 5 && body.expected === 2 && outside.some(u => /key=yt-key/.test(u)), JSON.stringify(body));
 check('site: no YouTube key set up says so', (await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt', { env: Object.assign({}, siteEnv, { YT_KEY: '' }) })).status === 503);
 check('site: a bad playlist id is refused', (await site('/playlist?list=../x')).status === 400);
 res = await site('/state', { method: 'PUT', body: { base: 0, state: { marks: {} } } });
 check('site: the synced document and plays, without the recorder key', res.status === 200 && (await (await site('/state')).json()).version === 1
   && (await (await site('/plays?channel=christmas&since=0')).json()).plays.length === 1);
+// Nov 1: the API's "Billy Paul - Topic" kept two Billy Paul Williams songs from matching on the site
+check('credited artists from an auto-generated video\'s description, else nothing', creditedArtists('Provided to YouTube by X\n\nChristmas Eve · Members Only\n\nAlbum') === 'Members Only'
+  && creditedArtists('Provided to YouTube by X\n\nSong · A · B\n\nAlbum') === 'A, B' && creditedArtists('My own upload') === '' && creditedArtists('') === '');
 check('isoSeconds', isoSeconds('PT4M5S') === 245 && isoSeconds('PT1H') === 3600 && isoSeconds('P1DT1S') === 86401 && isoSeconds('') === 0);
 
 console.log(fail ? `${fail} failed` : 'all passed');

@@ -9,6 +9,16 @@ export function isoSeconds(d) {
   const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(String(d || ''));
   return m ? ((+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0)) : 0;
 }
+// The API names the uploader's channel, which for YouTube's auto-generated music videos isn't always the artist
+// ("Billy Paul - Topic" for Billy Paul Williams, "Release - Topic" for Members Only). Their description says who
+// it is: "Provided to YouTube by …", a blank line, then "Title · Artist · Other Artist". Those artists, or ''.
+export function creditedArtists(description) {
+  const d = String(description || '');
+  if (!/^Provided to YouTube by /.test(d)) return '';
+  const line = (d.split(/\n\s*\n/)[1] || '').trim().split('\n')[0];
+  const parts = line.split(' · ').map(s => s.trim()).filter(Boolean);
+  return parts.length > 1 ? parts.slice(1).join(', ') : '';
+}
 const blockedInUS = r => !!r && ((Array.isArray(r.blocked) && r.blocked.indexOf('US') >= 0) || (Array.isArray(r.allowed) && r.allowed.indexOf('US') < 0));
 
 export async function readPlaylist(playlistId, key, fetchFn = fetch) {
@@ -42,7 +52,7 @@ export async function readPlaylist(playlistId, key, fetchFn = fetch) {
     const id = e.contentDetails && e.contentDetails.videoId, sn = e.snippet || {}, v = info.get(id);
     const privacy = (e.status && e.status.privacyStatus) || '';
     if (!id || !v || privacy === 'private' || privacy === 'privacyStatusUnspecified' || /^(Deleted|Private) video$/.test(sn.title || '') || blockedInUS(v.contentDetails && v.contentDetails.regionRestriction)) { hidden++; continue; }
-    items.push({ id, title: String(sn.title || ''), ch: String(sn.videoOwnerChannelTitle || ''), secs: isoSeconds(v.contentDetails && v.contentDetails.duration) });
+    items.push({ id, title: String(sn.title || ''), ch: creditedArtists(sn.description) || String(sn.videoOwnerChannelTitle || ''), secs: isoSeconds(v.contentDetails && v.contentDetails.duration) });
   }
   if (!items.length) throw Object.assign(new Error('no playable songs found (is the playlist public or unlisted?)'), { status: 502 });
   return { items, hidden, complete: entries.length >= total, read: entries.length, expected: Math.max(0, total - hidden) };
