@@ -24,8 +24,13 @@
     if (!db) return;
     try { const os = db.transaction('kv', 'readwrite').objectStore('kv'); if (v === undefined) os.delete(k); else os.put(v, k); } catch (e) { /* kept in memory */ }
   };
+  // Tampermonkey's values are shared by every tab at once; here each tab holds its own copy, so a change is also told
+  // to the site's other open tabs and windows (the Google sign-in window hands its key back this way)
+  const others = typeof BroadcastChannel === 'function' ? new BroadcastChannel('xmaslounge-kv') : null;
+  const keep = (k, c) => { if (c === undefined) values.delete(k); else values.set(k, c); };
+  if (others) others.onmessage = e => keep(e.data.k, e.data.v);
   window.GM_getValue = (k, d) => values.has(k) ? copy(values.get(k)) : d;
-  window.GM_setValue = (k, v) => { const c = copy(v); if (c === undefined) values.delete(k); else values.set(k, c); store(k, c); };
+  window.GM_setValue = (k, v) => { const c = copy(v); keep(k, c); store(k, c); if (others) others.postMessage({ k, v: c }); };
   window.GM_listValues = () => Array.from(values.keys());
   window.GM_setClipboard = text => { navigator.clipboard.writeText(text).catch(() => {}); };
   window.GM_xmlhttpRequest = () => { throw new Error('not on the site'); };

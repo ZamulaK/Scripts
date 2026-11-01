@@ -243,7 +243,8 @@ SomaFM stops this channel in late Feb or early Mar, and the history page may go 
 updating Tampermonkey on each device, and every key built into the site rather than pasted per device.
 
 - **Same file, "site mode":** `site/public/site.js` stands in for Tampermonkey (`GM_getValue`/`GM_setValue` on IndexedDB, all read
-  into memory first because the script reads them synchronously), fetches `/api/config`, sets `window.XMAS_SITE = { api, clientId,
+  into memory first because the script reads them synchronously; each change is also sent to the site's other tabs over a
+  `BroadcastChannel`, since Tampermonkey shares values live and the Google sign-in window hands its key back that way), fetches `/api/config`, sets `window.XMAS_SITE = { api, clientId,
   station }`, then runs `soma-xmas-checker.user.js` (copied in by `site/deploy.js`). With `SITE` set the script reads SomaFM's list
   from `/api/feed`, the playlist from `/api/playlist`, treats the site as its recorder with no key (no setup code, no Turn off),
   and uses the built-in Client ID for Shuffle (no setup step). Under Tampermonkey `SITE` is null and nothing changes.
@@ -259,7 +260,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 127 real-page checks (the last 7 load the site's own files against a stand-in `/api`), including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 128 real-page checks (the last 8 load the site's own files against a stand-in `/api`), including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`; the site's `/api` with a made-up Access key and stand-ins for SomaFM and YouTube). The page check fakes the recorder with `page.route`.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).

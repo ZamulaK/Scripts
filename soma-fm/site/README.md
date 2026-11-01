@@ -7,7 +7,7 @@ HANDOFF.md §8c). Only Dan can open it: Cloudflare Access asks for his Google si
 | File | What it is |
 |---|---|
 | `public/index.html` | The page. |
-| `public/site.js` | Stands in for Tampermonkey (saved values in IndexedDB), gets the built-in settings, runs the script. |
+| `public/site.js` | Stands in for Tampermonkey (saved values in IndexedDB, shared live with the site's other tabs), gets the built-in settings, runs the script. |
 | `functions/api/[[path]].js` | Every `/api` request, handled by `../worker/src/site.js` (checks the Access sign-in on each one). |
 | `wrangler.toml` | Project name, the recorder's D1 database, the names of the secrets. |
 | `deploy.js` | `node site/deploy.js`: copies the userscript into `public/` and deploys. |

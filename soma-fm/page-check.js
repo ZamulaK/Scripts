@@ -732,7 +732,14 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
       const page = await ctx.newPage();
       const errors = [];
       page.on('pageerror', e => errors.push(e.message));
-      await page.route(SITE_URL + '**', route => {
+      // Google's sign-in, standing in: straight back to the site with an access key, as the real one does after you choose an account
+      await ctx.route('https://accounts.google.com/**', route => {
+        const q = new globalThis.URL(route.request().url()).searchParams;
+        const back = q.get('redirect_uri') + '#' + new URLSearchParams({ state: q.get('state'), access_token: 'site-token', expires_in: '3600', token_type: 'Bearer' });
+        route.fulfill({ status: 200, contentType: 'text/html', body: '<script>location.replace(' + JSON.stringify(back) + ')</script>' });
+      });
+      await ctx.route('https://www.googleapis.com/**', route => route.abort());   // the shuffle that follows stops at YouTube, keeping the key
+      await ctx.route(SITE_URL + '**', route => {
         const req = route.request(), u = new globalThis.URL(req.url()), p = u.pathname;
         const send = (body, type = 'application/json', status = 200) => route.fulfill({ status, contentType: type, body: typeof body === 'string' ? body : JSON.stringify(body) });
         if (p === '/') return send(file('site/public/index.html'), 'text/html');
@@ -775,6 +782,15 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const shuf = await inShadow(s.page, r => ({ setup: !!r.querySelector('#shclient'), buttons: [...r.querySelectorAll('#shufbody button')].map(b => b.textContent).join() }));
     check('Site: Shuffle has the Client ID built in: straight to Sign in with Google, nothing to paste or change',
       !shuf.setup && /Sign in with Google/.test(shuf.buttons) && !/Change Client ID/.test(shuf.buttons), JSON.stringify(shuf));
+    // Nov 1: the key came back to the Google window's own copy of the saved values, so this page waited forever
+    const popup = s.page.waitForEvent('popup', { timeout: 10000 }).catch(() => null);
+    await inShadow(s.page, r => { for (const b of r.querySelectorAll('#shufbody button')) if (/Sign in with Google/.test(b.textContent)) b.click(); });
+    const win = await popup;
+    if (win) await win.waitForEvent('close', { timeout: 10000 }).catch(() => {});
+    await s.page.waitForTimeout(1500);
+    const after = await s.page.evaluate(() => ({ token: (GM_getValue('signin:token', null) || {}).token || '', waiting: /Finish signing in/.test(document.getElementById('xm-host').shadowRoot.querySelector('#shufbody').textContent) }));
+    check('Site: signing in to Google in its own window carries on in the page that asked (the key reaches it)',
+      !!win && win.isClosed() && after.token === 'site-token' && !after.waiting, JSON.stringify({ popup: !!win, closed: win && win.isClosed(), after }));
     const saved = await s.page.evaluate(() => new Promise(res => { const r = indexedDB.open('xmaslounge'); r.onsuccess = () => { const q = r.result.transaction('kv').objectStore('kv').get('history:christmas'); q.onsuccess = () => res((q.result || []).length); q.onerror = () => res(-1); }; r.onerror = () => res(-1); }));
     check('Site: what the page saves is kept in this browser (IndexedDB)', saved >= hist.length, String(saved));
     check('Site: no script errors', s.errors.length === 0, s.errors.join(' | '));
