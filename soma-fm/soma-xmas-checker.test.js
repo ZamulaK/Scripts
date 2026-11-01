@@ -252,6 +252,28 @@ function historyChecks() {
   check('recorder breaks: numbers only, newest first', C.cleanBreaks([5, 'x', -1, 9, '7']).join() === '9,7,5');
   check('each check reaches an hour before the last one, the first one back to the start', C.sinceFor(0) === 0 && C.sinceFor(undefined) === 0 && C.sinceFor(1793500000) === 1793496400);
 
+  // 3.22: synced data, merged key by key; a cleared mark or dislike stays cleared unless set again later
+  const Y = M.Sync;
+  const devA = { marks: { k1: { v: 'have', at: 100 }, k2: { v: 'not', at: 100 } }, dislikes: { d1: 100 }, favorites: { v1: { on: true, at: 100 } }, categories: {}, notes: { n1: { t: 'A', at: 100 } },
+    archive: {}, original: null, removed: { marks: { k3: 300 }, dislikes: {} } };
+  const devB = { marks: { k1: { v: 'not', at: 200 }, k3: { v: 'have', at: 250 }, k4: { v: 'have', at: 400 } }, dislikes: { d1: 100, d2: 100 }, favorites: { v1: { on: false, at: 150 } },
+    categories: { v1: { c: 'jazz', at: 120 } }, notes: {}, archive: {}, original: { at: 5, playlistId: 'PL', songs: [{ id: 'i1', videoId: 'v1', title: 'T' }] }, removed: { marks: {}, dislikes: { d1: 200 } } };
+  const sm = Y.merge(devA, devB);
+  check('sync: the newer mark wins; a mark cleared after it was set is dropped; one set after its removal stays',
+    sm.marks.k1.v === 'not' && sm.marks.k2.v === 'not' && !('k3' in sm.marks) && sm.marks.k4 && sm.removed.marks.k3 === 300);
+  check('sync: a dislike cleared on one device is cleared on both', !('d1' in sm.dislikes) && sm.dislikes.d2 === 100 && sm.removed.dislikes.d1 === 200);
+  check('sync: favorites, categories and notes merge by the newer change; the earliest original order wins',
+    sm.favorites.v1.on === false && sm.categories.v1.c === 'jazz' && sm.notes.n1.t === 'A' && sm.original.at === 5);
+  check('sync: merging is the same either way round, and merging the result again changes nothing',
+    Y.same(sm, Y.merge(devB, devA)) && Y.same(Y.merge(sm, sm), sm) && Y.same(Y.merge(sm, devA), sm));
+  const reSet = Y.merge({ marks: { k3: { v: 'not', at: 500 } } }, sm);
+  check('sync: setting a cleared mark again (later) brings it back', reSet.marks.k3 && reSet.marks.k3.v === 'not');
+  check('sync: comparing ignores key order', Y.same({ a: 1, b: { c: [1, { d: 2, e: 3 }] } }, { b: { c: [1, { e: 3, d: 2 }] }, a: 1 }) && !Y.same({ a: 1 }, { a: 2 }));
+  const cl = Y.clean({ marks: { ok: { v: 'have', at: 1 }, bad: { v: 'maybe' } }, favorites: { v1: { on: 'yes' } }, removed: { marks: { x: 5, y: 'no' } }, junk: 1 });
+  check('sync: a document from the recorder is checked like a backup', Object.keys(cl.marks).join() === 'ok' && !Object.keys(cl.favorites).length && Object.keys(cl.removed.marks).join() === 'x' && !('junk' in cl));
+  const empty = Y.clean(null);
+  check('sync: no document yet is an empty one', !Object.keys(empty.marks).length && empty.original === null && Y.same(Y.merge(devA, empty).marks, devA.marks));
+
   // Breaks and measured song lengths
   const bfeed = feed([[nowS - 100, 'A', 'One'], [nowS - 300, 'SomaFM', 'Station ID'], [nowS - 500, 'B', 'Two'], [nowS + 86400 - 700, 'Break', 'Break']]);
   const br = H.breaksFromFeed(bfeed, nowS);

@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.21.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.22.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -54,7 +54,8 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
    │
    ├─ every 60 s (Live updates on): fetch /songs/christmas.json ──► History.fromFeed ──► History.merge into saved history
    │                                                                (gap marker if the feed no longer reaches back)
-   ├─ on open, then every 10 min (Live on): cloud recorder /plays ──► Cloud.cleanPlays ──► History.union (fills missed stretches)
+   ├─ on open, then every 2 min (Live on): cloud recorder — send new plays, /plays ──► History.union (fills missed stretches),
+   │                                         /state ──► Sync.merge both ways (also 3 s after any change here)
    ├─ every 15 min (or Refresh): Reader.read(YouTube) ──► playlist items ──► Archive.update (remember titles, notice gone songs)
    │
    └─ render(): for each play shown, statusOf(row) =
@@ -75,6 +76,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `Stats` | yes | Everything in the Stats panel: counts, shares, rotation estimates, top lists, per-song play logs. |
 | `Shuffle` | yes (I/O injected) | Shuffling the real playlist: Fisher-Yates order, the move plan, reading the playlist and making the moves through the YouTube Data API, owner check. `call(method, resource, params, body)` is injected so it can be tested with a fake API. See §8a. |
 | `Cloud` | yes | The cloud recorder's setup code (`address#key`) and checking what it sends (`cleanPlays`, `cleanBreaks`) before it's merged. |
+| `Sync` | yes | The synced document (3.22): `clean` (checked like a backup), `merge` (backup rules key by key, plus removals for marks and dislikes), `same` (key-order-free compare). |
 | `Reader` | yes (I/O injected) | Reading the YouTube playlist: page parsing, the >100-song side-panel fallback, complete/incomplete reads. `read(get, post)` takes fetch functions so it can be tested with a fake YouTube. |
 | `main()` | no | Everything on the page: UI, storage, timers, dialogs, event handlers. Runs only under Tampermonkey (the file exports the modules instead when loaded by Node). |
 
@@ -96,6 +98,8 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `backup:beforeImport` | `{ at, data }` saved before every import, for "Undo last import". |
 | `cloud` | The cloud recorder's `{ url, key }` (3.21), from the setup code pasted in Backup / Restore. Per device, not in backups, kept out of the repo. |
 | `cloud:through:<channel>`, `cloud:status:<channel>` | The recorder's "now" at the last check (the next asks from an hour before it), and how the last check went (`{ at, ok, added, filled, total, run, note }`), shown in Backup / Restore and as a header warning when something's wrong. |
+| `removed` | When this device cleared a mark or dislike: `{ marks: { key: ms }, dislikes: { key: ms } }` (3.22). Synced, so a cleared one isn't brought back from another device; one set again later wins. Not in backups. |
+| `cloud:pushed:<channel>`, `cloud:sync` | The newest play time sent to the recorder (0 sends the whole history: at setup and after a backup import), and how the last document sync went. |
 | `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
 | `signin:pending`, `signin:token`, `signin:reopen` | Sign-in in progress (random `state`, popup or same tab); the one-hour access key `{ token, at, exp }`; "reopen Shuffle after a same-tab sign-in". |
 | `shuffle:job:<playlistId>` | A shuffle or put-back in progress: `{ target, before, kind: 'shuffle' \| 'undo', at }`. Saved before the first move; cleared once the read-back confirms the order. |
@@ -211,9 +215,8 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 
 ## 8b. Cloud recorder (3.21)
 
-Dan wanted history recorded unattended (the feed only covers about the last hour, so a sleeping tablet leaves gaps) and,
-later, all his data kept centrally (part 2, not built yet: marks, dislikes, favorites, categories, notes, original order,
-synced with the Backup merge rules). He has a personal Cloudflare account; everything fits the free plan.
+Dan wanted history recorded unattended (the feed only covers about the last hour, so a sleeping tablet leaves gaps) and
+all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account; everything fits the free plan.
 
 - **Recorder** (`worker/`, see its README): Cron Trigger every 10 minutes reads `/songs/christmas.json` and stores new
   plays and breaks in D1 using `History.fromFeed` / `History.merge` from this file, so dates and gap flags follow the same rules.
@@ -221,13 +224,20 @@ synced with the Backup merge rules). He has a personal Cloudflare account; every
 - **Userscript:** `pullCloud()` asks `/plays?since=` on open, every 10 minutes while Live is on, and on coming back to the
   tab; `History.union` adds every play either side has. "After a gap" survives only where both missed the stretch.
   Requests are plain `fetch` with CORS (the Worker allows https://somafm.com), so no `@connect` was needed.
+- **Part 2, sync (3.22):** each device sends the plays it recorded (`POST /plays`; `since` now means stored-or-changed, so
+  old plays sent late reach the other devices) and merges one document (`/state`) holding marks, dislikes, favorites,
+  categories, notes, the remembered playlist songs and the original order. Merge = the backup rules key by key (newer `at`
+  wins, removals kept as `on: false` / `c: ''` / `t: ''`), plus `removed` times for marks and dislikes, which are deleted when
+  cleared. Saves carry the version read; a 409 means merge with the newer one and try again (up to 4 times). The merge runs
+  on the device's data as it is after the network wait, so a tap made meanwhile isn't lost. Device clocks decide "newer".
+  With sync on, Replace / Undo of a backup can't remove what the document still has (the panel says so).
 - **Key:** a Worker secret (`wrangler secret put KEY`); devices store the setup code `https://…workers.dev#key`. A refused key
   or an unreachable recorder isn't saved at setup, and later shows as a header warning (refuse and report).
 
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 110 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 115 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`). The page check fakes the recorder with `page.route`.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
@@ -282,6 +292,7 @@ synced with the Backup merge rules). He has a personal Cloudflare account; every
 | 3.20.0 | ⭐ filter chip: only favorites (Dan asked for it), first on the category row, combines with category chips, remembered per device (`favOnly`). A menu that fits neither below nor above its button scrolls the page so it fits below (the category menu was cut off on a short screen). |
 | 3.20.1 | Each filter chip row fits on one line at 600 px: tighter chips below desktop width, "Not in list" / "In list" there, and `fitChips()` shrinks a row's text up to 15% rather than wrapping as counts grow. |
 | 3.21.0 | Cloud recorder, part 1: a Cloudflare Worker (`worker/`) records plays every 10 minutes; the userscript fills in missed stretches from it (`History.union`, `Cloud`), set up in Backup / Restore. Also fixed: the Undo section showed before any import (`.ssec` grid beat `hidden`). |
+| 3.22.0 | Cloud recorder, part 2: devices send their plays and sync marks, dislikes, favorites, categories, notes, remembered songs and original order through the recorder (`Sync`, `/state` with version check, `removed` for cleared marks and dislikes). Every 2 minutes and 3 s after a change. Live database migrated (`migrate-3.22.sql`). Spacing fixed in the Cloud recorder section. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

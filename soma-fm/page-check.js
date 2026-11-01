@@ -542,16 +542,26 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   {
     const hist = seedHistory(), g = hist[250], before = hist[251];   // seedHistory's first gap: 7 hours missed before hist[250]
     const filler = [[g[0], g[1], g[2], ''], [g[0] - 3600, 'Cloud Artist', 'Filled In One', 'Alb'], [g[0] - 7200, 'Cloud Artist', 'Filled In Two', 'Alb'], [before[0], before[1], before[2], '']];
-    const cors = { 'access-control-allow-origin': 'https://somafm.com', 'access-control-allow-headers': 'Authorization', 'access-control-allow-methods': 'GET, OPTIONS' };
-    const asked = [];
+    const cors = { 'access-control-allow-origin': 'https://somafm.com', 'access-control-allow-headers': 'Authorization, Content-Type', 'access-control-allow-methods': 'GET, POST, PUT, OPTIONS' };
+    const asked = [], posted = [];
+    // A stand-in recorder: plays, plays sent by the device, and the synced document (3.22) with its version check
+    const doc = { version: 0, state: null, puts: [] };
     const recorder = key => async route => {
-      const req = route.request();
+      const req = route.request(), u = new globalThis.URL(req.url());
+      const reply = (body, status = 200) => route.fulfill({ status, headers: Object.assign({ 'content-type': 'application/json' }, cors), body: JSON.stringify(body) });
       if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
-      asked.push(req.url());
-      if (req.headers().authorization !== 'Bearer ' + key) return route.fulfill({ status: 401, headers: Object.assign({ 'content-type': 'application/json' }, cors), body: '{"error":"wrong or missing key"}' });
+      asked.push(req.method() + ' ' + u.pathname + u.search);
+      if (req.headers().authorization !== 'Bearer ' + key) return reply({ error: 'wrong or missing key' }, 401);
       const now = Math.floor(Date.now() / 1000);
-      return route.fulfill({ status: 200, headers: Object.assign({ 'content-type': 'application/json' }, cors), body: JSON.stringify({ channel: 'christmas', now, recording: true,
-        lastRun: { at: now - 120, ok: true, added: 3, note: '', lastOk: now - 120 }, plays: filler, breaks: [g[0] - 60] }) });
+      if (u.pathname === '/state' && req.method() === 'GET') return reply({ version: doc.version, state: doc.state });
+      if (u.pathname === '/state' && req.method() === 'PUT') {
+        const b = JSON.parse(req.postData());
+        if (b.base !== doc.version) return reply({ error: 'changed since', version: doc.version, state: doc.state }, 409);
+        doc.version++; doc.state = b.state; doc.puts.push(b.state);
+        return reply({ version: doc.version });
+      }
+      if (u.pathname === '/plays' && req.method() === 'POST') { const b = JSON.parse(req.postData()); posted.push(...b.plays); return reply({ received: b.plays.length, changed: 0 }); }
+      return reply({ channel: 'christmas', now, recording: true, lastRun: { at: now - 120, ok: true, added: 3, note: '', lastOk: now - 120 }, plays: filler, breaks: [g[0] - 60] });
     };
     const KEY = 'testkey-0123456789abcdef';
     let p = await openPage(browser, { width: 600, store: { 'history:christmas': hist, cloud: { url: 'https://rec.test.workers.dev', key: KEY } }, recorder: recorder(KEY) });
@@ -559,13 +569,35 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     let st = await p.page.evaluate(gAt => { const h = window.__store['history:christmas'];
       return { n: h.filter(x => /^Filled In/.test(x[2])).length, gapCleared: !h.find(x => x[0] === gAt)[4], status: window.__store['cloud:status:christmas'], through: window.__store['cloud:through:christmas'] }; }, g[0]);
     check('The cloud recorder fills the plays this device missed, and that stretch is no longer marked as missed',
-      st.n === 2 && st.gapCleared && st.status && st.status.ok && st.status.added === 2 && st.through > 0 && /since=0$/.test(asked[0]), JSON.stringify(st) + ' ' + asked[0]);
+      st.n === 2 && st.gapCleared && st.status && st.status.ok && st.status.added === 2 && st.through > 0 && asked.indexOf('GET /plays?channel=christmas&since=0') >= 0, JSON.stringify(st) + ' ' + asked.join());
+    check('First sync sends this device\'s whole play history, 500 at a time, and saves the synced document',
+      posted.length === hist.length + Math.max(0, posted.length - hist.length) && posted.length >= hist.length && asked.filter(a => a.startsWith('POST /plays')).length === Math.ceil(posted.length / 500)
+      && doc.version === 1 && doc.state && typeof doc.state.marks === 'object' && doc.state.removed && await p.page.evaluate(() => window.__store['cloud:pushed:christmas'] > 0), `posted ${posted.length} of ${hist.length}, version ${doc.version}`);
+    // A change here is sent a few seconds later
+    const starred = await inShadow(p.page, r => { for (const b of r.querySelectorAll('#cards > li.have button.fav')) if (b.getAttribute('aria-pressed') === 'false') { b.click(); return b.dataset.vid; } });
+    await p.page.waitForTimeout(3800);
+    check('A favorite set here reaches the synced document a few seconds later', doc.version === 2 && doc.state.favorites[starred] && doc.state.favorites[starred].on === true, JSON.stringify({ v: doc.version, starred }));
     await inShadow(p.page, r => r.querySelector('#backup').click());
     await p.page.waitForTimeout(200);
     const bt = await inShadow(p.page, r => r.querySelector('#cloudbody').textContent);
     check('Backup / Restore shows the cloud recorder working', /rec\.test\.workers\.dev/.test(bt) && /2 plays filled in/.test(bt) && /last read SomaFM's song list/.test(bt) && /Turn off on this device/.test(bt), bt);
     check('Backup / Restore hides Undo until something has been imported', await inShadow(p.page, r => r.querySelector('#bkundo').offsetParent === null));
     check('Cloud recorder: no script errors', p.errors.length === 0, p.errors.join(' | '));
+    await p.ctx.close();
+
+    // Another device: gets the favorite, a note and a category from the document; a mark cleared elsewhere is cleared here
+    const key0 = Object.keys(doc.state.favorites)[0];
+    doc.state = Object.assign({}, doc.state, { notes: { 'test|song': { t: 'From the other device', at: Date.now() } }, categories: { [key0]: { c: 'jazz', at: Date.now() } },
+      removed: { marks: { 'gone|mark': Date.now() }, dislikes: {} } });
+    doc.version++;
+    p = await openPage(browser, { width: 600, store: { 'history:christmas': hist, cloud: { url: 'https://rec.test.workers.dev', key: KEY }, 'cloud:pushed:christmas': hist[0][0],
+      marks: { 'gone|mark': { v: 'have', at: Date.now() - 86400000 }, 'kept|mark': { v: 'not', at: Date.now() } } }, recorder: recorder(KEY) });
+    await settle(p.page);
+    const other = await p.page.evaluate(k => ({ fav: (window.__store.favorites || {})[k], note: (window.__store.notes || {})['test|song'], cat: (window.__store.categories || {})[k], marks: Object.keys(window.__store.marks || {}).join() }), key0);
+    check('Another device gets favorites, notes and categories from the synced document, and a mark cleared elsewhere is cleared there',
+      other.fav && other.fav.on && other.note && other.note.t === 'From the other device' && other.cat && other.cat.c === 'jazz' && other.marks === 'kept|mark', JSON.stringify(other));
+    check('That device sends its own mark back up, and keeps the removal', doc.state.marks['kept|mark'] && !doc.state.marks['gone|mark'] && doc.state.removed.marks['gone|mark'] > 0, JSON.stringify(doc.state.marks));
+    check('Cloud sync: no script errors', p.errors.length === 0, p.errors.join(' | '));
     await p.ctx.close();
 
     // A refused key: the header says so

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.21.0
+// @version      3.22.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -703,7 +703,7 @@ const Backup = (() => {
       original: incoming.original ? incoming.original.at : 0 };
   }
 
-  return { build, validate, mergeHistory, mergeMarks, mergeDislikes, mergeFavorites, favCount, mergeCategories, catCount, mergeNotes, noteCount, mergeArchive, mergeOriginal, preview };
+  return { build, validate, markTime, mergeHistory, mergeMarks, mergeDislikes, mergeFavorites, favCount, mergeCategories, catCount, mergeNotes, noteCount, mergeArchive, mergeOriginal, preview };
 })();
 
 /* ---------- Stats panel numbers (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -1338,8 +1338,54 @@ const Cloud = (() => {
   return { parseSetup, cleanPlays, cleanBreaks, sinceFor };
 })();
 
+/* ---------- Synced data (pure; tested by soma-xmas-checker.test.js) ---------- */
+// 3.22: marks, dislikes, favorites, categories, notes, the remembered playlist songs and the original order, kept in one
+// document on the cloud recorder. Each device merges it with its own using the backup merge rules, so the newer change
+// wins key by key. Marks and dislikes are deleted when cleared, so each device also keeps when it cleared one
+// (removed: { marks: { key: ms }, dislikes: { key: ms } }); a mark or dislike set no later than its removal is dropped.
+const Sync = (() => {
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  const PARTS = ['marks', 'dislikes', 'favorites', 'categories', 'notes', 'archive', 'original', 'removed'];
+  function cleanRemoved(r) {
+    const out = { marks: {}, dislikes: {} };
+    for (const kind of ['marks', 'dislikes']) {
+      const m = isObj(r) && isObj(r[kind]) ? r[kind] : {};
+      for (const k of Object.keys(m)) if (typeof m[k] === 'number' && m[k] > 0) out[kind][k] = m[k];
+    }
+    return out;
+  }
+  // A document from the recorder, checked like a backup (anything malformed is left out); null gives an empty one
+  function clean(doc) {
+    const d = isObj(doc) ? doc : {};
+    const v = Backup.validate(Backup.build({ history: {}, marks: d.marks, dislikes: d.dislikes, favorites: d.favorites, categories: d.categories,
+      notes: d.notes, archive: d.archive, original: d.original })).data;
+    return { marks: v.marks, dislikes: v.dislikes, favorites: v.favorites, categories: v.categories, notes: v.notes, archive: v.archive, original: v.original, removed: cleanRemoved(d.removed) };
+  }
+  const later = (a, b) => { const out = Object.assign({}, a); for (const k of Object.keys(b || {})) out[k] = Math.max(out[k] || 0, b[k]); return out; };
+  function merge(a, b) {
+    const ra = cleanRemoved(a.removed), rb = cleanRemoved(b.removed);
+    const removed = { marks: later(ra.marks, rb.marks), dislikes: later(ra.dislikes, rb.dislikes) };
+    const marks = Backup.mergeMarks(a.marks || {}, b.marks || {});
+    for (const k of Object.keys(removed.marks)) if (k in marks && Backup.markTime(marks[k]) <= removed.marks[k]) delete marks[k];
+    const dislikes = Backup.mergeDislikes(a.dislikes || {}, b.dislikes || {});
+    for (const k of Object.keys(removed.dislikes)) if (k in dislikes && dislikes[k] <= removed.dislikes[k]) delete dislikes[k];
+    return { marks, dislikes, favorites: Backup.mergeFavorites(a.favorites || {}, b.favorites || {}), categories: Backup.mergeCategories(a.categories || {}, b.categories || {}),
+      notes: Backup.mergeNotes(a.notes || {}, b.notes || {}), archive: Backup.mergeArchive(a.archive || {}, b.archive || {}),
+      original: Backup.mergeOriginal(a.original || null, b.original || null), removed };
+  }
+  // The same JSON whatever order the keys are in
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + Matcher.mapOf(v, canon).join(',') + ']';
+    if (isObj(v)) { const ks = Object.keys(v).sort(), out = []; for (const k of ks) if (v[k] !== undefined) out.push(JSON.stringify(k) + ':' + canon(v[k])); return '{' + out.join(',') + '}'; }
+    return JSON.stringify(v === undefined ? null : v);
+  }
+  const same = (a, b) => canon(a) === canon(b);
+  const samePart = (a, b, part) => canon(a[part] === undefined ? null : a[part]) === canon(b[part] === undefined ? null : b[part]);
+  return { PARTS, clean, cleanRemoved, merge, canon, same, samePart };
+})();
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = Object.assign({ History, Archive, Reader, Stats, Backup, Shuffle, Cloud }, Matcher);
+  module.exports = Object.assign({ History, Archive, Reader, Stats, Backup, Shuffle, Cloud, Sync }, Matcher);
 } else if (!catchSignIn()) {
   main();
 }
@@ -1561,7 +1607,8 @@ function main() {
     .shead h2{margin:0;font-size:1.2em}
     #statsbody{padding:1rem;display:grid;gap:1.1rem}
     .ssec{display:grid;gap:.55rem}
-    .ssec[hidden]{display:none}   /* the grid above would otherwise show the Undo section before any import */
+    .ssec[hidden]{display:none}
+    #cloudbody{display:grid;gap:.55rem}   /* the grid above would otherwise show the Undo section before any import */
     .ssec h3{margin:0;font-size:.78em;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
     .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(7.25rem,1fr));gap:.5rem}
     .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.6rem .75rem}
@@ -1745,15 +1792,20 @@ function main() {
 
   function getMarks() { const m = GM_getValue('marks', {}); return m && typeof m === 'object' ? m : {}; }
   function setMark(key, v, id) {
-    const m = getMarks(); if (v) m[key] = id ? { v, at: Date.now(), id } : { v, at: Date.now() }; else delete m[key]; GM_setValue('marks', m);
+    const m = getMarks(); if (v) m[key] = id ? { v, at: Date.now(), id } : { v, at: Date.now() }; else { delete m[key]; noteRemoved('marks', key); } GM_setValue('marks', m);
     statusCache.delete(key);   // only this song can change, so only it is matched again
+    queueSync();
   }
+  // When a mark or dislike was cleared, so syncing doesn't bring it back from another device (3.22)
+  function getRemoved() { return Sync.cleanRemoved(GM_getValue('removed', null)); }
+  function noteRemoved(kind, key) { const r = getRemoved(); r[kind][key] = Date.now(); GM_setValue('removed', r); }
 
   // Songs you dislike, kept apart from the have/not marks so Undo restores the card exactly
   function getDislikes() { const d = GM_getValue('dislikes', {}); return d && typeof d === 'object' ? d : {}; }
   function setDislike(key, on) {
-    const d = getDislikes(); if (on) d[key] = Date.now(); else delete d[key]; GM_setValue('dislikes', d);
+    const d = getDislikes(); if (on) d[key] = Date.now(); else { delete d[key]; noteRemoved('dislikes', key); } GM_setValue('dislikes', d);
     statusCache.delete(key);
+    queueSync();
   }
 
   // Favorites are playlist videos (by video id), so every SomaFM song linked to one shares its star.
@@ -1764,7 +1816,7 @@ function main() {
     return favCache;
   }
   const isFav = (favs, id) => !!(id && favs[id] && favs[id].on);
-  function setFav(id, on) { const f = Object.assign({}, getFavs()); f[id] = { on, at: Date.now() }; favCache = f; GM_setValue('favorites', f); }
+  function setFav(id, on) { const f = Object.assign({}, getFavs()); f[id] = { on, at: Date.now() }; favCache = f; GM_setValue('favorites', f); queueSync(); }
   // The star button: ☆ to add, ⭐ to remove
   // Stars and categories change in place (every card or Stats row for that video), without redrawing the list,
   // so they respond at once. Nothing else on a card depends on them.
@@ -1799,7 +1851,7 @@ function main() {
     return catCache;
   }
   const catOf = (cats, id) => (id && cats[id] && catName(cats[id].c) ? cats[id].c : '');
-  function setCat(id, c) { const f = Object.assign({}, getCats()); f[id] = { c, at: Date.now() }; catCache = f; GM_setValue('categories', f); }
+  function setCat(id, c) { const f = Object.assign({}, getCats()); f[id] = { c, at: Date.now() }; catCache = f; GM_setValue('categories', f); queueSync(); }
   // Category and Per page buttons open a menu in the page's colors (3.18.2, 3.18.4); a system drop-down can't be themed,
   // and on a tablet it opens as a plain full-screen list. The button keeps the chosen value in data-value.
   function showCat(b, c) {
@@ -1894,7 +1946,7 @@ function main() {
     return noteCache;
   }
   const noteOf = (notes, key) => (notes[key] && typeof notes[key].t === 'string' ? notes[key].t : '');
-  function setNote(key, t) { const f = Object.assign({}, getNotes()); f[key] = { t, at: Date.now() }; noteCache = f; GM_setValue('notes', f); }
+  function setNote(key, t) { const f = Object.assign({}, getNotes()); f[key] = { t, at: Date.now() }; noteCache = f; GM_setValue('notes', f); queueSync(); }
   // The card being noted, and what's typed so far (kept through a redraw)
   let noteKey = null, noteDraft = '', noteShown = false;
   // ✏️ to add a note, 📝 once there is one; both in color, so it reads as a button either way
@@ -1991,7 +2043,7 @@ function main() {
   let archiveNote = '', goneCache = null, goneOpen = false;
   const goneItems = () => goneCache || (goneCache = Archive.goneList(archive));
   function dismissGone(id) {
-    archive = Archive.dismiss(archive, id, Date.now()); GM_setValue(AKEY, archive);
+    archive = Archive.dismiss(archive, id, Date.now()); GM_setValue(AKEY, archive); queueSync();
     goneCache = null; statusCache.clear(); render();
   }
 
@@ -2062,24 +2114,51 @@ function main() {
 
   /* ----- Data: plays from the cloud recorder (3.21; soma-fm/worker) ----- */
   // Set up per device with a setup code (address#key); not in backups. Asked at most every CLOUD_MINUTES.
-  const CLOUD_MINUTES = 10, CTKEY = 'cloud:through:' + channel, CSKEY = 'cloud:status:' + channel;
+  const CLOUD_MINUTES = 2, CTKEY = 'cloud:through:' + channel, CSKEY = 'cloud:status:' + channel, CPKEY = 'cloud:pushed:' + channel, SSKEY = 'cloud:sync';
   let cloudBusy = false, cloudAt = 0, cloudStatus = GM_getValue(CSKEY, null);
   const cloudConf = () => { const c = GM_getValue('cloud', null); return c && c.url && c.key ? c : null; };
-  // Returns true when the history changed
-  async function pullCloud(force) {
+  // A request to the recorder; errors read as "the recorder …"
+  async function cloudFetch(c, path, method, body) {
+    let r;
+    try {
+      r = await fetch(c.url + path, { method: method || 'GET', cache: 'no-store',
+        headers: body === undefined ? { Authorization: 'Bearer ' + c.key } : { Authorization: 'Bearer ' + c.key, 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch (e) { throw new Error("couldn't be reached"); }
+    if (r.status === 401) throw new Error('refused the key');
+    if (!r.ok && r.status !== 409) throw new Error('answered ' + r.status);
+    return { status: r.status, data: await r.json() };
+  }
+  // Everything the recorder keeps for this device: plays this device recorded go up, plays from the recorder and the
+  // other devices come down, and the synced document is merged. At most every CLOUD_MINUTES unless forced.
+  // Returns true when something here changed.
+  async function cloudSync(force) {
     const c = cloudConf();
     if (!c || cloudBusy || (!force && Date.now() - cloudAt < CLOUD_MINUTES * 60000)) return false;
     cloudBusy = true; cloudAt = Date.now();
     let changed = false;
     try {
-      let r;
-      try {
-        r = await fetch(`${c.url}/plays?channel=${encodeURIComponent(channel)}&since=${Cloud.sinceFor(GM_getValue(CTKEY, 0))}`,
-          { headers: { Authorization: 'Bearer ' + c.key }, cache: 'no-store' });
-      } catch (e) { throw new Error("couldn't be reached"); }
-      if (r.status === 401) throw new Error('refused the key');
-      if (!r.ok) throw new Error('answered ' + r.status);
-      const d = await r.json();
+      changed = await syncState(c);
+      await pushPlays(c);
+      changed = (await pullPlays(c)) || changed;
+    } finally { cloudBusy = false; }
+    if ($('#backupbox').open) cloudShow();
+    return changed;
+  }
+  // Plays this device recorded since the last ones sent (all of them the first time, or after a backup import), 500 at a time
+  async function pushPlays(c) {
+    const from = Number(GM_getValue(CPKEY, 0)) || 0;
+    const list = keep(history, p => p[0] > from - 7200);
+    if (!list.length) return;
+    try {
+      for (let i = 0; i < list.length; i += 500) await cloudFetch(c, `/plays?channel=${encodeURIComponent(channel)}`, 'POST', { plays: list.slice(i, i + 500) });
+      GM_setValue(CPKEY, list[0][0]);
+    } catch (e) { /* tried again next time; the pull reports a recorder that can't be reached */ }
+  }
+  async function pullPlays(c) {
+    let changed = false;
+    try {
+      const d = (await cloudFetch(c, `/plays?channel=${encodeURIComponent(channel)}&since=${Cloud.sinceFor(GM_getValue(CTKEY, 0))}`)).data;
       const total = (cloudStatus && cloudStatus.total) || 0;
       if (!d.recording) cloudStatus = { at: Date.now(), ok: true, off: true, total };
       else {
@@ -2092,16 +2171,70 @@ function main() {
       }
     } catch (e) {
       cloudStatus = Object.assign({}, cloudStatus, { at: Date.now(), ok: false, note: e.message || String(e) });
-    } finally { cloudBusy = false; }
+    }
     GM_setValue(CSKEY, cloudStatus);
-    if ($('#backupbox').open) cloudShow();
     return changed;
+  }
+
+  // The synced document (3.22): merged both ways; saved only from the version just read, else read again and merge again
+  let syncStatus = GM_getValue(SSKEY, null), syncTimer = null;
+  function localState() {
+    return { marks: getMarks(), dislikes: getDislikes(), favorites: getFavs(), categories: getCats(), notes: getNotes(),
+      archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null), removed: getRemoved() };
+  }
+  const STORE = { marks: 'marks', dislikes: 'dislikes', favorites: 'favorites', categories: 'categories', notes: 'notes', archive: AKEY, original: OKEY, removed: 'removed' };
+  // Saves the parts that differ; returns true when any did
+  function applyState(st) {
+    const cur = localState();
+    let any = false;
+    for (const part of Sync.PARTS) if (!Sync.samePart(cur, st, part)) { GM_setValue(STORE[part], st[part]); any = true; }
+    if (any) {
+      archive = GM_getValue(AKEY, {}); if (!archive || typeof archive !== 'object' || Array.isArray(archive)) archive = {};
+      goneCache = null; favCache = null; catCache = null; noteCache = null; statusCache.clear();
+    }
+    return any;
+  }
+  async function syncState(c) {
+    let changed = false;
+    try {
+      let got = (await cloudFetch(c, '/state')).data, sent = false;
+      for (let tries = 0; tries < 4; tries++) {
+        const theirs = Sync.clean(got.state);
+        // Merged with this device's data as it is now, after the wait, so a change made meanwhile isn't lost
+        const merged = Sync.merge(localState(), theirs);
+        changed = applyState(merged) || changed;
+        if (got.state && Sync.same(merged, theirs)) break;
+        const r = await cloudFetch(c, '/state', 'PUT', { base: got.version, state: merged });
+        if (r.status !== 409) { sent = true; got = { version: r.data.version }; break; }
+        got = r.data;   // another device saved first: merge with that and try again
+      }
+      syncStatus = { at: Date.now(), ok: true, version: got.version, sent };
+    } catch (e) {
+      syncStatus = Object.assign({}, syncStatus, { at: Date.now(), ok: false, note: e.message || String(e) });
+    }
+    GM_setValue(SSKEY, syncStatus);
+    return changed;
+  }
+  // After a change here: sync soon, once the taps have settled
+  function queueSync() {
+    if (!cloudConf()) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(async () => {
+      const c = cloudConf();
+      if (!c || cloudBusy) { if (c) queueSync(); return; }
+      cloudBusy = true;
+      let changed = false;
+      try { changed = await syncState(c); } finally { cloudBusy = false; }
+      if (changed) quietRender();
+      if ($('#backupbox').open) cloudShow();
+    }, 3000);
   }
   // A problem worth a line in the header; '' when all is well
   function cloudWarning() {
     const s = cloudStatus;
-    if (!cloudConf() || !s) return '';
-    if (!s.ok) return `The cloud recorder ${s.note}, so plays missed here aren't being filled in (see Backup / Restore).`;
+    if (!cloudConf() || !s) return '';   // (the sync status is set by the same checks)
+    if (!s.ok) return `The cloud recorder ${s.note}, so plays missed here aren't being filled in and changes aren't synced (see Backup / Restore).`;
+    if (syncStatus && !syncStatus.ok) return `Syncing with the cloud recorder failed (${syncStatus.note}); changes here are kept and sent next time.`;
     if (s.run && !s.run.ok) return `The cloud recorder couldn't read SomaFM's song list last time (${s.run.note}).`;
     if (s.run && s.run.lastOk && s.at / 1000 - s.run.lastOk > 45 * 60) return `The cloud recorder hasn't recorded anything since ${when(s.run.lastOk)}.`;
     return '';
@@ -2113,7 +2246,7 @@ function main() {
     const c = cloudConf(), s = cloudStatus;
     const row = (...x) => { const r = el('div', 'brow'); r.append(...x); b.append(r); };
     if (!c) {
-      b.append(el('div', 'snote', "A small program on your Cloudflare account reads SomaFM's song list around the clock, so plays from when no device had this page open are filled in here. Paste its setup code (the address and key on one line). It stays on this device."));
+      b.append(el('div', 'snote', "A small program on your Cloudflare account reads SomaFM's song list around the clock, so plays from when no device had this page open are filled in here. It also keeps your marks, dislikes, favorites, categories, notes and play history the same on every device that uses it. Paste its setup code (the address and key on one line). It stays on this device."));
       const inp = el('input', 'shinput'); inp.id = 'cloudcode'; inp.type = 'text'; inp.spellcheck = false; inp.autocomplete = 'off'; inp.placeholder = 'https://….workers.dev#…';
       b.append(inp);
       row(plain('Save', 'ctl primary', async () => {
@@ -2121,7 +2254,8 @@ function main() {
         if (!conf) return cloudShow("That doesn't look like a setup code. It starts with https:// and has the key after a #.", 'err');
         GM_setValue('cloud', conf); GM_setValue(CTKEY, 0); cloudStatus = null;
         cloudShow('Checking the recorder…');
-        const changed = await pullCloud(true);
+        GM_setValue(CPKEY, 0);   // send this device's whole history the first time
+        const changed = await cloudSync(true);
         if (!cloudStatus || !cloudStatus.ok) { const note = cloudStatus ? cloudStatus.note : ''; GM_setValue('cloud', null); cloudStatus = null; GM_setValue(CSKEY, null); return cloudShow(`Not saved: the recorder ${note}.`, 'err'); }
         if (changed) quietRender();
         cloudShow();
@@ -2132,15 +2266,18 @@ function main() {
       else if (s && s.off) b.append(el('div', 'bmsg', "The recorder isn't set to record this station."));
       else if (s) {
         b.append(el('div', 'sline', `Last check ${when(s.at / 1000)}: ${s.added ? fmt(s.added) + ' play' + (s.added === 1 ? '' : 's') + ' filled in' : 'nothing new to fill in'}. ${fmt(s.total || 0)} filled in on this device so far.`));
+        const y = syncStatus;
+        if (y) b.append(el('div', y.ok ? 'sline' : 'bmsg err', y.ok ? `Marks, dislikes, favorites, categories and notes synced ${when(y.at / 1000)}.` : `Syncing failed ${when(y.at / 1000)}: the recorder ${y.note}. Changes here are kept and sent next time.`));
         if (s.run) b.append(el('div', 'snote', s.run.ok ? `The recorder last read SomaFM's song list at ${when(s.run.at)}.` : `The recorder couldn't read SomaFM's song list at ${when(s.run.at)} (${s.run.note})${s.run.lastOk ? '; last good read ' + when(s.run.lastOk) : ''}.`));
       }
+      b.append(el('div', 'snote', "With syncing on, Replace and Undo under \"Bring in a backup\" can't take away what the other devices still have: it comes back at the next sync."));
       const warn = cloudWarning();
       if (warn && s && s.ok) b.append(el('div', 'bmsg err', warn));
-      row(plain('Check now', 'ctl', async () => { cloudShow('Checking…'); if (await pullCloud(true)) quietRender(); cloudShow(); }),
+      row(plain('Sync now', 'ctl', async () => { cloudShow('Syncing…'); if (await cloudSync(true)) quietRender(); cloudShow(); }),
         plain(cloudOff ? 'Tap again to turn off' : 'Turn off on this device', 'ctl', () => {
           if (!cloudOff) { cloudOff = true; return cloudShow(); }
-          cloudOff = false; GM_setValue('cloud', null); GM_setValue(CSKEY, null); cloudStatus = null;
-          cloudShow('Turned off on this device. The plays already filled in stay.'); quietRender();
+          cloudOff = false; GM_setValue('cloud', null); GM_setValue(CSKEY, null); GM_setValue(SSKEY, null); cloudStatus = null; syncStatus = null;
+          cloudShow('Turned off on this device. Everything already here stays.'); quietRender();
         }));
     }
     if (msg) b.append(el('div', 'bmsg' + (cls ? ' ' + cls : ''), msg));
@@ -2230,7 +2367,7 @@ function main() {
         if (u.refused) archiveNote = `This playlist read looked incomplete (${u.refused} songs missing at once), so none were marked as gone.`;
         else {
           const was = goneSig();
-          archiveNote = ''; archive = u.archive; GM_setValue(AKEY, archive); goneCache = null;
+          archiveNote = ''; archive = u.archive; GM_setValue(AKEY, archive); goneCache = null; queueSync();
           if (goneSig() !== was) statusCache.clear();   // songs gone (or back) are labeled differently
         }
       }
@@ -2929,6 +3066,7 @@ function main() {
     // The original playlist order can't be recreated, so even Replace keeps this device's when the backup has none
     GM_setValue(OKEY, mode === 'merge' ? Backup.mergeOriginal(before.original, inc.original) : inc.original || before.original || null);
     reloadState();
+    GM_setValue(CPKEY, 0); queueSync();   // with the cloud recorder on: send the plays and merge the rest
     pending = null; $('#bkpreview').textContent = '';
     say('#bkinmsg', mode === 'merge' ? `Merged. ${fmt(history.length)} plays saved here now.` : `Replaced. ${fmt(history.length)} plays saved here now.`, 'ok');
     showUndo();
@@ -3362,7 +3500,7 @@ function main() {
     clearInterval(timer);
     if (live) timer = setInterval(async () => {
       await loadSongs();                       // keeps recording in the background, as long as the browser lets it run
-      await pullCloud(false);                  // every 10 minutes, when the cloud recorder is set up
+      if (await cloudSync(false)) rowBase = null;   // every 2 minutes, when the cloud recorder is set up
       if (document.hidden) return;             // skip the playlist check and redraw until you're looking
       await loadPlaylist(false);
       quietRender();                           // not while you're choosing a song or reading Stats
@@ -3401,7 +3539,7 @@ function main() {
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) holdScreen(); });
   document.addEventListener('visibilitychange', async () => {
-    if (!document.hidden && live) { await loadSongs(); await pullCloud(false); await loadPlaylist(false); quietRender(); }
+    if (!document.hidden && live) { await loadSongs(); await cloudSync(false); await loadPlaylist(false); quietRender(); }
   });
 
   render();
@@ -3410,7 +3548,7 @@ function main() {
   const back = GM_getValue('signin:reopen', 0);
   if (back) { GM_setValue('signin:reopen', 0); if (Date.now() - back < 5 * 60000) openShuffle(); }
   (async () => {
-    await Promise.all([loadSongs(), loadPlaylist(false), pullCloud(true)]);
+    await Promise.all([loadSongs(), loadPlaylist(false), cloudSync(true)]);
     loading = false;
     render();
     schedule();

@@ -1,7 +1,7 @@
 // What the recorder keeps from one look at SomaFM's song list. It uses the userscript's own History code,
 // so plays are read, dated and gap-flagged exactly as on a device.
 import Script from '../../soma-xmas-checker.user.js';
-const { History } = Script;
+const { History, Cloud } = Script;
 
 // songs: the feed's rows; nowS: SomaFM's clock (unix seconds); newest: the newest play recorded so far,
 // [at, artist, title, album], or null. Returns the plays newer than it (the first one flagged as after a gap
@@ -11,5 +11,8 @@ export function fromFeed(songs, nowS, newest) {
   const m = History.merge(newest ? [newest] : [], fetched, Infinity);
   return { plays: m.plays.slice(0, m.added), breaks: History.breaksFromFeed(songs, nowS) };
 }
+
+// Plays a device sends, checked the same way devices check the recorder's
+export const cleanPlays = Cloud.cleanPlays;
 
 export const validChannel = c => /^[a-z0-9]{1,40}$/.test(c || '');
