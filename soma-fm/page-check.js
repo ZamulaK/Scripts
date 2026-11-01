@@ -49,12 +49,13 @@ const STUBS = `
 const results = [];
 const check = (label, ok, detail) => { results.push({ label, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${!ok && detail ? '  — ' + detail : ''}`); };
 
-async function openPage(browser, { width, height = 1000, scheme = 'light', store = {}, hash = '', api = null }) {
+async function openPage(browser, { width, height = 1000, scheme = 'light', store = {}, hash = '', api = null, recorder = null }) {
   const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, timezoneId: 'America/New_York', acceptDownloads: true });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   if (api) await page.route('https://www.googleapis.com/**', api.handle);
+  if (recorder) await page.route('https://rec.test.workers.dev/**', recorder);
   await page.goto(URL + hash, { waitUntil: 'load' });
   await page.evaluate(s => { window.__store = s; }, Object.assign({ playlist: { schema: 3, at: Date.now(), items, hidden: 0 }, 'history:christmas': seedHistory(), live: false }, store));
   await page.addScriptTag({ content: STUBS + script });
@@ -534,6 +535,66 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     await p.page.setViewportSize({ width: 601, height: 900 }); await p.page.waitForTimeout(200); await p.page.setViewportSize({ width: 600, height: 900 }); await p.page.waitForTimeout(300);
     const big = await lines();
     check('600px: with three-digit counts everywhere, each chip row still fits on one line', big.every(t => / on 1 line/.test(t)), big.join(' // '));
+    await p.ctx.close();
+  }
+
+  // 4c. The cloud recorder (3.21) fills a stretch this device missed; a refused key is reported; setting it up from Backup / Restore
+  {
+    const hist = seedHistory(), g = hist[250], before = hist[251];   // seedHistory's first gap: 7 hours missed before hist[250]
+    const filler = [[g[0], g[1], g[2], ''], [g[0] - 3600, 'Cloud Artist', 'Filled In One', 'Alb'], [g[0] - 7200, 'Cloud Artist', 'Filled In Two', 'Alb'], [before[0], before[1], before[2], '']];
+    const cors = { 'access-control-allow-origin': 'https://somafm.com', 'access-control-allow-headers': 'Authorization', 'access-control-allow-methods': 'GET, OPTIONS' };
+    const asked = [];
+    const recorder = key => async route => {
+      const req = route.request();
+      if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+      asked.push(req.url());
+      if (req.headers().authorization !== 'Bearer ' + key) return route.fulfill({ status: 401, headers: Object.assign({ 'content-type': 'application/json' }, cors), body: '{"error":"wrong or missing key"}' });
+      const now = Math.floor(Date.now() / 1000);
+      return route.fulfill({ status: 200, headers: Object.assign({ 'content-type': 'application/json' }, cors), body: JSON.stringify({ channel: 'christmas', now, recording: true,
+        lastRun: { at: now - 120, ok: true, added: 3, note: '', lastOk: now - 120 }, plays: filler, breaks: [g[0] - 60] }) });
+    };
+    const KEY = 'testkey-0123456789abcdef';
+    let p = await openPage(browser, { width: 600, store: { 'history:christmas': hist, cloud: { url: 'https://rec.test.workers.dev', key: KEY } }, recorder: recorder(KEY) });
+    await settle(p.page);
+    let st = await p.page.evaluate(gAt => { const h = window.__store['history:christmas'];
+      return { n: h.filter(x => /^Filled In/.test(x[2])).length, gapCleared: !h.find(x => x[0] === gAt)[4], status: window.__store['cloud:status:christmas'], through: window.__store['cloud:through:christmas'] }; }, g[0]);
+    check('The cloud recorder fills the plays this device missed, and that stretch is no longer marked as missed',
+      st.n === 2 && st.gapCleared && st.status && st.status.ok && st.status.added === 2 && st.through > 0 && /since=0$/.test(asked[0]), JSON.stringify(st) + ' ' + asked[0]);
+    await inShadow(p.page, r => r.querySelector('#backup').click());
+    await p.page.waitForTimeout(200);
+    const bt = await inShadow(p.page, r => r.querySelector('#cloudbody').textContent);
+    check('Backup / Restore shows the cloud recorder working', /rec\.test\.workers\.dev/.test(bt) && /2 plays filled in/.test(bt) && /last read SomaFM's song list/.test(bt) && /Turn off on this device/.test(bt), bt);
+    check('Backup / Restore hides Undo until something has been imported', await inShadow(p.page, r => r.querySelector('#bkundo').offsetParent === null));
+    check('Cloud recorder: no script errors', p.errors.length === 0, p.errors.join(' | '));
+    await p.ctx.close();
+
+    // A refused key: the header says so
+    p = await openPage(browser, { width: 600, store: { 'history:christmas': hist, cloud: { url: 'https://rec.test.workers.dev', key: 'wrong-0123456789abcdef' } }, recorder: recorder(KEY) });
+    await settle(p.page);
+    const warn = await inShadow(p.page, r => { const a = r.querySelector('#anote'); return a.hidden ? '' : a.textContent; });
+    check('A key the recorder refuses is reported in the header', /cloud recorder refused the key/.test(warn), warn);
+    await p.ctx.close();
+
+    // Setting it up: a wrong code is refused, a refused key isn't saved, the right code is saved and fills in at once
+    asked.length = 0;
+    p = await openPage(browser, { width: 360, store: { 'history:christmas': hist }, recorder: recorder(KEY) });
+    await settle(p.page);
+    await inShadow(p.page, r => r.querySelector('#backup').click());
+    await p.page.waitForTimeout(200);
+    const save = async code => { await p.page.locator('#cloudcode').fill(code); await inShadow(p.page, r => [...r.querySelectorAll('#cloudbody button')].find(b => b.textContent === 'Save').click()); await p.page.waitForTimeout(400); return inShadow(p.page, r => r.querySelector('#cloudbody').textContent); };
+    const t1 = await save('not a code');
+    const t2 = await save('https://rec.test.workers.dev#wrong-0123456789abcdef');
+    const saved2 = await p.page.evaluate(() => window.__store.cloud || null);
+    const t3 = await save('https://rec.test.workers.dev/#' + KEY);
+    const after = await p.page.evaluate(() => ({ cloud: window.__store.cloud, n: window.__store['history:christmas'].filter(x => /^Filled In/.test(x[2])).length }));
+    check('Setting up the recorder: a wrong code and a refused key are not saved; the right code is saved and fills in at once',
+      /doesn't look like a setup code/.test(t1) && /Not saved: the recorder refused the key/.test(t2) && !saved2 && after.cloud && after.cloud.url === 'https://rec.test.workers.dev' && after.n === 2 && /2 plays filled in/.test(t3), JSON.stringify([t1, t2, t3, after]));
+    check('360px: Backup / Restore with the recorder has no sideways scrolling', await inShadow(p.page, r => { const d = r.querySelector('#backupbox'); return d.scrollWidth <= d.clientWidth + 1; }));
+    await inShadow(p.page, r => [...r.querySelectorAll('#cloudbody button')].find(b => b.textContent === 'Turn off on this device').click());
+    await inShadow(p.page, r => [...r.querySelectorAll('#cloudbody button')].find(b => b.textContent === 'Tap again to turn off').click());
+    await p.page.waitForTimeout(200);
+    const off = await p.page.evaluate(() => ({ cloud: window.__store.cloud, n: window.__store['history:christmas'].filter(x => /^Filled In/.test(x[2])).length }));
+    check('Turning it off takes two taps and keeps the plays filled in', !off.cloud && off.n === 2, JSON.stringify(off));
     await p.ctx.close();
   }
 

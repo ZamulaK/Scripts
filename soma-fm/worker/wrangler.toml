@@ -1,0 +1,16 @@
+# SomaFM recorder: looks at SomaFM's song list every 10 minutes and keeps every play (see README.md)
+name = "soma-recorder"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
+CHANNELS = "christmas"   # stations to record, comma-separated (the part of the address before /songhistory.html)
+ALLOW_ORIGIN = "https://somafm.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "soma"
+database_id = "00000000-0000-0000-0000-000000000000"   # filled in by `wrangler d1 create soma`

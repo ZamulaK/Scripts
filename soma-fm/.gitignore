@@ -3,3 +3,5 @@ node_modules/
 # exported play history and backups stay out of the repo unless added on purpose
 somafm-*-history-*.csv
 soma-xmas-checker-backup-*.json
+.wrangler/
+.dev.vars

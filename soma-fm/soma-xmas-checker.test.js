@@ -226,6 +226,32 @@ function historyChecks() {
   const resumed = H.merge(unstuck, H.fromFeed(feed([[nowS - 60, 'N', 'New']]), nowS), 100);
   check('after removing them, new plays are recorded again (flagged after a gap)', resumed.added === 1 && resumed.plays[0][2] === 'New' && resumed.gap);
 
+  // 3.21: plays from the cloud recorder fill the stretches this device missed
+  const dev = [[5000, 'D', 'Four', 'x', 1], [4000, 'C', 'Three', 'x'], [1000, 'A', 'One', 'x']];   // asleep between One and Four
+  const cloud = [[5000, 'D', 'Four', 'x'], [4000, 'C', 'Three', 'x'], [2500, 'B', 'Two', 'x'], [1000, 'A', 'One', 'x', 1]];
+  const u = H.union(dev, cloud, 100);
+  check('union: the cloud fills the missed play, newest first, and the gap it covered is no longer flagged',
+    u.added === 1 && u.filled === 1 && !u.plays[0][4] && u.plays.length === 4 && u.plays[2][2] === 'Two' && !u.plays[2][4] && u.plays[3][2] === 'One' && !u.plays[3][4]);
+  const u0 = H.union([[5000, 'D', 'Four', 'x', 1], [1000, 'A', 'One', 'x']], [[5000, 'D', 'Four', 'x'], [3000, 'B', 'Two', 'x']], 100);
+  check('union: a play both have loses "after a gap" when the cloud was recording before it', u0.added === 1 && u0.filled === 1 && !u0.plays[0][4]);
+  check('union: nothing new gives the same list back', H.union(u.plays, cloud, 100).plays === u.plays && H.union(u.plays, [], 100).added === 0);
+  const both = H.union([[9000, 'E', 'Five', 'x', 1], [1000, 'A', 'One', 'x']], [[9000, 'E', 'Five', 'x', 1], [8000, 'Z', 'New', 'x', 1]], 100);
+  check('union: a gap both missed stays flagged, on the oldest play after it',
+    both.plays.length === 3 && both.plays[0][4] === 1 && both.plays[1][2] === 'New' && both.plays[1][4] === 1);
+  check('union: the cap keeps the newest plays', H.union(dev, cloud, 2).plays.length === 2 && H.union(dev, cloud, 2).plays[1][2] === 'Three');
+  check('union: same time, different song are both kept', H.union([[100, 'A', 'One', '']], [[100, 'B', 'Two', '']], 100).plays.length === 2);
+
+  // 3.21: what the cloud recorder sends is checked before it's used
+  const C = M.Cloud;
+  const sc = C.parseSetup('  https://soma-recorder.dan.workers.dev/#abcdefghijklmnop0123  ');
+  check('setup code: address and key from one line', sc && sc.url === 'https://soma-recorder.dan.workers.dev' && sc.key === 'abcdefghijklmnop0123');
+  check('setup code: refused without https, without a key, or with a short key', !C.parseSetup('http://x.workers.dev#abcdefghijklmnop0123') && !C.parseSetup('https://x.workers.dev') && !C.parseSetup('https://x.workers.dev#short') && !C.parseSetup(''));
+  const cp = C.cleanPlays([[200, 'B', 'Two', 'Alb', 1], [300, 'C', 'Three'], ['x', 'D', 'Bad'], [100, '', 'No artist'], [150, 'E', 5], 'junk', [100, 'A', 'One', null]]);
+  check('recorder plays: malformed ones left out, newest first, gap flags kept', cp.length === 3 && cp[0][2] === 'Three' && cp[0][3] === '' && cp[1][4] === 1 && cp[2][3] === '' && cp[2].length === 4);
+  check('recorder plays: not a list gives none', C.cleanPlays(null).length === 0 && C.cleanPlays({}).length === 0);
+  check('recorder breaks: numbers only, newest first', C.cleanBreaks([5, 'x', -1, 9, '7']).join() === '9,7,5');
+  check('each check reaches an hour before the last one, the first one back to the start', C.sinceFor(0) === 0 && C.sinceFor(undefined) === 0 && C.sinceFor(1793500000) === 1793496400);
+
   // Breaks and measured song lengths
   const bfeed = feed([[nowS - 100, 'A', 'One'], [nowS - 300, 'SomaFM', 'Station ID'], [nowS - 500, 'B', 'Two'], [nowS + 86400 - 700, 'Break', 'Break']]);
   const br = H.breaksFromFeed(bfeed, nowS);

@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.20.1**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.21.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -43,6 +43,7 @@ song is already there, (2) find the ones he doesn't have, and (3) understand Som
 | `playlist.fixture.json` | Snapshot of 61 songs from the playlist (Oct 24) that the matching tests run against. |
 | `page-check.js` | Real-page regression check (`npm run test:page`): loads SomaFM's live page in headless Chromium with stand-ins for Tampermonkey, checks layout at 1024/768/600/400/360 px, light and dark, plus Stats, Backup, Per page, card play history, and response time. Needs internet to somafm.com, and never contacts YouTube. |
 | `package.json` | `npm test`, `npm run test:page`. Playwright is a dev dependency. |
+| `worker/` | The cloud recorder (3.21): a Cloudflare Worker that reads SomaFM's song list every 10 minutes into a D1 database, reusing `History` from the userscript. Its own `package.json` (wrangler), tests (`npm test` there) and README with the setup steps. |
 
 First-time setup on a new machine: `npm install`, then `npx playwright install chromium`.
 
@@ -53,6 +54,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
    │
    ├─ every 60 s (Live updates on): fetch /songs/christmas.json ──► History.fromFeed ──► History.merge into saved history
    │                                                                (gap marker if the feed no longer reaches back)
+   ├─ on open, then every 10 min (Live on): cloud recorder /plays ──► Cloud.cleanPlays ──► History.union (fills missed stretches)
    ├─ every 15 min (or Refresh): Reader.read(YouTube) ──► playlist items ──► Archive.update (remember titles, notice gone songs)
    │
    └─ render(): for each play shown, statusOf(row) =
@@ -72,6 +74,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `Backup` | yes | Backup file format, validation, merge rules (history, marks, dislikes, favorites, categories, archive), import preview. |
 | `Stats` | yes | Everything in the Stats panel: counts, shares, rotation estimates, top lists, per-song play logs. |
 | `Shuffle` | yes (I/O injected) | Shuffling the real playlist: Fisher-Yates order, the move plan, reading the playlist and making the moves through the YouTube Data API, owner check. `call(method, resource, params, body)` is injected so it can be tested with a fake API. See §8a. |
+| `Cloud` | yes | The cloud recorder's setup code (`address#key`) and checking what it sends (`cleanPlays`, `cleanBreaks`) before it's merged. |
 | `Reader` | yes (I/O injected) | Reading the YouTube playlist: page parsing, the >100-song side-panel fallback, complete/incomplete reads. `read(get, post)` takes fetch functions so it can be tested with a fake YouTube. |
 | `main()` | no | Everything on the page: UI, storage, timers, dialogs, event handlers. Runs only under Tampermonkey (the file exports the modules instead when loaded by Node). |
 
@@ -91,6 +94,8 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `notes` | Song key (same as marks and dislikes) → `{ t, at }` (3.18), a free-text note on any song, e.g. why a disliked song can't be added (no SomaFM version on YouTube). Dan preferred a note over more playlist statuses. Deleting keeps `t: ''`; same merge rule as favorites. In backups. |
 | `catFilters` | Category chips that are on (`band` … `soul`, `uncat` for "None"); none on means no category filter (per device). |
 | `backup:beforeImport` | `{ at, data }` saved before every import, for "Undo last import". |
+| `cloud` | The cloud recorder's `{ url, key }` (3.21), from the setup code pasted in Backup / Restore. Per device, not in backups, kept out of the repo. |
+| `cloud:through:<channel>`, `cloud:status:<channel>` | The recorder's "now" at the last check (the next asks from an hour before it), and how the last check went (`{ at, ok, added, filled, total, run, note }`), shown in Backup / Restore and as a header warning when something's wrong. |
 | `signin:clientId` | Dan's Google OAuth Client ID (pasted into the Shuffle panel once per device; kept out of the public repo). |
 | `signin:pending`, `signin:token`, `signin:reopen` | Sign-in in progress (random `state`, popup or same tab); the one-hour access key `{ token, at, exp }`; "reopen Shuffle after a same-tab sign-in". |
 | `shuffle:job:<playlistId>` | A shuffle or put-back in progress: `{ target, before, kind: 'shuffle' \| 'undo', at }`. Saved before the first move; cleared once the read-back confirms the order. |
@@ -98,7 +103,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `shuffle:last:<playlistId>` | `{ before, at }`: the order before the last shuffle, for "Show the earlier order". |
 | `shuffle:units` | `{ day, units }`: this script's own estimate of quota used today (Pacific date). |
 | `shuffle:lastRun` | `{ kind, at, units, moves, complete }`: quota used by the last shuffle or put-back, shown under the Quota line. |
-| `filters`, `favOnly`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:` keys or the other `shuffle:` keys). |
+| `filters`, `favOnly`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:`, `cloud` keys or the other `shuffle:` keys). |
 
 **Song key** = `Matcher.markKey(artist, title)` = normalized artist + `|` + normalized title (case, accents, punctuation ignored). Marks, dislikes, stats and caches all use it.
 
@@ -204,10 +209,26 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
   reports YouTube's message and the job can be finished or set aside.
 - Playing it: shuffle off, playlist sort setting on **Manual** (otherwise YouTube shows another order).
 
+## 8b. Cloud recorder (3.21)
+
+Dan wanted history recorded unattended (the feed only covers about the last hour, so a sleeping tablet leaves gaps) and,
+later, all his data kept centrally (part 2, not built yet: marks, dislikes, favorites, categories, notes, original order,
+synced with the Backup merge rules). He has a personal Cloudflare account; everything fits the free plan.
+
+- **Recorder** (`worker/`, see its README): Cron Trigger every 10 minutes reads `/songs/christmas.json` and stores new
+  plays and breaks in D1 using `History.fromFeed` / `History.merge` from this file, so dates and gap flags follow the same rules.
+  It never touches YouTube (Cloudflare may run it outside the US, gotcha 5).
+- **Userscript:** `pullCloud()` asks `/plays?since=` on open, every 10 minutes while Live is on, and on coming back to the
+  tab; `History.union` adds every play either side has. "After a gap" survives only where both missed the stretch.
+  Requests are plain `fetch` with CORS (the Worker allows https://somafm.com), so no `@connect` was needed.
+- **Key:** a Worker secret (`wrangler secret put KEY`); devices store the setup code `https://…workers.dev#key`. A refused key
+  or an unreachable recorder isn't saved at setup, and later shows as a header warning (refuse and report).
+
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 102 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 110 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`). The page check fakes the recorder with `page.route`.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -260,6 +281,7 @@ Dan wanted the playlist itself in a fair random order, because YouTube's own shu
 | 3.19.1 | YouTube API requests use `cache: 'no-store'`. After Dan finished a shuffle that had stopped partway, the read-back said the order differed, but opening Shuffle again found it exactly as planned; it happened only when finishing, so most likely a stored or "not modified" answer from the read just before. |
 | 3.20.0 | ⭐ filter chip: only favorites (Dan asked for it), first on the category row, combines with category chips, remembered per device (`favOnly`). A menu that fits neither below nor above its button scrolls the page so it fits below (the category menu was cut off on a short screen). |
 | 3.20.1 | Each filter chip row fits on one line at 600 px: tighter chips below desktop width, "Not in list" / "In list" there, and `fitChips()` shrinks a row's text up to 15% rather than wrapping as counts grow. |
+| 3.21.0 | Cloud recorder, part 1: a Cloudflare Worker (`worker/`) records plays every 10 minutes; the userscript fills in missed stretches from it (`History.union`, `Cloud`), set up in Backup / Restore. Also fixed: the Undo section showed before any import (`.ssec` grid beat `hidden`). |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

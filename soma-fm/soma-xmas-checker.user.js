@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.20.1
+// @version      3.21.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -392,6 +392,33 @@ const History = (() => {
     return { plays, added: fresh.length, gap };
   }
 
+  // Plays from another recording of the same station (the cloud recorder, 3.21) added to the stored ones: every
+  // play either list has, newest first, at most max. A play is the same when its time, artist and title are.
+  // "After a gap" stays only where every list that has the play says so: if one of them was recording just
+  // before it, nothing was missed there. Returns the same list back when nothing changes.
+  function union(stored, other, max) {
+    const id = p => p[0] + '\u0001' + p[1] + '\u0001' + p[2];
+    const byId = new Map();
+    for (let i = 0; i < stored.length; i++) byId.set(id(stored[i]), i);
+    const out = stored.slice(), fresh = [];
+    let added = 0, filled = 0;
+    for (let i = 0; i < other.length; i++) {
+      const p = other[i], k = id(p);
+      if (byId.has(k)) {
+        const j = byId.get(k);
+        if (out[j][4] && !p[4]) { out[j] = out[j].slice(0, 4); filled++; }
+      } else {
+        byId.set(k, -1);
+        fresh.push(p[4] ? p.slice(0, 4).concat([1]) : p.slice(0, 4));
+        added++;
+      }
+    }
+    if (!added && !filled) return { plays: stored, added: 0, filled: 0 };
+    let plays = out.concat(fresh).sort((a, b) => b[0] - a[0]);
+    if (plays.length > max) plays = plays.slice(0, max);
+    return { plays, added, filled };
+  }
+
   const pad = n => (n < 10 ? '0' : '') + n;
   // m/d/yy, local time
   function formatDate(sec) {
@@ -448,7 +475,7 @@ const History = (() => {
     return (h ? h + ':' + pad(m) : m) + ':' + pad(r);
   }
 
-  return { fromFeed, fixDate, breaksFromFeed, mergeBreaks, measuredLengths, dropFuture, merge, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
+  return { fromFeed, fixDate, breaksFromFeed, mergeBreaks, measuredLengths, dropFuture, merge, union, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
 })();
 
 /* ---------- Playlist memory (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -1279,8 +1306,40 @@ const Shuffle = (() => {
     UNITS_PER_MOVE, DAILY_UNITS };
 })();
 
+/* ---------- Cloud recorder answers (pure; tested by soma-xmas-checker.test.js) ---------- */
+// The recorder (soma-fm/worker) is a Cloudflare Worker that reads SomaFM's song list every 10 minutes, so plays
+// from when no device had this page open can be filled in. These check what it sends before anything is saved.
+const Cloud = (() => {
+  // Each check asks for plays from an hour before the previous one's "now", in case a look was late
+  const MARGIN = 3600;
+  // The setup code is the recorder's address and key on one line: https://name.example.workers.dev#key
+  function parseSetup(text) {
+    const m = String(text || '').trim().match(/^(https:\/\/[A-Za-z0-9.-]+(?::\d+)?(?:\/[^\s#]*)?)#([A-Za-z0-9_-]{16,200})$/);
+    return m ? { url: m[1].replace(/\/+$/, ''), key: m[2] } : null;
+  }
+  // Plays [at, artist, title, album, afterGap?], newest first; anything malformed is left out
+  function cleanPlays(list) {
+    const out = [];
+    for (let i = 0; Array.isArray(list) && i < list.length; i++) {
+      const x = list[i];
+      if (!Array.isArray(x) || !(Number(x[0]) > 0) || typeof x[1] !== 'string' || !x[1] || typeof x[2] !== 'string' || !x[2]) continue;
+      const p = [Number(x[0]), x[1], x[2], typeof x[3] === 'string' ? x[3] : ''];
+      if (x[4]) p.push(1);
+      out.push(p);
+    }
+    return out.sort((a, b) => b[0] - a[0]);
+  }
+  function cleanBreaks(list) {
+    const out = [];
+    for (let i = 0; Array.isArray(list) && i < list.length; i++) if (Number(list[i]) > 0) out.push(Number(list[i]));
+    return out.sort((a, b) => b - a);
+  }
+  const sinceFor = through => Number(through) > MARGIN ? Math.floor(Number(through) - MARGIN) : 0;
+  return { parseSetup, cleanPlays, cleanBreaks, sinceFor };
+})();
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = Object.assign({ History, Archive, Reader, Stats, Backup, Shuffle }, Matcher);
+  module.exports = Object.assign({ History, Archive, Reader, Stats, Backup, Shuffle, Cloud }, Matcher);
 } else if (!catchSignIn()) {
   main();
 }
@@ -1502,6 +1561,7 @@ function main() {
     .shead h2{margin:0;font-size:1.2em}
     #statsbody{padding:1rem;display:grid;gap:1.1rem}
     .ssec{display:grid;gap:.55rem}
+    .ssec[hidden]{display:none}   /* the grid above would otherwise show the Undo section before any import */
     .ssec h3{margin:0;font-size:.78em;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
     .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(7.25rem,1fr));gap:.5rem}
     .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.6rem .75rem}
@@ -1642,6 +1702,10 @@ function main() {
       <div class="ssec" id="bkundo" hidden>
         <h3>Undo</h3>
         <div class="brow"><span class="bmsg" id="bkundotext"></span><button type="button" class="ctl" id="bkundobtn">Undo last import</button></div>
+      </div>
+      <div class="ssec">
+        <h3>Cloud recorder</h3>
+        <div id="cloudbody"></div>
       </div>
     </div>
   </dialog>
@@ -1994,6 +2058,92 @@ function main() {
     } catch (e) {
       if (songsFrom !== 'live') songsFrom = 'page';
     }
+  }
+
+  /* ----- Data: plays from the cloud recorder (3.21; soma-fm/worker) ----- */
+  // Set up per device with a setup code (address#key); not in backups. Asked at most every CLOUD_MINUTES.
+  const CLOUD_MINUTES = 10, CTKEY = 'cloud:through:' + channel, CSKEY = 'cloud:status:' + channel;
+  let cloudBusy = false, cloudAt = 0, cloudStatus = GM_getValue(CSKEY, null);
+  const cloudConf = () => { const c = GM_getValue('cloud', null); return c && c.url && c.key ? c : null; };
+  // Returns true when the history changed
+  async function pullCloud(force) {
+    const c = cloudConf();
+    if (!c || cloudBusy || (!force && Date.now() - cloudAt < CLOUD_MINUTES * 60000)) return false;
+    cloudBusy = true; cloudAt = Date.now();
+    let changed = false;
+    try {
+      let r;
+      try {
+        r = await fetch(`${c.url}/plays?channel=${encodeURIComponent(channel)}&since=${Cloud.sinceFor(GM_getValue(CTKEY, 0))}`,
+          { headers: { Authorization: 'Bearer ' + c.key }, cache: 'no-store' });
+      } catch (e) { throw new Error("couldn't be reached"); }
+      if (r.status === 401) throw new Error('refused the key');
+      if (!r.ok) throw new Error('answered ' + r.status);
+      const d = await r.json();
+      const total = (cloudStatus && cloudStatus.total) || 0;
+      if (!d.recording) cloudStatus = { at: Date.now(), ok: true, off: true, total };
+      else {
+        const u = History.union(history, History.dropFuture(Cloud.cleanPlays(d.plays), Date.now() / 1000), HISTORY_MAX);
+        if (u.added || u.filled) { history = u.plays; rowBase = null; measured = null; GM_setValue(HKEY, history); changed = true; }
+        const nb = History.mergeBreaks(breaks, Cloud.cleanBreaks(d.breaks), BREAKS_MAX);
+        if (nb !== breaks) { breaks = nb; measured = null; GM_setValue(BKEY, breaks); }
+        if (Number(d.now) > 0) GM_setValue(CTKEY, Number(d.now));
+        cloudStatus = { at: Date.now(), ok: true, added: u.added, filled: u.filled, total: total + u.added, run: d.lastRun || null };
+      }
+    } catch (e) {
+      cloudStatus = Object.assign({}, cloudStatus, { at: Date.now(), ok: false, note: e.message || String(e) });
+    } finally { cloudBusy = false; }
+    GM_setValue(CSKEY, cloudStatus);
+    if ($('#backupbox').open) cloudShow();
+    return changed;
+  }
+  // A problem worth a line in the header; '' when all is well
+  function cloudWarning() {
+    const s = cloudStatus;
+    if (!cloudConf() || !s) return '';
+    if (!s.ok) return `The cloud recorder ${s.note}, so plays missed here aren't being filled in (see Backup / Restore).`;
+    if (s.run && !s.run.ok) return `The cloud recorder couldn't read SomaFM's song list last time (${s.run.note}).`;
+    if (s.run && s.run.lastOk && s.at / 1000 - s.run.lastOk > 45 * 60) return `The cloud recorder hasn't recorded anything since ${when(s.run.lastOk)}.`;
+    return '';
+  }
+  let cloudOff = false;   // "Turn off" asks for a second tap
+  function cloudShow(msg, cls) {
+    const b = $('#cloudbody');
+    b.textContent = '';
+    const c = cloudConf(), s = cloudStatus;
+    const row = (...x) => { const r = el('div', 'brow'); r.append(...x); b.append(r); };
+    if (!c) {
+      b.append(el('div', 'snote', "A small program on your Cloudflare account reads SomaFM's song list around the clock, so plays from when no device had this page open are filled in here. Paste its setup code (the address and key on one line). It stays on this device."));
+      const inp = el('input', 'shinput'); inp.id = 'cloudcode'; inp.type = 'text'; inp.spellcheck = false; inp.autocomplete = 'off'; inp.placeholder = 'https://….workers.dev#…';
+      b.append(inp);
+      row(plain('Save', 'ctl primary', async () => {
+        const conf = Cloud.parseSetup($('#cloudcode').value);
+        if (!conf) return cloudShow("That doesn't look like a setup code. It starts with https:// and has the key after a #.", 'err');
+        GM_setValue('cloud', conf); GM_setValue(CTKEY, 0); cloudStatus = null;
+        cloudShow('Checking the recorder…');
+        const changed = await pullCloud(true);
+        if (!cloudStatus || !cloudStatus.ok) { const note = cloudStatus ? cloudStatus.note : ''; GM_setValue('cloud', null); cloudStatus = null; GM_setValue(CSKEY, null); return cloudShow(`Not saved: the recorder ${note}.`, 'err'); }
+        if (changed) quietRender();
+        cloudShow();
+      }));
+    } else {
+      b.append(el('div', 'sline', `Set up on this device: ${c.url.replace(/^https:\/\//, '')}`));
+      if (s && !s.ok) b.append(el('div', 'bmsg err', `Last check ${when(s.at / 1000)}: the recorder ${s.note}.`));
+      else if (s && s.off) b.append(el('div', 'bmsg', "The recorder isn't set to record this station."));
+      else if (s) {
+        b.append(el('div', 'sline', `Last check ${when(s.at / 1000)}: ${s.added ? fmt(s.added) + ' play' + (s.added === 1 ? '' : 's') + ' filled in' : 'nothing new to fill in'}. ${fmt(s.total || 0)} filled in on this device so far.`));
+        if (s.run) b.append(el('div', 'snote', s.run.ok ? `The recorder last read SomaFM's song list at ${when(s.run.at)}.` : `The recorder couldn't read SomaFM's song list at ${when(s.run.at)} (${s.run.note})${s.run.lastOk ? '; last good read ' + when(s.run.lastOk) : ''}.`));
+      }
+      const warn = cloudWarning();
+      if (warn && s && s.ok) b.append(el('div', 'bmsg err', warn));
+      row(plain('Check now', 'ctl', async () => { cloudShow('Checking…'); if (await pullCloud(true)) quietRender(); cloudShow(); }),
+        plain(cloudOff ? 'Tap again to turn off' : 'Turn off on this device', 'ctl', () => {
+          if (!cloudOff) { cloudOff = true; return cloudShow(); }
+          cloudOff = false; GM_setValue('cloud', null); GM_setValue(CSKEY, null); cloudStatus = null;
+          cloudShow('Turned off on this device. The plays already filled in stay.'); quietRender();
+        }));
+    }
+    if (msg) b.append(el('div', 'bmsg' + (cls ? ' ' + cls : ''), msg));
   }
 
   /* ----- Data: your YouTube playlist ----- */
@@ -2439,7 +2589,8 @@ function main() {
 
     // Songs gone from the playlist
     const an = $('#anote');
-    an.hidden = !archiveNote; an.textContent = archiveNote ? '⚠ ' + archiveNote : '';
+    const warnText = archiveNote || cloudWarning();
+    an.hidden = !warnText; an.textContent = warnText ? '⚠ ' + warnText : '';
     const gl = goneItems(), gb = $('#gonebox');
     gb.hidden = !gl.length;
     if (gl.length) {
@@ -2705,6 +2856,7 @@ function main() {
   function openBackup() {
     say('#bkoutmsg', ''); say('#bkinmsg', ''); $('#bkpreview').textContent = ''; $('#bkpaste').value = ''; $('#bkfile').value = '';
     showUndo();
+    cloudOff = false; cloudShow();
     const d = $('#backupbox'); if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
   }
   $('#backup').onclick = openBackup;
@@ -3210,6 +3362,7 @@ function main() {
     clearInterval(timer);
     if (live) timer = setInterval(async () => {
       await loadSongs();                       // keeps recording in the background, as long as the browser lets it run
+      await pullCloud(false);                  // every 10 minutes, when the cloud recorder is set up
       if (document.hidden) return;             // skip the playlist check and redraw until you're looking
       await loadPlaylist(false);
       quietRender();                           // not while you're choosing a song or reading Stats
@@ -3248,7 +3401,7 @@ function main() {
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) holdScreen(); });
   document.addEventListener('visibilitychange', async () => {
-    if (!document.hidden && live) { await loadSongs(); await loadPlaylist(false); quietRender(); }
+    if (!document.hidden && live) { await loadSongs(); await pullCloud(false); await loadPlaylist(false); quietRender(); }
   });
 
   render();
@@ -3257,7 +3410,7 @@ function main() {
   const back = GM_getValue('signin:reopen', 0);
   if (back) { GM_setValue('signin:reopen', 0); if (Date.now() - back < 5 * 60000) openShuffle(); }
   (async () => {
-    await Promise.all([loadSongs(), loadPlaylist(false)]);
+    await Promise.all([loadSongs(), loadPlaylist(false), pullCloud(true)]);
     loading = false;
     render();
     schedule();
