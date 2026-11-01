@@ -13,4 +13,4 @@ ALLOW_ORIGIN = "https://somafm.com"
 [[d1_databases]]
 binding = "DB"
 database_name = "soma"
-database_id = "00000000-0000-0000-0000-000000000000"   # filled in by `wrangler d1 create soma`
+database_id = "66275f3e-568b-400f-97ed-428fd00c91e8"   # from `wrangler d1 create soma` (not secret)
