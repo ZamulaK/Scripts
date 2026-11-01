@@ -1,0 +1,8 @@
+{
+  "name": "xmaslounge",
+  "private": true,
+  "description": "Christmas Lounge site: the Xmas Mixed checker as a web page on Cloudflare Pages",
+  "scripts": {
+    "deploy": "node deploy.js"
+  }
+}

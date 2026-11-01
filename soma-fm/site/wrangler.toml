@@ -1,0 +1,19 @@
+# Christmas Lounge site (xmaslounge.pages.dev): the checker as a web page, behind Cloudflare Access (see README.md)
+name = "xmaslounge"
+pages_build_output_dir = "public"
+compatibility_date = "2026-10-01"
+
+[vars]
+CHANNELS = "christmas"
+
+# The recorder's database: the site reads and adds to the same plays and synced document
+[[d1_databases]]
+binding = "DB"
+database_name = "soma"
+database_id = "66275f3e-568b-400f-97ed-428fd00c91e8"
+
+# Secrets, set with `wrangler pages secret put NAME --project-name xmaslounge` (not in the repo):
+#   YT_KEY            YouTube Data API key, for reading the playlist
+#   GOOGLE_CLIENT_ID  OAuth Client ID, for Shuffle's Google sign-in
+#   ACCESS_TEAM       Zero Trust team name (the part before .cloudflareaccess.com)
+#   ACCESS_AUD        the Access application's audience (AUD) tag

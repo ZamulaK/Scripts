@@ -5,7 +5,7 @@
 // devices: YouTube hides region-blocked songs outside the US, and Cloudflare may run this anywhere.
 import { fromFeed, cleanPlays, validChannel } from './core.js';
 
-const UA = 'soma-recorder (personal play history for one listener)';
+export const UA = 'soma-recorder (personal play history for one listener)';
 const MAX_ROWS = 50000, MAX_PUSH = 500, MAX_DOC = 1500000;
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -53,7 +53,7 @@ function cors(env) {
   return { 'Access-Control-Allow-Origin': env.ALLOW_ORIGIN || 'https://somafm.com', 'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS', 'Access-Control-Max-Age': '86400', Vary: 'Origin' };
 }
-const json = (env, body, status = 200) => new Response(JSON.stringify(body), { status, headers: Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, cors(env)) });
+export const json = (env, body, status = 200) => new Response(JSON.stringify(body), { status, headers: Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, cors(env)) });
 
 // The key is set with `wrangler secret put KEY`; requests send it as "Authorization: Bearer <key>"
 function authorized(req, env) {
@@ -71,7 +71,7 @@ async function body(req, max) {
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
 
 // GET: plays stored or changed since a time, newest first. POST: plays a device recorded.
-async function plays(req, env, url) {
+export async function plays(req, env, url) {
   const channel = url.searchParams.get('channel') || 'christmas';
   if (!validChannel(channel)) return json(env, { error: 'bad channel' }, 400);
   if (req.method === 'POST') {
@@ -98,7 +98,7 @@ async function plays(req, env, url) {
 
 // GET: the synced document and its version (0 and null before the first save). PUT { base, state }: replaces
 // it only when base is the current version; otherwise 409 with the current one, to merge and try again.
-async function state(req, env) {
+export async function state(req, env) {
   const row = await env.DB.prepare('SELECT version, body, updated FROM docs WHERE name = ?').bind('state').first();
   const version = row ? row.version : 0;
   if (req.method === 'GET') return json(env, { version, updated: row ? row.updated : 0, state: row ? JSON.parse(row.body) : null });

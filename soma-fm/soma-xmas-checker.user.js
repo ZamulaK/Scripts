@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.24.1
+// @version      3.25.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -27,8 +27,12 @@ const CACHE_SCHEMA = 3;            // bump when the saved playlist's meaning cha
 const LIVE_SECONDS = 60;           // when live updates are on, re-check the song history this often
 const HISTORY_MAX = 10000;         // plays kept on this device (about 3½ weeks of round-the-clock listening, ~1 MB)
 const PAGE_SIZES = [25, 50, 100, 250];
+// The Christmas Lounge site (xmaslounge.pages.dev, soma-fm/site) runs this same file with Tampermonkey's functions
+// stood in for, and sets this first: { api, clientId, station }. Then SomaFM's list, the playlist and the recorder are
+// asked through the site's /api, which only answers after the Cloudflare Access sign-in. null under Tampermonkey.
+const SITE = (typeof window !== 'undefined' && window.XMAS_SITE) || null;
 // Shuffling the real playlist: Google sends sign-ins back here. It must match the OAuth client's redirect URI exactly.
-const SIGNIN_RETURN = 'https://somafm.com/christmas/songhistory.html';
+const SIGNIN_RETURN = SITE ? location.origin + '/' : 'https://somafm.com/christmas/songhistory.html';
 const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';   // manage your YouTube playlists
 
 /* ---------- Matching (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -1491,8 +1495,8 @@ function catchSignIn() {
 /* ---------- Page behavior (Tampermonkey only) ---------- */
 function main() {
   const { anyOf, mapOf, keep } = Matcher;   // prototype.js-safe array helpers
-  const channel = location.pathname.split('/')[1] || 'christmas';
-  const stationName = ((document.title.match(/SomaFM:\s*(.*?)\s+Song History/i) || [])[1] || 'SomaFM').trim();
+  const channel = SITE ? 'christmas' : location.pathname.split('/')[1] || 'christmas';
+  const stationName = SITE ? SITE.station || 'Christmas Lounge' : ((document.title.match(/SomaFM:\s*(.*?)\s+Song History/i) || [])[1] || 'SomaFM').trim();
 
   /* ----- Read the page's own table first: it's the fallback if the live feed can't be reached ----- */
   function readTable() {
@@ -2170,7 +2174,7 @@ function main() {
   /* ----- Data: song history (SomaFM's own feed, same site) ----- */
   async function loadSongs() {
     try {
-      const r = await fetch(`/songs/${channel}.json`, { cache: 'no-store' });
+      const r = await fetch(SITE ? `${SITE.api}/feed?channel=${channel}` : `/songs/${channel}.json`, { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       const data = await r.json();
       // "Now" from SomaFM's server clock when it sends one, so a device clock that's off doesn't move real plays
@@ -2192,16 +2196,17 @@ function main() {
   // Set up per device with a setup code (address#key); not in backups. Asked at most every CLOUD_MINUTES.
   const CLOUD_MINUTES = 2, CTKEY = 'cloud:through:' + channel, CSKEY = 'cloud:status:' + channel, CPKEY = 'cloud:pushed:' + channel, SSKEY = 'cloud:sync';
   let cloudBusy = false, cloudAt = 0, cloudStatus = GM_getValue(CSKEY, null);
-  const cloudConf = () => { const c = GM_getValue('cloud', null); return c && c.url && c.key ? c : null; };
+  // On the site the recorder is the site itself, signed in through Cloudflare Access, so there is no setup code
+  const cloudConf = () => { if (SITE) return { url: SITE.api, key: '' }; const c = GM_getValue('cloud', null); return c && c.url && c.key ? c : null; };
   // A request to the recorder; errors read as "the recorder …"
   async function cloudFetch(c, path, method, body) {
     let r;
     try {
       r = await fetch(c.url + path, { method: method || 'GET', cache: 'no-store',
-        headers: body === undefined ? { Authorization: 'Bearer ' + c.key } : { Authorization: 'Bearer ' + c.key, 'Content-Type': 'application/json' },
+        headers: Object.assign(c.key ? { Authorization: 'Bearer ' + c.key } : {}, body === undefined ? {} : { 'Content-Type': 'application/json' }),
         body: body === undefined ? undefined : JSON.stringify(body) });
-    } catch (e) { throw new Error("couldn't be reached"); }
-    if (r.status === 401) throw new Error('refused the key');
+    } catch (e) { throw new Error(SITE ? "couldn't be reached (if the sign-in ran out, reload the page)" : "couldn't be reached"); }
+    if (r.status === 401) throw new Error(SITE ? 'needs you to sign in again: reload the page' : 'refused the key');
     if (!r.ok && r.status !== 409) throw new Error('answered ' + r.status);
     return { status: r.status, data: await r.json() };
   }
@@ -2337,7 +2342,7 @@ function main() {
         cloudShow();
       }));
     } else {
-      b.append(el('div', 'sline', `Set up on this device: ${c.url.replace(/^https:\/\//, '')}`));
+      b.append(el('div', 'sline', SITE ? 'Built into this site: your plays, marks, favorites, categories and notes are kept on your Cloudflare account.' : `Set up on this device: ${c.url.replace(/^https:\/\//, '')}`));
       if (s && !s.ok) b.append(el('div', 'bmsg err', `Last check ${when(s.at / 1000)}: the recorder ${s.note}.`));
       else if (s && s.off) b.append(el('div', 'bmsg', "The recorder isn't set to record this station."));
       else if (s) {
@@ -2349,7 +2354,9 @@ function main() {
       b.append(el('div', 'snote', "With syncing on, Replace and Undo under \"Bring in a backup\" can't take away what the other devices still have: it comes back at the next sync."));
       const warn = cloudWarning();
       if (warn && s && s.ok) b.append(el('div', 'bmsg err', warn));
-      row(plain('Sync now', 'ctl', async () => { cloudShow('Syncing…'); if (await cloudSync(true)) quietRender(); cloudShow(); }),
+      const syncNow = plain('Sync now', 'ctl', async () => { cloudShow('Syncing…'); if (await cloudSync(true)) quietRender(); cloudShow(); });
+      if (SITE) row(syncNow);
+      else row(syncNow,
         plain(cloudOff ? 'Tap again to turn off' : 'Turn off on this device', 'ctl', () => {
           if (!cloudOff) { cloudOff = true; return cloudShow(); }
           cloudOff = false; GM_setValue('cloud', null); GM_setValue(CSKEY, null); GM_setValue(SSKEY, null); cloudStatus = null; syncStatus = null;
@@ -2378,7 +2385,16 @@ function main() {
       onerror: r => rej(new Error('network error (' + why(r) + ')')), timeout: 20000
     }));
   }
-  const fetchPlaylist = () => Reader.read(gmGet, gmPost);
+  // On the site, the recorder reads the playlist with YouTube's API and answers in Reader.read's shape
+  async function sitePlaylist() {
+    let r;
+    try { r = await fetch(`${SITE.api}/playlist?list=${encodeURIComponent(PLAYLIST_ID)}`, { cache: 'no-store' }); }
+    catch (e) { throw new Error("the site couldn't be reached"); }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'the site answered ' + r.status);
+    return d;
+  }
+  const fetchPlaylist = () => SITE ? sitePlaylist() : Reader.read(gmGet, gmPost);
 
   // Waits (ms) before each retry when a read comes back short or fails
   const RETRY_WAITS = [5000, 15000];
@@ -3268,12 +3284,14 @@ function main() {
     return `Couldn't talk to YouTube: ${e.message}`;
   }
 
+  // The site has the Client ID built in; under Tampermonkey it's pasted once per device
+  const clientId = () => (SITE && SITE.clientId) || GM_getValue('signin:clientId', '');
   function signIn() {
     const b = new Uint8Array(16); crypto.getRandomValues(b);
     let state = '';
     for (let i = 0; i < b.length; i++) state += b[i].toString(16).padStart(2, '0');
     const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
-      client_id: GM_getValue('signin:clientId', ''), redirect_uri: SIGNIN_RETURN, response_type: 'token', scope: YT_SCOPE, state });
+      client_id: clientId(), redirect_uri: SIGNIN_RETURN, response_type: 'token', scope: YT_SCOPE, state });
     const startedAt = Date.now();
     GM_setValue('signin:pending', { state, popup: true, at: startedAt });
     const w = window.open(url, 'xmsignin', 'popup,width=520,height=700');
@@ -3309,7 +3327,7 @@ function main() {
   }
 
   async function shufStart() {
-    if (!GM_getValue('signin:clientId', '')) return shufShow('setup');
+    if (!clientId()) return shufShow('setup');
     shufToken = validToken();
     if (!shufToken) return shufShow('signin');
     shufShow('loading', 'Reading your playlist…');
@@ -3436,7 +3454,8 @@ function main() {
       if (msg) say1(msg, 'err');
       sec.append(el('div', 'sline', `Sign in with the Google account that owns ${PLAYLIST_NAME}. If Google asks for a channel, choose the one that owns the playlist.`),
         el('div', 'snote', "Google will say the app hasn't been verified: it's your own app, so choose Continue. The sign-in lasts an hour."));
-      row(plain('Sign in with Google', 'ctl primary', signIn), plain('Change Client ID', 'ctl', () => shufShow('setup')));
+      if (SITE) row(plain('Sign in with Google', 'ctl primary', signIn));
+      else row(plain('Sign in with Google', 'ctl primary', signIn), plain('Change Client ID', 'ctl', () => shufShow('setup')));
     } else if (view === 'waiting') {
       sec.append(el('div', 'sline', 'Finish signing in in the Google window…'));
       row(plain('Cancel', 'ctl', () => { clearInterval(waitTimer); waitTimer = null; shufShow('signin'); }));

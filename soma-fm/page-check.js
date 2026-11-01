@@ -720,6 +720,71 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check('Marking other versions: no script errors', p.errors.length === 0, p.errors.join(' | '));
     await p.ctx.close();
   }
+
+  // 6. The Christmas Lounge site (site/public): the same script as a web page, against a stand-in for its /api
+  {
+    const SITE_URL = 'https://xmaslounge.test/';
+    const file = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
+    const hist = seedHistory();
+    const api = { calls: [], auth: 0, posted: 0, doc: { version: 0, state: null }, signedIn: true };
+    const openSite = async () => {
+      const ctx = await browser.newContext({ viewport: { width: 600, height: 1000 }, timezoneId: 'America/New_York' });
+      const page = await ctx.newPage();
+      const errors = [];
+      page.on('pageerror', e => errors.push(e.message));
+      await page.route(SITE_URL + '**', route => {
+        const req = route.request(), u = new globalThis.URL(req.url()), p = u.pathname;
+        const send = (body, type = 'application/json', status = 200) => route.fulfill({ status, contentType: type, body: typeof body === 'string' ? body : JSON.stringify(body) });
+        if (p === '/') return send(file('site/public/index.html'), 'text/html');
+        if (p === '/site.js') return send(file('site/public/site.js'), 'text/javascript');
+        if (p === '/soma-xmas-checker.user.js') return send(file('soma-xmas-checker.user.js'), 'text/javascript');
+        api.calls.push(req.method() + ' ' + p);
+        if (req.headers().authorization) api.auth++;
+        if (!api.signedIn) return send({ error: 'sign in' }, 'application/json', 401);
+        const now = Math.floor(Date.now() / 1000);
+        if (p === '/api/config') return send({ clientId: 'built-in.apps.googleusercontent.com' });
+        if (p === '/api/feed') return send({ songs: [{ date: String(now - 30), artist: 'Site Artist', title: 'Played Through The Site', album: '' }].concat(hist.slice(0, 15).map(x => ({ date: String(x[0]), artist: x[1], title: x[2], album: '' }))) });
+        if (p === '/api/playlist') return send({ items, hidden: 0, complete: true, read: items.length, expected: items.length });
+        if (p === '/api/plays' && req.method() === 'POST') { api.posted += JSON.parse(req.postData()).plays.length; return send({ received: 1, changed: 0 }); }
+        if (p === '/api/plays') return send({ channel: 'christmas', now, recording: true, lastRun: { at: now - 60, ok: true, added: 1, note: '', lastOk: now - 60 }, plays: hist, breaks: [] });
+        if (p === '/api/state' && req.method() === 'GET') return send({ version: api.doc.version, state: api.doc.state });
+        if (p === '/api/state' && req.method() === 'PUT') { const b = JSON.parse(req.postData()); api.doc = { version: api.doc.version + 1, state: b.state }; return send({ version: api.doc.version }); }
+        return send({ error: 'not found' }, 'application/json', 404);
+      });
+      await page.goto(SITE_URL, { waitUntil: 'load' });
+      await page.waitForFunction(() => { const h = document.getElementById('xm-host'); return h && h.shadowRoot && h.shadowRoot.querySelectorAll('#cards > li').length > 0; }, null, { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      return { ctx, page, errors };
+    };
+    let s = await openSite();
+    const first = await inShadow(s.page, r => ({ h1: r.querySelector('h1').textContent, cards: r.querySelectorAll('#cards > li').length, have: r.querySelectorAll('#cards > li.have').length,
+      first: (r.querySelector('#cards > li .title, #cards > li') || {}).textContent || '' }));
+    check('Site: the checker runs as a web page, named Christmas Lounge, with the playlist and plays from its /api',
+      first.h1 === 'Christmas Lounge' && first.cards > 0 && first.have > 0 && /Played Through The Site/.test(first.first)
+      && api.calls.indexOf('GET /api/playlist') >= 0 && api.calls.indexOf('GET /api/feed') >= 0, JSON.stringify(first) + ' ' + api.calls.join());
+    check('Site: syncs with no recorder key (Access signs it in): sends its plays, saves the synced document, no Authorization header',
+      api.auth === 0 && api.posted > 0 && api.doc.version >= 1 && api.calls.indexOf('GET /api/plays') >= 0, JSON.stringify({ auth: api.auth, posted: api.posted, v: api.doc.version }));
+    await inShadow(s.page, r => r.querySelector('#backup').click());
+    await s.page.waitForTimeout(400);
+    const cloud = await inShadow(s.page, r => ({ code: !!r.querySelector('#cloudcode'), text: r.querySelector('#cloudbody').textContent, buttons: [...r.querySelectorAll('#cloudbody button')].map(b => b.textContent).join() }));
+    check('Site: Backup / Restore has no setup code to paste and no Turn off, just the sync status and Sync now',
+      !cloud.code && /Built into this site/.test(cloud.text) && cloud.buttons === 'Sync now', JSON.stringify(cloud));
+    await inShadow(s.page, r => { const d = r.querySelector('#backupbox'); if (d.close) d.close(); else d.removeAttribute('open'); });
+    await inShadow(s.page, r => r.querySelector('#shuffle').click());
+    await s.page.waitForTimeout(400);
+    const shuf = await inShadow(s.page, r => ({ setup: !!r.querySelector('#shclient'), buttons: [...r.querySelectorAll('#shufbody button')].map(b => b.textContent).join() }));
+    check('Site: Shuffle has the Client ID built in: straight to Sign in with Google, nothing to paste or change',
+      !shuf.setup && /Sign in with Google/.test(shuf.buttons) && !/Change Client ID/.test(shuf.buttons), JSON.stringify(shuf));
+    const saved = await s.page.evaluate(() => new Promise(res => { const r = indexedDB.open('xmaslounge'); r.onsuccess = () => { const q = r.result.transaction('kv').objectStore('kv').get('history:christmas'); q.onsuccess = () => res((q.result || []).length); q.onerror = () => res(-1); }; r.onerror = () => res(-1); }));
+    check('Site: what the page saves is kept in this browser (IndexedDB)', saved >= hist.length, String(saved));
+    check('Site: no script errors', s.errors.length === 0, s.errors.join(' | '));
+    await s.ctx.close();
+    api.signedIn = false;
+    s = await openSite();
+    const boot = await s.page.evaluate(() => (document.getElementById('boot') || {}).textContent || '');
+    check('Site: when the sign-in has run out, the page says to reload to sign in', /Sign-in needed/.test(boot) && !(await s.page.$('#xm-host')), boot);
+    await s.ctx.close();
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

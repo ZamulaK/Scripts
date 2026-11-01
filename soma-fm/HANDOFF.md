@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.24.1**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.25.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -237,11 +237,30 @@ all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account
 - **Key:** a Worker secret (`wrangler secret put KEY`); devices store the setup code `https://…workers.dev#key`. A refused key
   or an unreachable recorder isn't saved at setup, and later shows as a header warning (refuse and report).
 
+## 8c. Christmas Lounge site (3.25)
+
+SomaFM stops this channel in late Feb or early Mar, and the history page may go with it. Dan also wanted changes without
+updating Tampermonkey on each device, and every key built into the site rather than pasted per device.
+
+- **Same file, "site mode":** `site/public/site.js` stands in for Tampermonkey (`GM_getValue`/`GM_setValue` on IndexedDB, all read
+  into memory first because the script reads them synchronously), fetches `/api/config`, sets `window.XMAS_SITE = { api, clientId,
+  station }`, then runs `soma-xmas-checker.user.js` (copied in by `site/deploy.js`). With `SITE` set the script reads SomaFM's list
+  from `/api/feed`, the playlist from `/api/playlist`, treats the site as its recorder with no key (no setup code, no Turn off),
+  and uses the built-in Client ID for Shuffle (no setup step). Under Tampermonkey `SITE` is null and nothing changes.
+- **`/api`** (`worker/src/site.js`, a Pages Function in `site/functions/api/[[path]].js`): checks the Cloudflare Access token
+  (`worker/src/access.js`, RS256 against the team's certs, audience and issuer) on every request and refuses without it, so preview
+  addresses get nothing. `/feed` reads SomaFM now and records those plays (`record`). `/playlist` uses the YouTube Data API
+  (`worker/src/youtube.js`, `YT_KEY` secret): every page, lengths, and deleted, private or US-blocked videos counted as hidden.
+  `/plays` and `/state` are the recorder's handlers on the same D1 database.
+- **Sign-in:** Cloudflare Access with Google as the login method, allowing only Dan's account.
+- **Secrets** (not in the repo): `YT_KEY`, `GOOGLE_CLIENT_ID`, `ACCESS_TEAM`, `ACCESS_AUD`.
+- The recorder Worker keeps the 10-minute look and the key-protected endpoints the userscript uses. Pages can't run on a schedule.
+
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 120 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
-- `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`). The page check fakes the recorder with `page.route`.
+- `npm run test:page`: 127 real-page checks (the last 7 load the site's own files against a stand-in `/api`), including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`; the site's `/api` with a made-up Access key and stand-ins for SomaFM and YouTube). The page check fakes the recorder with `page.route`.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
 
@@ -300,6 +319,7 @@ all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account
 | 3.23.1 | The "not in your playlist" share tile is hidden while no song played is missing (Dan asked; it had been stuck at 0%), like "another version". |
 | 3.24.0 | In its place, a card with how long until a song comes back: the rotation headline in decimal hours (14.7 h) so it fits on one line at 600 px. Dan finds it one of the most interesting numbers. Page check serves an empty feed (`noFeed`) so only the seeded plays count. |
 | 3.24.1 | "Another version" and "not in your playlist" cards show only with at least 2 songs or 1% of plays (Dan: one song is better seen through its filter chip). Page check `feed` option serves a made-up live list. |
+| 3.25.0 | Christmas Lounge site (§8c): the same file runs as a web page on Cloudflare in site mode, behind Cloudflare Access, with the YouTube key and Client ID built in. Playlist read with YouTube's API there. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

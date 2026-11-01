@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { fromFeed } from './src/core.js';
 import worker, { record, handle } from './src/index.js';
+import { siteApi } from './src/site.js';
+import { accessEmail, forgetAccessKeys } from './src/access.js';
+import { isoSeconds } from './src/youtube.js';
 
 let fail = 0;
 const check = (label, ok, detail) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${ok || detail === undefined ? '' : '  — ' + detail}`); if (!ok) fail++; };
@@ -127,6 +130,65 @@ old.raw.exec("INSERT INTO plays (channel, at, artist, title, album, gap) VALUES 
 old.raw.exec(fs.readFileSync(new URL('./migrate-3.22.sql', import.meta.url), 'utf8'));
 check('migrate-3.22.sql: old plays kept, stored time set to their play time, synced document table added',
   old.raw.prepare('SELECT added FROM plays').get().added === 500 && old.raw.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name = 'docs'").get().n === 1);
+
+// The Christmas Lounge site's /api: only behind Cloudflare Access, with a token signed by the team's key
+const TEAM = 'lounge', AUD = 'aud-123';
+const pair = await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+const jwk = Object.assign(await crypto.subtle.exportKey('jwk', pair.publicKey), { kid: 'k1' });
+const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function jwt(claims, key = pair.privateKey, kid = 'k1') {
+  const head = b64u(JSON.stringify({ alg: 'RS256', kid })), body = b64u(JSON.stringify(claims));
+  return head + '.' + body + '.' + b64u(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(head + '.' + body)));
+}
+const nowSec = Math.floor(Date.now() / 1000);
+const good = await jwt({ aud: [AUD], iss: 'https://lounge.cloudflareaccess.com', exp: nowSec + 600, email: 'dan@example.com' });
+const outside = [];
+const youtube = { items: [] };
+const siteFetch = async (u) => {
+  u = String(u); outside.push(u);
+  if (u === 'https://lounge.cloudflareaccess.com/cdn-cgi/access/certs') return new Response(JSON.stringify({ keys: [jwk] }));
+  if (u.startsWith('https://somafm.com/songs/christmas.json')) return new Response(JSON.stringify({ songs: feed([[now + 30000, 'Site', 'Through The Site']]) }), { headers: { Date: new Date((now + 30050) * 1000).toUTCString() } });
+  if (u.includes('/youtube/v3/playlistItems')) {
+    const page = new URL(u).searchParams.get('pageToken') ? 2 : 1;
+    const it = (id, title, ch, privacy = 'public') => ({ snippet: { title, videoOwnerChannelTitle: ch }, contentDetails: { videoId: id }, status: { privacyStatus: privacy } });
+    return new Response(JSON.stringify(page === 1
+      ? { pageInfo: { totalResults: 5 }, nextPageToken: 'p2', items: [it('v1', 'Song One', 'Artist - Topic'), it('v2', 'Private video', '', 'private'), it('v3', 'Blocked Song', 'B')] }
+      : { pageInfo: { totalResults: 5 }, items: [it('v4', 'Song Four', 'Four'), it('v5', 'Deleted video', '')] }));
+  }
+  if (u.includes('/youtube/v3/videos')) return new Response(JSON.stringify({ items: [
+    { id: 'v1', contentDetails: { duration: 'PT3M25S' } }, { id: 'v3', contentDetails: { duration: 'PT2M', regionRestriction: { blocked: ['US', 'DE'] } } },
+    { id: 'v4', contentDetails: { duration: 'PT1H1S', regionRestriction: { blocked: ['DE'] } } }] }));
+  return new Response('{}', { status: 404 });
+};
+const siteEnv = { DB: fakeD1(), CHANNELS: 'christmas', ACCESS_TEAM: TEAM, ACCESS_AUD: AUD, YT_KEY: 'yt-key', GOOGLE_CLIENT_ID: 'cid.apps.googleusercontent.com', ALLOW_ORIGIN: 'https://xmaslounge.pages.dev' };
+const site = (path, opts = {}) => siteApi(new Request('https://xmaslounge.pages.dev/api' + path, { method: opts.method || 'GET',
+  headers: opts.token === null ? {} : { 'Cf-Access-Jwt-Assertion': opts.token || good }, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) }), opts.env || siteEnv, siteFetch);
+check('site: no Access token, refused', (await site('/config', { token: null })).status === 401);
+check('site: a token for another application, refused', (await site('/config', { token: await jwt({ aud: ['other'], iss: 'https://lounge.cloudflareaccess.com', exp: nowSec + 600 }) })).status === 401);
+check('site: an expired token, refused', (await site('/config', { token: await jwt({ aud: [AUD], iss: 'https://lounge.cloudflareaccess.com', exp: nowSec - 5 }) })).status === 401);
+const otherPair = await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+check('site: a token signed by some other key, refused', (await site('/config', { token: await jwt({ aud: [AUD], iss: 'https://lounge.cloudflareaccess.com', exp: nowSec + 600 }, otherPair.privateKey) })).status === 401);
+check('site: Access not set up on the site, so nothing is let through', (await site('/config', { env: Object.assign({}, siteEnv, { ACCESS_AUD: '' }) })).status === 401);
+forgetAccessKeys();
+check('accessEmail: the signed-in email', await accessEmail(new Request('https://x/', { headers: { Cookie: 'a=1; CF_Authorization=' + good } }), siteEnv, siteFetch) === 'dan@example.com');
+res = await site('/config');
+check('site: signed in, the built-in Client ID', res.status === 200 && (await res.json()).clientId === 'cid.apps.googleusercontent.com');
+res = await site('/feed?channel=christmas');
+body = await res.json();
+check('site: SomaFM\'s list read now, and its plays recorded on the way through', res.status === 200 && body.songs[0].title === 'Through The Site'
+  && siteEnv.DB.raw.prepare("SELECT COUNT(*) n FROM plays WHERE title = 'Through The Site'").get().n === 1 && siteEnv.DB.raw.prepare('SELECT ok FROM runs').get().ok === 1);
+check('site: only recorded stations', (await site('/feed?channel=groovesalad')).status === 400);
+res = await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt');
+body = await res.json();
+check('site: the playlist through YouTube\'s API, every page; private, deleted and US-blocked videos counted as hidden',
+  res.status === 200 && body.items.map(i => i.id).join() === 'v1,v4' && body.items[0].ch === 'Artist - Topic' && body.items[0].secs === 205 && body.items[1].secs === 3601
+  && body.hidden === 3 && body.complete && body.read === 5 && body.expected === 2 && outside.some(u => /key=yt-key/.test(u)), JSON.stringify(body));
+check('site: no YouTube key set up says so', (await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt', { env: Object.assign({}, siteEnv, { YT_KEY: '' }) })).status === 503);
+check('site: a bad playlist id is refused', (await site('/playlist?list=../x')).status === 400);
+res = await site('/state', { method: 'PUT', body: { base: 0, state: { marks: {} } } });
+check('site: the synced document and plays, without the recorder key', res.status === 200 && (await (await site('/state')).json()).version === 1
+  && (await (await site('/plays?channel=christmas&since=0')).json()).plays.length === 1);
+check('isoSeconds', isoSeconds('PT4M5S') === 245 && isoSeconds('PT1H') === 3600 && isoSeconds('P1DT1S') === 86401 && isoSeconds('') === 0);
 
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

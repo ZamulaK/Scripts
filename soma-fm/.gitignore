@@ -5,3 +5,5 @@ somafm-*-history-*.csv
 soma-xmas-checker-backup-*.json
 .wrangler/
 .dev.vars
+# the userscript is copied into the site when it's deployed (site/deploy.js)
+site/public/soma-xmas-checker.user.js
