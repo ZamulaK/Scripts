@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.25.0
+// @version      3.25.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -12,7 +12,6 @@
 // @grant        GM_setValue
 // @grant        GM_setClipboard
 // @grant        GM_listValues
-// @grant        unsafeWindow
 // @connect      www.youtube.com
 // @connect      m.youtube.com
 // @connect      youtube.com
@@ -1776,7 +1775,6 @@ function main() {
       <span class="btns">
         <button type="button" class="ctl" id="refresh"></button>
         <button type="button" class="ctl" id="live"></button>
-        <button type="button" class="ctl" id="awake"></button>
       </span>
       <div class="controls">
         <span class="status" role="status"></span>
@@ -2661,14 +2659,6 @@ function main() {
     const liveBtn = $('#live');
     setLabel(liveBtn, 'Live updates: ' + (live ? 'On' : 'Off'), 'Live: ' + (live ? 'On' : 'Off'));
     liveBtn.setAttribute('aria-pressed', String(live));
-    const aw = $('#awake');
-    const awState = !wakeApi() ? ['Not supported', 'N/A'] : !keepAwake ? ['Off', 'Off'] : wakeError ? ['Blocked', 'Blocked'] : wakeLock ? ['On', 'On'] : ['Waiting', 'Waiting'];
-    setLabel(aw, 'Keep screen on: ' + awState[0], 'Awake: ' + awState[1]);
-    aw.setAttribute('aria-pressed', String(keepAwake && !!wakeApi()));
-    aw.disabled = !wakeApi();
-    aw.title = !wakeApi() ? "This browser can't keep the screen on for a page."
-      : wakeError ? `The browser refused: ${wakeError}. Tap to try again.`
-      : keepAwake ? 'Holds while this page is the visible tab. Turns back on when you return to it.' : '';
 
     const f = $('.filters');
     f.textContent = '';
@@ -3613,42 +3603,11 @@ function main() {
   }
   $('#live').onclick = () => { live = !live; GM_setValue('live', live); schedule(); render(); };
 
-  /* ----- Keep screen on (Screen Wake Lock) ----- */
-  // The browser holds it only while this page is the visible tab and releases it whenever the tab is
-  // hidden or the screen is turned off by hand, so it's asked for again each time the page comes back.
-  let keepAwake = GM_getValue('keepAwake', false), wakeLock = null, wakeError = '';
-  function wakeApi() {
-    try {
-      const nav = (typeof unsafeWindow !== 'undefined' && unsafeWindow.navigator && unsafeWindow.navigator.wakeLock) ? unsafeWindow.navigator : navigator;
-      return nav.wakeLock && typeof nav.wakeLock.request === 'function' ? nav.wakeLock : null;
-    } catch (e) { return null; }
-  }
-  async function holdScreen() {
-    const api = wakeApi();
-    if (!keepAwake || !api || wakeLock || document.hidden) { quietRender(); return; }
-    try {
-      const lock = await api.request('screen');
-      wakeLock = lock; wakeError = '';
-      lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; quietRender(); });
-    } catch (e) { wakeError = (e && (e.message || e.name)) || 'not allowed'; }
-    quietRender();
-  }
-  async function releaseScreen() {
-    const lock = wakeLock; wakeLock = null; wakeError = '';
-    if (lock) { try { await lock.release(); } catch (e) {} }
-    render();
-  }
-  $('#awake').onclick = () => {
-    if (keepAwake && !wakeError) { keepAwake = false; GM_setValue('keepAwake', false); releaseScreen(); }
-    else { keepAwake = true; GM_setValue('keepAwake', true); wakeError = ''; holdScreen(); }
-  };
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) holdScreen(); });
   document.addEventListener('visibilitychange', async () => {
     if (!document.hidden && live) { await loadSongs(); await cloudSync(false); await loadPlaylist(false); quietRender(); }
   });
 
   render();
-  holdScreen();
   // Back from signing in to Google in this tab (when the browser blocked the sign-in window)
   const back = GM_getValue('signin:reopen', 0);
   if (back) { GM_setValue('signin:reopen', 0); if (Date.now() - back < 5 * 60000) openShuffle(); }

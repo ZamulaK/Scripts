@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.25.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.25.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -107,7 +107,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `shuffle:last:<playlistId>` | `{ before, at }`: the order before the last shuffle, for "Show the earlier order". |
 | `shuffle:units` | `{ day, units }`: this script's own estimate of quota used today (Pacific date). |
 | `shuffle:lastRun` | `{ kind, at, units, moves, complete }`: quota used by the last shuffle or put-back, shown under the Quota line. |
-| `filters`, `favOnly`, `live`, `keepAwake`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:`, `cloud` keys or the other `shuffle:` keys). |
+| `filters`, `favOnly`, `live`, `pageSize`, `topSort` | Per-device settings. Not included in backups (nor are the `signin:`, `cloud` keys or the other `shuffle:` keys). |
 
 **Song key** = `Matcher.markKey(artist, title)` = normalized artist + `|` + normalized title (case, accents, punctuation ignored). Marks, dislikes, stats and caches all use it.
 
@@ -132,7 +132,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 4. **SomaFM's page has no viewport tag.** Without the one `main()` adds, phones and tablets lay the page out 980 px wide and shrink it.
 5. **YouTube from non-US servers hides region-blocked songs** (from Anthropic's cloud, 41 of 78 were hidden). Anything checking real playlist contents must run from a US connection, such as Dan's machines.
 6. **The 63-character cutoff** in SomaFM titles and artists can leave an unclosed bracket (`[Rudolph the Red-Nosed Re`) or a word fragment. The matcher treats an open bracket as closed and lets a final fragment match the start of a word (a one-letter fragment only after two or more matched words).
-7. **Tampermonkey's sandbox:** the wake lock is looked up on `unsafeWindow.navigator` first. `@connect` must list `www.youtube.com`, `m.youtube.com` and `youtube.com`, or requests fail as "network error".
+7. **Tampermonkey's sandbox:** `@connect` must list `www.youtube.com`, `m.youtube.com` and `youtube.com`, or requests fail as "network error".
 8. **Background redraws are paused while a dialog or the song picker is open** (`quietRender()` + `renderPending`), then caught up on close. Rendering under an open dialog made closing it lag.
 9. **Performance (see also 14):** matching every recorded song against the playlist takes about 0.3 s on a desktop and over 2 s on a tablet. `statusCache` is keyed by song key: marks and dislikes **delete only that key**. Clear the whole cache only when the playlist or the gone list changes. **Compare contents, not objects** (`samePlaylist`, `goneSig`): every `GM_getValue` returns a new object, so until 3.15.1 the once-a-minute check cleared the cache and re-matched everything each minute (seconds-long freezes on a tablet). A background redraw also waits while a category menu is open (3.18.2; before that, a focused drop-down), since redrawing would close it.
 10. **An incomplete playlist read must never mark songs as gone.** `Reader.read` reports `complete` only when it reaches the stated total (minus "N unavailable videos are hidden"). `Archive.update` also refuses if more than max(5, 25%) of songs vanish at once. Short or failed reads are retried twice (after 5 s and 15 s, `Reader.readRetry`); if still short, the fuller previous read is kept and the next check tries again. `loadPlaylist` runs one read at a time.
@@ -175,7 +175,7 @@ Mommy…" played 9:47 PM, then not until 2:48 PM. Dan's view: SomaFM probably pl
 
 ## 8. UI notes
 
-- **Header:** title left, 📊 Stats always top right. Refresh / Live / Awake sit under Stats when they fit beside the title. `fitHeader()` **measures** (full labels → short labels "Refresh / Live: On / Awake: On" → own row) and re-runs on resize and label changes. Dan explicitly asked for this arrangement at 600 px portrait.
+- **Header:** title left, 📊 Stats always top right. Refresh / Live sit under Stats when they fit beside the title. `fitHeader()` **measures** (full labels → short labels "Refresh / Live: On / Awake: On" → own row) and re-runs on resize and label changes. Dan explicitly asked for this arrangement at 600 px portrait.
 - **Chips** toggle multi-select, All resets, and all-on = All. "Not in playlist" includes gone songs. The ⭐ chip (3.20, first on the category row) shows only favorites, together with any category chips; its count, like theirs, is cards and follows a star tap without a redraw. **Each chip row fits on one line at 600 px** (Dan asked, 3.20.1): below desktop width the chips are tighter and two status chips use short names ("Not in list", "In list"; the aria-label keeps the full one), and `fitChips()` measures each row and shrinks its text up to 15% if it would wrap, since the counts grow with the play history.
 - **Cards:** shading = slate on not-in-playlist, lighter slate on other version, plain on matches, dashed on disliked. Every row of buttons must fit on **one line at tablet portrait width** (Dan's requirement).
 - **"Working…"** pill shows after 150 ms for slow actions (`runBusy`). Dialogs are `<dialog>` with `showModal`, and tap outside closes.
@@ -320,6 +320,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 | 3.24.0 | In its place, a card with how long until a song comes back: the rotation headline in decimal hours (14.7 h) so it fits on one line at 600 px. Dan finds it one of the most interesting numbers. Page check serves an empty feed (`noFeed`) so only the seeded plays count. |
 | 3.24.1 | "Another version" and "not in your playlist" cards show only with at least 2 songs or 1% of plays (Dan: one song is better seen through its filter chip). Page check `feed` option serves a made-up live list. |
 | 3.25.0 | Christmas Lounge site (§8c): the same file runs as a web page on Cloudflare in site mode, behind Cloudflare Access, with the YouTube key and Client ID built in. Playlist read with YouTube's API there. |
+| 3.25.1 | Keep screen on (Awake) removed: the recorder records around the clock, so no device has to stay awake (Dan asked). |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

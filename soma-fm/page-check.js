@@ -112,7 +112,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     const { ctx, page, errors } = await openPage(browser, { width, scheme });
     const info = await inShadow(page, r => {
       const h = r.querySelector('header'), R = q => r.querySelector(q).getBoundingClientRect();
-      const b = ['#refresh', '#live', '#awake'].map(R), st = R('#stats'), h1 = R('h1');
+      const b = ['#refresh', '#live'].map(R), st = R('#stats'), h1 = R('h1');
       return { mode: h.classList.contains('stacked') ? 'own row' : 'under Stats', statsBesideTitle: st.top < h1.bottom,
         buttonsOneRow: new Set(b.map(x => Math.round(x.top))).size === 1, overflow: document.documentElement.scrollWidth > innerWidth,
         undefinedText: /undefined|NaN/.test(r.querySelector('ol').textContent), cards: r.querySelectorAll('ol > li:not(.gap):not(.empty)').length };
