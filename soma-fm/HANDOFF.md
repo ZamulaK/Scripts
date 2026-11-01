@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.23.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.23.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -163,6 +163,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 - **Heard so far:** playlist songs matched automatically or by linked mark (unlinked marks don't say which video, so they don't count).
 - **Replay headline = recorded time × different songs ÷ plays.** Gaps can't skew it: neither the time nor the plays inside a gap are counted. A simulation (3 songs at 10/30/90 min, 8 h unrecorded) gave a true 21 min and this estimate 21 min. It's in the tests.
 - **Measured replays (since 3.23.0):** one average and median of the time between a song's plays (`Stats.intervals`). A gap-free replay always counts. One across a recording gap counts only when it's in line with that song's gap-free replays: the song has at least 2, and it's at most 25% longer than the longest (`GAP_FIT`). So for a song that comes back every ~8 h, a 22 h replay across a gap is left out, but for one that varies from 4 to 28 h it counts. Dan asked for this once the recorder made gaps rare; before that, the panel showed gap-free and across-gap averages separately, with which way each leaned.
+- **Why the measured average runs above the gap-free one (checked Nov 1 on 2,423 plays):** gap-free replays averaged 11.5 h (1,339), the across-gap ones that count 13.9 h (570), the ones left out 29.5 h (268); all counted, 12.2 h; headline 14.7 h. Across-gap replays are longer because a longer replay is more likely to have a gap inside it, not because plays were missed, so the gap-free average alone runs short. Six gaps by then (Oct 26, 27, 28, a 10-minute one on Oct 29, and two on Nov 1) put 838 of the 2,177 replays across a gap. With the recorder running, that share drops as new replays come in.
 - Per-song play logs (tap a count in Stats, or "▸ N plays" on a card) show every replay, read down each column (CSS `columns`). * marks a gap in between, and a replay left out of the averages is struck through.
 
 **Dan's data (CSV, Oct 25–26):** 286 plays, 188 songs, 17.3 h recorded in two stretches (7.7 h evening, 9.6 h morning, 6.9 h gap).
@@ -239,7 +240,7 @@ all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 116 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 117 real-page checks, including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`). The page check fakes the recorder with `page.route`.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
@@ -296,6 +297,7 @@ all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account
 | 3.21.0 | Cloud recorder, part 1: a Cloudflare Worker (`worker/`) records plays every 10 minutes; the userscript fills in missed stretches from it (`History.union`, `Cloud`), set up in Backup / Restore. Also fixed: the Undo section showed before any import (`.ssec` grid beat `hidden`). |
 | 3.22.0 | Cloud recorder, part 2: devices send their plays and sync marks, dislikes, favorites, categories, notes, remembered songs and original order through the recorder (`Sync`, `/state` with version check, `removed` for cleared marks and dislikes). Every 2 minutes and 3 s after a change. Live database migrated (`migrate-3.22.sql`). Spacing fixed in the Cloud recorder section. |
 | 3.23.0 | Daylight saving fix: a feed dated an hour off is moved back (`History.feedShift`, device and recorder), and what the Nov 1 glitch saved is repaired (`History.repair`). Replays across a gap count in the averages when in line with the song's others; one measured average instead of two. Play logs read down each column. |
+| 3.23.1 | The "not in your playlist" share tile is hidden while no song played is missing (Dan asked; it had been stuck at 0%), like "another version". |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |

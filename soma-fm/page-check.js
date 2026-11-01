@@ -415,11 +415,12 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   const stats = await inShadow(page, r => {
     const d = r.querySelector('#statsbox');
     const shares = [...r.querySelectorAll('.tile.share .v')].map(x => parseInt(x.textContent));
-    return { open: d.open, overflow: d.scrollWidth > d.clientWidth + 1, sections: r.querySelectorAll('.ssec').length, shareSum: shares.reduce((a, b) => a + b, 0), shareCount: shares.length, otherTile: !!r.querySelector('.tile.share.other'), otherSongs: !!r.querySelector('#statsbox .sline .chip.other'),
+    return { open: d.open, overflow: d.scrollWidth > d.clientWidth + 1, sections: r.querySelectorAll('.ssec').length, shareSum: shares.reduce((a, b) => a + b, 0), shareCount: shares.length, otherTile: !!r.querySelector('.tile.share.other'), otherSongs: !!r.querySelector('#statsbox .sline .chip.other'), noneTile: !!r.querySelector('.tile.share.none'), noneSongs: !!r.querySelector('#statsbox .sline .chip.none, #statsbox .sline .chip.gone'),
       headline: [...r.querySelectorAll('.sline')].map(x => x.textContent).find(x => /comes back about every/.test(x)) || '' };
   });
   check('Stats opens without overflow', stats.open && !stats.overflow && stats.sections >= 6, JSON.stringify(stats));
-  check('Stats shares add up to about 100%', stats.shareCount === (stats.otherSongs ? 4 : 3) && Math.abs(stats.shareSum - 100) <= 2, String(stats.shareSum));
+  check('Stats shares add up to about 100%', stats.shareCount === 2 + (stats.otherSongs ? 1 : 0) + (stats.noneSongs ? 1 : 0) && Math.abs(stats.shareSum - 100) <= 2, String(stats.shareSum));
+  check('The "not in your playlist" share shows only while some song played isn\'t in it', stats.noneTile === stats.noneSongs, JSON.stringify(stats));
   check('The "another version" share shows only while some song has another version', stats.otherTile === stats.otherSongs, JSON.stringify(stats));
   check('Stats shows the replay headline', /\d/.test(stats.headline), stats.headline);
   const statLens = await inShadow(page, r => r.querySelectorAll('#statsbox .slist .nm small .len').length);
