@@ -31,8 +31,10 @@ export async function record(env, channel, fetchFn = fetch) {
     const served = Date.parse(r.headers.get('Date') || '');
     if (isFinite(served)) nowS = served / 1000;
     const data = await r.json();
-    const row = await env.DB.prepare('SELECT at, artist, title, album FROM plays WHERE channel = ? ORDER BY at DESC LIMIT 1').bind(channel).first();
-    const { plays, breaks } = fromFeed(data && data.songs, nowS, row ? [row.at, row.artist, row.title, row.album] : null);
+    const rows = (await env.DB.prepare('SELECT at, artist, title, album FROM plays WHERE channel = ? ORDER BY at DESC LIMIT 60').bind(channel).all()).results || [];
+    const recent = [];
+    for (const r of rows) recent.push([r.at, r.artist, r.title, r.album]);
+    const { plays, breaks } = fromFeed(data && data.songs, nowS, recent);
     const stmts = upserts(env, channel, plays, nowSec());
     for (const b of breaks) stmts.push(env.DB.prepare('INSERT OR IGNORE INTO breaks (channel, at) VALUES (?, ?)').bind(channel, b));
     const at = Math.round(nowS);

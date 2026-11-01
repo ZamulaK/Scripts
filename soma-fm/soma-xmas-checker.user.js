@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.22.0
+// @version      3.23.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -299,16 +299,41 @@ const History = (() => {
     return moved <= hi ? moved : null;
   }
 
+  // A feed dated a whole hour off, as SomaFM's was when daylight saving time ended on Nov 1, 2026 (an hour late
+  // from 07:00 to 08:00 UTC, then an hour early from 09:00 to 10:00): seconds to add to every date, or 0. The
+  // newest row is the song playing now, so it started at most a song's length before now. An hour ahead can't be
+  // real. An hour behind is believed only when plays were being recorded at that time and that song isn't among
+  // them (an old copy of the list would repeat plays already recorded). recent: recorded plays, newest first.
+  const HOUR = 3600, SHIFT_FIT = 25 * 60;
+  function feedShift(songs, now, recent) {
+    const list = songs || [];
+    let top = null;
+    for (let i = 0; i < list.length; i++) {
+      const at = Number(list[i] && list[i].date);
+      if (isFinite(at) && at > 0 && (!top || at > Number(top.date))) top = list[i];
+    }
+    if (!top) return 0;
+    const at = Number(top.date), off = at - now;
+    if (off > FUTURE_SLACK && Math.abs(off - HOUR) <= SHIFT_FIT) return -HOUR;
+    if (Math.abs(off + HOUR) > SHIFT_FIT || !recent || !recent.length || recent[0][0] < at - 600) return 0;
+    const artist = String(top.artist || ''), title = String(top.title || '');
+    for (let i = 0; i < recent.length && recent[i][0] >= at; i++) if (recent[i][0] === at && recent[i][1] === artist && recent[i][2] === title) return 0;
+    return HOUR;
+  }
+
   // SomaFM feed rows -> plays, newest first; station IDs and rows without a time are dropped. Given now,
-  // a misdated play gets its date fixed (fixDate), or is dropped when it can't be.
-  function fromFeed(songs, now) {
+  // a feed an hour off is moved back (feedShift), and a misdated play gets its date fixed (fixDate), or is
+  // dropped when it can't be. recent: the plays recorded so far, newest first (optional).
+  function fromFeed(songs, now, recent) {
     const out = [];
     const list = songs || [];
+    const shift = now ? feedShift(list, now, recent) : 0;
     for (let i = 0; i < list.length; i++) {
       const x = list[i];
       if (!x || !x.artist || !x.title) continue;
       let at = Number(x.date);
       if (!isFinite(at) || at <= 0 || isBreak(String(x.artist), String(x.title))) continue;
+      at += shift;
       if (now) { at = fixDate(at, now); if (at === null) continue; }
       out.push([at, String(x.artist), String(x.title), String(x.album || '')]);
     }
@@ -317,14 +342,16 @@ const History = (() => {
   }
 
   // Start times of station IDs and breaks in the feed, newest first. Never shown; they only end the song before them.
-  function breaksFromFeed(songs, now) {
+  function breaksFromFeed(songs, now, recent) {
     const out = [];
     const list = songs || [];
+    const shift = now ? feedShift(list, now, recent) : 0;
     for (let i = 0; i < list.length; i++) {
       const x = list[i];
       if (!x || !isBreak(String(x.artist || ''), String(x.title || ''))) continue;
       let at = Number(x.date);
       if (!isFinite(at) || at <= 0) continue;
+      at += shift;
       if (now) { at = fixDate(at, now); if (at === null) continue; }
       out.push(at);
     }
@@ -365,6 +392,43 @@ const History = (() => {
       out.set(k, l.length % 2 ? l[m] : Math.round((l[m - 1] + l[m]) / 2));
     });
     return out;
+  }
+
+  // Undoes what an hour-off feed already saved (see feedShift). A run of at least 3 plays that each repeat the same
+  // song exactly an hour earlier is a copy dated an hour late; it's dropped, and the play after it is flagged after a
+  // gap, since the real plays of that hour were never listed with their right times. MOVED: plays dated an hour off
+  // that nothing else gives away. plays newest first; the same list back when nothing changes.
+  const MOVED = [[1793523537, 'Twisty', 'Deer Socks', HOUR]];   // Nov 1, 2026, played 09:58:57 UTC, saved as 08:58:57
+  function repair(plays) {
+    const id = (at, artist, title) => at + '\u0001' + artist + '\u0001' + title;
+    const have = new Set();
+    for (let i = 0; i < plays.length; i++) have.add(id(plays[i][0], plays[i][1], plays[i][2]));
+    const copy = p => have.has(id(p[0] - HOUR, p[1], p[2]));
+    const drop = new Set(), flag = new Set();
+    for (let i = 0; i < plays.length;) {
+      if (!copy(plays[i])) { i++; continue; }
+      let j = i;
+      while (j < plays.length && copy(plays[j])) j++;
+      if (j - i >= 3) { for (let k = i; k < j; k++) drop.add(k); if (i > 0) flag.add(i - 1); }
+      i = j;
+    }
+    const out = [];
+    let changed = drop.size > 0;
+    for (let i = 0; i < plays.length; i++) {
+      if (drop.has(i)) continue;
+      let p = plays[i];
+      for (let m = 0; m < MOVED.length; m++) {
+        const v = MOVED[m];
+        if (p[0] !== v[0] || p[1] !== v[1] || p[2] !== v[2]) continue;
+        changed = true;
+        p = have.has(id(v[0] + v[3], v[1], v[2])) ? null : [v[0] + v[3], p[1], p[2], p[3], 1];
+        break;
+      }
+      if (!p) continue;
+      if (flag.has(i) && !p[4]) { p = p.slice(0, 4).concat([1]); changed = true; }
+      out.push(p);
+    }
+    return changed ? out.sort((a, b) => b[0] - a[0]) : plays;
   }
 
   // Saved plays dated in the future removed (see FUTURE_SLACK); the same list back when there are none
@@ -475,7 +539,7 @@ const History = (() => {
     return (h ? h + ':' + pad(m) : m) + ':' + pad(r);
   }
 
-  return { fromFeed, fixDate, breaksFromFeed, mergeBreaks, measuredLengths, dropFuture, merge, union, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
+  return { fromFeed, fixDate, feedShift, repair, breaksFromFeed, mergeBreaks, measuredLengths, dropFuture, merge, union, formatDate, formatTime, toCSV, coverage, lengthStats, formatTotal, formatClock };
 })();
 
 /* ---------- Playlist memory (pure; tested by soma-xmas-checker.test.js) ---------- */
@@ -731,25 +795,22 @@ const Stats = (() => {
     const list = [];
     songs.forEach(s => { s.r = statusOf(s.artist, s.title, s.key); list.push(s); });
     const byCount = (a, b) => b.count - a.count || b.last - a.last;
-    // Time between replays of the same song. An interval is left out if the recording has a gap inside it:
-    // a play flagged afterGap at time q means plays just before q were missed, so any interval
-    // (older, newer] that contains such a q isn't a true replay interval.
+    // Time between replays of the same song: the replays that count (see intervals)
     const gapTimes = [];
     for (let i = 0; i < n; i++) if (plays[i][4]) gapTimes.push(plays[i][0]);
-    const spansGap = (older, newer) => { for (let g = 0; g < gapTimes.length; g++) if (gapTimes[g] > older && gapTimes[g] <= newer) return true; return false; };
     const repeatGaps = [];
-    let repeatsSpanningGap = 0, gapRepeatSum = 0;
-    for (let i = 0; i < list.length; i++) for (let k = 1; k < list[i].times.length; k++) {
-      const older = list[i].times[k - 1], newer = list[i].times[k];
-      if (spansGap(older, newer)) { repeatsSpanningGap++; gapRepeatSum += newer - older; }
-      else repeatGaps.push(newer - older);
+    let repeatsSpanningGap = 0, gapRepeatsCounted = 0;
+    for (let i = 0; i < list.length; i++) {
+      const iv = intervals(list[i].times, gapTimes);
+      for (let k = 0; k < iv.length; k++) {
+        if (iv[k].spansGap) repeatsSpanningGap++;
+        if (iv[k].counted) { repeatGaps.push(iv[k].since); if (iv[k].spansGap) gapRepeatsCounted++; }
+      }
     }
     let repeatSum = 0;
     for (let i = 0; i < repeatGaps.length; i++) repeatSum += repeatGaps[i];
     // Headline estimate, counting only what was recorded: hours actually recorded x different songs / plays.
-    // Gaps can't skew it, since neither the time nor any plays inside a gap are counted. (Leaving out
-    // replays that span a gap would bias low, because long intervals are the ones gaps tend to fall in;
-    // keeping them as measured biases high, because plays inside the gap were missed.)
+    // Gaps can't skew it, since neither the time nor any plays inside a gap are counted.
     const rateRepeatSecs = n > list.length && covered ? covered * list.length / n : 0;
     // Of the most recent plays, how many were the first time that song was recorded
     const recent = Math.min(100, n);
@@ -790,8 +851,7 @@ const Stats = (() => {
       perHour: covered ? n / (covered / 3600) : 0,
       unique: list.length, repeated, repeatPlays: n - list.length, avgPlays: list.length ? n / list.length : 0,
       medianRepeatSecs: median(repeatGaps), avgRepeatSecs: repeatGaps.length ? repeatSum / repeatGaps.length : 0,
-      rateRepeatSecs, avgGapRepeatSecs: repeatsSpanningGap ? gapRepeatSum / repeatsSpanningGap : 0,
-      repeatIntervals: repeatGaps.length, repeatsSpanningGap, recent, recentFirsts: firsts, gapTimes,
+      rateRepeatSecs, repeatIntervals: repeatGaps.length, repeatsSpanningGap, gapRepeatsCounted, recent, recentFirsts: firsts, gapTimes,
       top: list.slice().sort(byCount).slice(0, 10),
       topMissing: missing.sort(byCount).slice(0, 10), missingSongs: missing.length,
       recentRepeats: keep(list, s => s.count > 1).sort((a, b) => b.last - a.last || b.count - a.count).slice(0, 10),
@@ -810,16 +870,30 @@ const Stats = (() => {
     const d = Math.floor(h / 24), rh = h % 24;
     return `${d} days${rh ? ' ' + rh + ' h' : ''}`;
   }
-  // One song's plays, newest first, each with the time since its previous play and whether a
-  // recording gap falls in between (plays may have been missed there). times: oldest first.
-  function playLog(times, gapTimes) {
+  // One song's replays, oldest first: each play after the first, the time since the one before, whether a recording
+  // gap falls in between (a play flagged after a gap inside it, so plays may have been missed and it may be too long),
+  // and whether it counts toward the averages. A gap-free replay counts; one across a gap counts only when it's in
+  // line with the song's gap-free replays: there are at least 2 and it's at most a quarter longer than the longest.
+  // times: oldest first; gapTimes: times of the plays flagged after a gap.
+  const GAP_FIT = 1.25;
+  function intervals(times, gapTimes) {
     const out = [];
-    for (let k = times.length - 1; k >= 0; k--) {
-      const at = times[k], prev = k > 0 ? times[k - 1] : null;
+    let longest = 0, clean = 0;
+    for (let k = 1; k < times.length; k++) {
+      const older = times[k - 1], at = times[k];
       let spansGap = false;
-      if (prev !== null) for (let g = 0; g < gapTimes.length; g++) if (gapTimes[g] > prev && gapTimes[g] <= at) { spansGap = true; break; }
-      out.push({ at, first: prev === null, spansGap, since: prev === null ? 0 : at - prev });
+      for (let g = 0; g < gapTimes.length; g++) if (gapTimes[g] > older && gapTimes[g] <= at) { spansGap = true; break; }
+      if (!spansGap) { clean++; if (at - older > longest) longest = at - older; }
+      out.push({ at, since: at - older, spansGap, counted: !spansGap });
     }
+    if (clean >= 2) for (let k = 0; k < out.length; k++) if (out[k].spansGap && out[k].since <= longest * GAP_FIT) out[k].counted = true;
+    return out;
+  }
+  // One song's plays, newest first, each as in intervals; the oldest is labeled first. times: oldest first.
+  function playLog(times, gapTimes) {
+    const iv = intervals(times, gapTimes), out = [];
+    for (let k = iv.length - 1; k >= 0; k--) out.push(Object.assign({ first: false }, iv[k]));
+    if (times.length) out.push({ at: times[0], first: true, spansGap: false, counted: false, since: 0 });
     return out;
   }
 
@@ -834,7 +908,7 @@ const Stats = (() => {
     return { times, gapTimes };
   }
 
-  return { compute, formatSpan, playLog, songTimes };
+  return { compute, formatSpan, intervals, playLog, songTimes };
 })();
 
 /* ---------- Reading the YouTube playlist (tested by soma-xmas-checker.test.js) ---------- */
@@ -1634,8 +1708,8 @@ function main() {
     .ctbtn[aria-expanded="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
     .ctbtn[aria-expanded="true"] .caret{transform:rotate(180deg)}
     .plog{grid-column:1 / -1;border-top:1px dashed var(--line);padding-top:.4rem;margin-top:.15rem}
-    .plog ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.15rem 1rem;font-size:.82em}
-    .plog li{display:block;background:none;border:0;border-radius:0;padding:0;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .plog ul{margin:0;padding:0;list-style:none;columns:15rem;column-gap:1rem;font-size:.82em}
+    .plog li{display:block;break-inside:avoid;margin-bottom:.15rem;background:none;border:0;border-radius:0;padding:0;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .plog li span{color:var(--muted)}
     .plog li.gapped span{color:var(--other-fg)}
     .plog li.this b{text-decoration:underline;text-underline-offset:2px}
@@ -2051,9 +2125,10 @@ function main() {
   const HKEY = 'history:' + channel;
   let history = GM_getValue(HKEY, []);
   if (!Array.isArray(history)) history = [];
-  // Plays saved with a future date (a SomaFM feed glitch, or merged in from a backup) would block new plays
+  // Plays saved with a future date (a SomaFM feed glitch, or merged in from a backup) would block new plays;
+  // plays an hour-off feed saved are put right too (History.repair)
   function clearFuture() {
-    const clean = History.dropFuture(history, Date.now() / 1000);
+    const clean = History.repair(History.dropFuture(history, Date.now() / 1000));
     if (clean !== history) { history = clean; GM_setValue(HKEY, history); }
   }
   clearFuture();
@@ -2100,11 +2175,11 @@ function main() {
       // "Now" from SomaFM's server clock when it sends one, so a device clock that's off doesn't move real plays
       const served = Date.parse(r.headers.get('Date') || '');
       const nowS = (isFinite(served) ? served : Date.now()) / 1000;
-      const fetched = History.fromFeed(data.songs, nowS);
+      const fetched = History.fromFeed(data.songs, nowS, history);
       if (fetched.length) nowAt = fetched[0][0];
       const m = History.merge(history, fetched, HISTORY_MAX);
       if (m.added) { history = m.plays; rowBase = null; measured = null; GM_setValue(HKEY, history); }
-      const nb = History.mergeBreaks(breaks, History.breaksFromFeed(data.songs, nowS), BREAKS_MAX);
+      const nb = History.mergeBreaks(breaks, History.breaksFromFeed(data.songs, nowS, history), BREAKS_MAX);
       if (nb !== breaks) { breaks = nb; measured = null; GM_setValue(BKEY, breaks); }
       songsFrom = 'live';
     } catch (e) {
@@ -2163,7 +2238,7 @@ function main() {
       if (!d.recording) cloudStatus = { at: Date.now(), ok: true, off: true, total };
       else {
         const u = History.union(history, History.dropFuture(Cloud.cleanPlays(d.plays), Date.now() / 1000), HISTORY_MAX);
-        if (u.added || u.filled) { history = u.plays; rowBase = null; measured = null; GM_setValue(HKEY, history); changed = true; }
+        if (u.added || u.filled) { history = History.repair(u.plays); rowBase = null; measured = null; GM_setValue(HKEY, history); changed = true; }
         const nb = History.mergeBreaks(breaks, Cloud.cleanBreaks(d.breaks), BREAKS_MAX);
         if (nb !== breaks) { breaks = nb; measured = null; GM_setValue(BKEY, breaks); }
         if (Number(d.now) > 0) GM_setValue(CTKEY, Number(d.now));
@@ -2529,18 +2604,22 @@ function main() {
     render();
   }
 
-  // One song's play log: each play with the time since the previous one; * marks a recording gap in between
+  // One song's play log, read down each column: each play with the time since the previous one; * marks a
+  // recording gap in between, struck through when it's left out of the averages (Stats.intervals)
   function playLogBox(cls, times, gapTimes, thisAt) {
     const box = el('div', cls), ul = el('ul', '');
-    let gaps = false;
+    let gaps = false, out = false;
     for (const e of Stats.playLog(times, gapTimes)) {
       if (e.spansGap) gaps = true;
       const it = el('li', (e.spansGap ? 'gapped' : '') + (e.at === thisAt ? ' this' : ''));
-      it.append(el('b', '', History.formatDate(e.at) + ' ' + History.formatTime(e.at)), ' ',
-        el('span', '', e.first ? 'first recorded' : Stats.formatSpan(e.since) + (e.spansGap ? '*' : '')));
+      const since = e.first ? 'first recorded' : Stats.formatSpan(e.since) + (e.spansGap ? '*' : '');
+      const sp = el('span', '');
+      if (e.spansGap && !e.counted) { out = true; sp.append(el('s', '', since)); } else sp.append(since);
+      it.append(el('b', '', History.formatDate(e.at) + ' ' + History.formatTime(e.at)), ' ', sp);
       ul.append(it);
     }
-    box.append(ul, el('p', 'plegend', 'Time since the previous play.' + (gaps ? ' * A recording gap falls in between, so plays may have been missed.' : '')));
+    box.append(ul, el('p', 'plegend', 'Time since the previous play.' + (gaps ? ' * A recording gap falls in between, so plays may have been missed.' : '') +
+      (out ? ' Struck through: left out of the averages, since it isn\'t in line with this song\'s gap-free replays (or there are too few to tell).' : '')));
     return box;
   }
 
@@ -2894,12 +2973,8 @@ function main() {
       [st.avgPlays.toFixed(1), 'plays per song']]));
     if (st.rateRepeatSecs) {
       rot.append(line('A song comes back about every ', el('b', '', Stats.formatSpan(st.rateRepeatSecs)), ' of listening.'));
-      rot.append(el('div', 'snote', `Worked out from ${Stats.formatSpan(st.coveredSecs)} of recorded time and ${fmt(st.plays)} plays of ${fmt(st.unique)} songs. ` +
-        'Only recorded time and the plays in it are counted, so gaps in recording don\'t skew it.'));
-      const parts = [];
-      if (st.repeatIntervals) parts.push(`back-to-back recorded replays average ${Stats.formatSpan(st.avgRepeatSecs)} (median ${Stats.formatSpan(st.medianRepeatSecs)}, ${fmt(st.repeatIntervals)} replays), which runs short because gaps tend to fall in the longer intervals`);
-      if (st.repeatsSpanningGap) parts.push(`replays across a gap average ${Stats.formatSpan(st.avgGapRepeatSecs)} (${fmt(st.repeatsSpanningGap)}), which runs long because plays inside the gap were missed`);
-      if (parts.length) rot.append(el('div', 'snote', 'Measured directly: ' + parts.join('; ') + '.'));
+      rot.append(el('div', 'snote', `Worked out from ${Stats.formatSpan(st.coveredSecs)} of recorded time and ${fmt(st.plays)} plays of ${fmt(st.unique)} songs.`));
+      if (st.repeatIntervals) rot.append(el('div', 'snote', `Measured from each song's replays: ${Stats.formatSpan(st.avgRepeatSecs)} on average, median ${Stats.formatSpan(st.medianRepeatSecs)} (${fmt(st.repeatIntervals)} replays).`));
     }
     const pct = st.recent ? Math.round(st.recentFirsts / st.recent * 100) : 0;
     rot.append(line(`Of the last ${fmt(st.recent)} plays, `, el('b', '', `${fmt(st.recentFirsts)} (${pct}%)`), ' were songs heard for the first time.'),
@@ -3055,7 +3130,7 @@ function main() {
     const chans = new Set(Object.keys(inc.history).concat(mode === 'replace' ? Object.keys(before.history) : []));
     chans.forEach(ch => {
       const mine = before.history[ch] || [], theirs = inc.history[ch] || [];
-      GM_setValue('history:' + ch, mode === 'merge' ? Backup.mergeHistory(mine, theirs, HISTORY_MAX) : theirs.slice(0, HISTORY_MAX));
+      GM_setValue('history:' + ch, History.repair(mode === 'merge' ? Backup.mergeHistory(mine, theirs, HISTORY_MAX) : theirs.slice(0, HISTORY_MAX)));
     });
     GM_setValue('marks', mode === 'merge' ? Backup.mergeMarks(before.marks, inc.marks) : inc.marks);
     GM_setValue('dislikes', mode === 'merge' ? Backup.mergeDislikes(before.dislikes, inc.dislikes) : inc.dislikes);

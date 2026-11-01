@@ -130,8 +130,18 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     await page.waitForTimeout(500);
     const box = await inShadow(page, r => { const b = r.querySelector('#statsbox').getBoundingClientRect(); return { l: Math.round(b.left), r: Math.round(innerWidth - b.right), w: Math.round(b.width) }; });
     check('1600px: Stats panel is wide (over 1100 px) and centered', box.w > 1100 && Math.abs(box.l - box.r) <= 2, JSON.stringify(box));
-    const cut = await inShadow(page, r => { r.querySelector('.ctbtn').click(); return [...r.querySelectorAll('.plog li')].filter(x => x.scrollWidth > x.clientWidth + 1).length; });
-    check('1600px: Stats play log entries are not cut off', cut === 0, String(cut));
+    await inShadow(page, r => r.querySelector('.ctbtn').click());   // the log is built a frame later
+    await page.waitForTimeout(300);
+    const cut = await inShadow(page, r => [r.querySelectorAll('.plog li').length, [...r.querySelectorAll('.plog li')].filter(x => x.scrollWidth > x.clientWidth + 1).length]);
+    check('1600px: Stats play log entries are not cut off', cut[0] > 0 && cut[1] === 0, String(cut));
+    // In list order, each entry is below the one before or at the top of the next column to the right
+    const order = await inShadow(page, r => {
+      const b = [...r.querySelector('.plog').querySelectorAll('li')].map(x => x.getBoundingClientRect());
+      let ok = true;
+      for (let i = 1; i < b.length; i++) if (!(Math.abs(b[i].left - b[i - 1].left) < 2 ? b[i].top > b[i - 1].top : b[i].left > b[i - 1].left && b[i].top < b[i - 1].top)) ok = false;
+      return { ok, n: b.length, cols: new Set(b.map(x => Math.round(x.left))).size };
+    });
+    check('1600px: the play log reads down each column, then the next', order.ok && order.cols > 1 && order.n > order.cols, JSON.stringify(order));
     await ctx.close();
   }
 

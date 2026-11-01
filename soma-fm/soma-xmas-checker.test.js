@@ -219,6 +219,38 @@ function historyChecks() {
   const newDayAhead = H.merge(savedHour, H.fromFeed(feed([[nowS - 30 + 86400, 'New', 'Misdated']].concat(repeatDayAhead)), nowS), 100);
   check('feed: a new play dated a day ahead is recorded at the right time, with no gap',
     newDayAhead.added === 1 && newDayAhead.plays[0][0] === nowS - 30 && newDayAhead.plays[0][2] === 'Misdated' && !newDayAhead.gap);
+  // Nov 1, 2026: around the end of daylight saving time the feed dated every play an hour late, then an hour early
+  const rec = [[nowS - 100, 'B', 'Two', ''], [nowS - 300, 'A', 'One', '']];
+  const late = H.fromFeed(feed([[nowS + 3600 + 50, 'C', 'Three'], [nowS + 3600 - 100, 'B', 'Two'], [nowS + 3600 - 300, 'A', 'One']]), nowS + 60, rec);
+  check('feed an hour late: every date moved back an hour (the copies of recorded plays land on them)',
+    late.length === 3 && late[0][0] === nowS + 50 && late[1][0] === nowS - 100 && H.merge(rec, late, 100).added === 1);
+  const early = H.fromFeed(feed([[nowS + 400 - 3600, 'D', 'Four'], [nowS + 50 - 3600, 'C', 'Three']]), nowS + 500, rec);
+  check('feed an hour early, while recording: moved forward an hour', early[0][0] === nowS + 400 && early[1][0] === nowS + 50);
+  const stale = H.fromFeed(feed([[nowS - 100, 'B', 'Two'], [nowS - 300, 'A', 'One']]), nowS + 3500, rec);
+  check('an old copy of the list (its newest play already recorded) is not moved', stale[0][0] === nowS - 100);
+  check('an hour early is not believed with nothing recorded then', H.feedShift(feed([[nowS - 3500, 'D', 'Four']]), nowS, []) === 0
+    && H.feedShift(feed([[nowS - 3500, 'D', 'Four']]), nowS, [[nowS - 9000, 'Z', 'Old', '']]) === 0);
+  check('a normal list, and one a day ahead, are not moved by an hour', H.feedShift(feed([[nowS - 200, 'Z', 'Real']]), nowS, rec) === 0
+    && H.feedShift(feed([[nowS + 86400 - 300, 'X', 'Tomorrow']]), nowS, rec) === 0);
+  // What the Nov 1 glitch saved: an hour of plays copied an hour later, hiding that hour's real plays, and one play saved an hour early
+  const D = 1793523537;   // Deer Socks, saved an hour early
+  const night = [[D + 3755, 'E', 'Carol'], [D, 'Twisty', 'Deer Socks', ''], [D - 111, 'F', 'White Christmas']];
+  for (let k = 0; k < 5; k++) night.push([D - 4000 - k * 200, 'Real' + k, 'R' + k, '']);
+  const nightReal = [];
+  for (let k = 0; k < 4; k++) { night.push([D - 5000 - k * 200, 'Dup' + k, 'S' + k, '']); nightReal.push([D - 8600 - k * 200, 'Dup' + k, 'S' + k, '']); }
+  const saved = night.concat(nightReal).sort((a, b) => b[0] - a[0]);
+  const fixed = H.repair(saved);
+  const byTitle = t => { for (let i = 0; i < fixed.length; i++) if (fixed[i][2] === t) return fixed[i]; return null; };
+  let copies = 0;
+  for (let i = 0; i < fixed.length; i++) if (/^Dup/.test(fixed[i][1]) && fixed[i][0] > D - 6000) copies++;
+  check('repair: the copied hour is dropped and the play after it flagged after a gap',
+    fixed.length === saved.length - 4 && copies === 0 && byTitle('R4')[4] === 1, JSON.stringify(fixed));
+  check('repair: Deer Socks moved to when it played, after a gap; a second repair changes nothing',
+    byTitle('Deer Socks')[0] === D + 3600 && byTitle('Deer Socks')[4] === 1 && fixed[0][2] === 'Carol' && fixed[1][2] === 'Deer Socks' && H.repair(fixed) === fixed);
+  check('repair: a song played exactly an hour apart once or twice is left alone', H.repair(nightReal.slice(0, 2).concat([[D - 5000, 'Dup0', 'S0', '']]).sort((a, b) => b[0] - a[0])).length === 3);
+  check('repair: Deer Socks already at the right time too: the early copy is dropped',
+    H.repair([[D + 3600, 'Twisty', 'Deer Socks', '', 1], [D, 'Twisty', 'Deer Socks', '']]).length === 1);
+
   const stuck = [[nowS + 86400, 'X', 'Tomorrow', '', 1], [nowS - 3600, 'Z', 'Real', '']];
   const unstuck = H.dropFuture(stuck, nowS);
   check('saved future plays are removed', unstuck.length === 1 && unstuck[0][2] === 'Real');
@@ -560,13 +592,23 @@ function statsChecks() {
   check('top song is the most played, ties broken by most recent', st.top[0].title === 'Christmas Is Here' && st.top[0].count === 2 && st.top[1].title === 'Mystery Song');
   check('most-played missing songs leave out dislikes and songs you have', st.topMissing.length === 1 && st.topMissing[0].title === 'Mystery Song' && st.missingSongs === 1);
   check('new-song rate: 4 of the 6 recent plays were first plays', st.recent === 6 && st.recentFirsts === 4);
-  check('replays across a recording gap are left out (both here)', st.repeatIntervals === 0 && st.repeatsSpanningGap === 2 && st.avgRepeatSecs === 0);
+  check('replays across a recording gap are left out when the song has too few gap-free ones to compare (both here)', st.repeatIntervals === 0 && st.repeatsSpanningGap === 2 && st.avgRepeatSecs === 0);
   // No gaps: A at 0, 600, 1500 (intervals 600, 900); B at 100, 1300 (1200) -> mean 900, median 900
   const clean = S.compute([[1500, 'A', 'a', ''], [1300, 'B', 'b', ''], [600, 'A', 'a', ''], [100, 'B', 'b', ''], [0, 'A', 'a', '']], items, () => ({ status: 'none' }));
   check('average and median time between replays', clean.repeatIntervals === 3 && clean.avgRepeatSecs === 900 && clean.medianRepeatSecs === 900 && clean.repeatsSpanningGap === 0);
   // Gap flagged on the play at 1300: A's 600->1500 interval spans it, A's 0->600 doesn't; B's 100->1300 includes it
   const withGap = S.compute([[1500, 'A', 'a', ''], [1300, 'B', 'b', '', 1], [600, 'A', 'a', ''], [100, 'B', 'b', ''], [0, 'A', 'a', '']], items, () => ({ status: 'none' }));
   check('only the replays spanning the gap are dropped', withGap.repeatIntervals === 1 && withGap.avgRepeatSecs === 600 && withGap.repeatsSpanningGap === 2);
+  // A song replayed about every 8 h: one replay across a gap at 22 h is left out; with replays of 4 to 28 h, a 22 h one counts
+  const HR = 3600;
+  const steady = S.intervals([0, 8 * HR, 16.2 * HR, 24 * HR, 46 * HR], [40 * HR]);
+  check('across a gap, much longer than the song\'s usual replays: left out', steady.length === 4 && steady[3].spansGap && !steady[3].counted && steady[0].counted && steady[2].counted);
+  const steadyNear = S.intervals([0, 8 * HR, 16.2 * HR, 24 * HR, 33 * HR], [30 * HR]);
+  check('across a gap, in line with them: counted', steadyNear[3].spansGap && steadyNear[3].counted);
+  const varied = S.intervals([0, 8 * HR, 12 * HR, 28 * HR, 56 * HR, 78 * HR], [70 * HR]);
+  check('a song with widely varied replays: a 22 h one across a gap counts', varied[4].spansGap && varied[4].since === 22 * HR && varied[4].counted);
+  const st2 = S.compute([[46 * HR, 'A', 'a', ''], [40 * HR, 'Z', 'z', '', 1], [24 * HR, 'A', 'a', ''], [16.2 * HR, 'A', 'a', ''], [8 * HR, 'A', 'a', ''], [0, 'A', 'a', '']], items, () => ({ status: 'none' }));
+  check('averages use the gap-free replays and the ones across a gap that are in line', st2.repeatIntervals === 3 && st2.repeatsSpanningGap === 1 && st2.gapRepeatsCounted === 0 && st2.avgRepeatSecs === 8 * HR);
   check('breakdown by status', st.breakdown.have.songs === 2 && st.breakdown.have.plays === 3 && st.breakdown.none.plays === 2 && st.breakdown.disliked.songs === 1);
   check('playlist: total, longest, shortest', st.playlist.total === 720 && st.playlist.longest.id === 'z' && st.playlist.shortest.id === 'p');
   check('heard / not heard: unlinked mark doesn\'t count', st.playlist.heard === 1 && st.playlist.notHeard.length === 2);
@@ -591,8 +633,8 @@ function statsChecks() {
   firstAfter.push(1);
   const est = S.compute(kept, items, () => ({ status: 'none' }));
   check('recorded-time estimate lands on the true average despite an 8 h gap (1246 s, within 5%)', Math.abs(est.rateRepeatSecs - 1246) / 1246 < 0.05);
-  check('leaving out gap-spanning replays runs short; including them as measured runs long',
-    est.avgRepeatSecs < est.rateRepeatSecs && est.avgGapRepeatSecs > est.rateRepeatSecs);
+  check('replays across the 8 h gap, far longer than each song\'s others, are left out',
+    est.repeatsSpanningGap === 3 && est.gapRepeatsCounted === 0 && est.repeatIntervals > 0);
   check('no replays yet: no estimate', S.compute([[100, 'A', 'a', ''], [0, 'B', 'b', '']], items, () => ({ status: 'none' })).rateRepeatSecs === 0);
   check('most recently replayed: repeats only, newest replay first', st.recentRepeats.length === 2 && st.recentRepeats[0].title === 'Christmas Is Here' && st.recentRepeats[1].title === 'Mystery Song');
   const stt = S.songTimes(plays, M.markKey('Kaskade', 'Christmas Is Here'));
@@ -601,6 +643,7 @@ function statsChecks() {
   check('play log: newest first, time since previous (kept across a gap, which is flagged), first play labeled',
     log.length === 4 && log[0].at === 2000 && log[0].since === 500 && log[1].spansGap && log[1].since === 900 &&
     log[2].since === 600 && !log[2].spansGap && log[3].first);
+  check('play log: a replay across a gap says whether it counts (900 s is more than a quarter over the longest gap-free one, 600 s, so it is left out)', !log[1].counted && log[0].counted && log[2].counted);
   const unk = S.compute(plays, [], () => ({ status: 'unknown' }));
   check('playlist unreadable: no shares instead of a divide-by-zero', unk.labeledPlays === 0 && unk.shares.have.playPct === 0);
   const empty = S.compute([], items, status);

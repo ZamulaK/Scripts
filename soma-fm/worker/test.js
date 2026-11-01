@@ -36,9 +36,9 @@ const titles = list => list.map(p => p[2]).join();
 const now = 1793500000;
 const first = fromFeed(feed([[now - 100, 'B', 'Two'], [now - 200, 'SomaFM', 'Station ID'], [now - 400, 'A', 'One']]), now, null);
 check('first look: every play, no gap; station IDs become breaks', first.plays.length === 2 && first.plays[0][2] === 'Two' && !first.plays[1][4] && first.breaks.join() === String(now - 200));
-const next = fromFeed(feed([[now + 200, 'C', 'Three'], [now - 100, 'B', 'Two'], [now - 400, 'A', 'One']]), now + 250, [now - 100, 'B', 'Two', 'Alb']);
+const next = fromFeed(feed([[now + 200, 'C', 'Three'], [now - 100, 'B', 'Two'], [now - 400, 'A', 'One']]), now + 250, [[now - 100, 'B', 'Two', 'Alb']]);
 check('next look: only newer plays', next.plays.length === 1 && next.plays[0][2] === 'Three' && !next.plays[0][4]);
-const late = fromFeed(feed([[now + 9000, 'E', 'Five'], [now + 8800, 'D', 'Four']]), now + 9100, [now - 100, 'B', 'Two', 'Alb']);
+const late = fromFeed(feed([[now + 9000, 'E', 'Five'], [now + 8800, 'D', 'Four']]), now + 9100, [[now - 100, 'B', 'Two', 'Alb']]);
 check('after missing a stretch: the oldest new play is flagged after a gap', late.plays.length === 2 && late.plays[1][4] === 1 && !late.plays[0][4]);
 
 // record (the 10-minute job)
@@ -55,6 +55,16 @@ const run = env.DB.raw.prepare('SELECT * FROM runs').get();
 check('a failed look is noted, keeping when the last good one was', !r.ok && run.ok === 0 && /503/.test(run.note) && run.last_ok === now + 9100, JSON.stringify(run));
 const dayAhead = await record(env, 'christmas', somaFM([[now + 9300 + 86400, 'F', 'Misdated']], now + 9400));
 check('a play SomaFM dates a day ahead is recorded at the right time', dayAhead.ok && env.DB.raw.prepare("SELECT at FROM plays WHERE title = 'Misdated'").get().at === now + 9300);
+
+// Nov 1, 2026: SomaFM's feed dated plays an hour late, then an hour early, around the end of daylight saving time
+const dst = { DB: fakeD1(), KEY, CHANNELS: 'christmas' };
+const H0 = now + 20000;
+await record(dst, 'christmas', somaFM([[H0 - 300, 'A', 'Real 1'], [H0 - 100, 'B', 'Real 2']], H0));
+await record(dst, 'christmas', somaFM([[H0 + 3600 + 200, 'C', 'Real 3'], [H0 + 3600 - 100, 'B', 'Real 2'], [H0 + 3600 - 300, 'A', 'Real 1']], H0 + 400));   // an hour late
+await record(dst, 'christmas', somaFM([[H0 + 600 - 3600, 'D', 'Real 4'], [H0 + 200 - 3600, 'C', 'Real 3']], H0 + 700));                                       // an hour early
+const dstRows = dst.DB.raw.prepare('SELECT at, title, gap FROM plays ORDER BY at').all();
+check('a feed dated an hour late or early is recorded at the right times, with nothing copied',
+  dstRows.length === 4 && dstRows.map(r => r.at - H0).join() === '-300,-100,200,600' && dstRows.every(r => !r.gap), JSON.stringify(dstRows));
 
 // the scheduled entry point records every listed station
 const jobs = [];
