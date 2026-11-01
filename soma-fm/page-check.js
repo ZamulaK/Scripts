@@ -454,7 +454,7 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
   check('Stats opens without overflow', stats.open && !stats.overflow && stats.sections >= 6, JSON.stringify(stats));
   check('Stats shares add up to about 100%', stats.shareCount === 2 + (stats.otherWorth ? 1 : 0) + (stats.noneWorth ? 1 : 0) && Math.abs(stats.shareSum - 100) <= 3, String(stats.shareSum));
   check('The "not in your playlist" share shows only with 2+ songs or 1%+ of plays', stats.noneTile === stats.noneWorth, JSON.stringify(stats));
-  check('The "comes back" card shows exactly when "not in your playlist" doesn't', stats.noneTile === !stats.backTile, JSON.stringify(stats));
+  check('The "comes back" card shows exactly when "not in your playlist" is hidden', stats.noneTile === !stats.backTile, JSON.stringify(stats));
   check('The "another version" share shows only with 2+ songs or 1%+ of plays', stats.otherTile === stats.otherWorth, JSON.stringify(stats));
   check('Stats shows the replay headline', /\d/.test(stats.headline), stats.headline);
   const statLens = await inShadow(page, r => r.querySelectorAll('#statsbox .slist .nm small .len').length);
