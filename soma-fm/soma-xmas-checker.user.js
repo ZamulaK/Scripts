@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.24.0
+// @version      3.24.1
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -2958,22 +2958,24 @@ function main() {
       const sh = st.shares, pc = v => Math.round(v) + '%';
       const share = sec(`Of everything SomaFM played (${fmt(st.labeledPlays)} plays, ${fmt(st.labeledSongs)} different songs)`);
       const g = el('div', 'tiles');
+      // "Another version" and "not in your playlist" show only with at least 2 songs or 1% of plays (Dan: a single
+      // song there is better seen through its filter chip on the main page)
+      const worth = k => sh[k].songs >= 2 || sh[k].playPct >= 1;
       for (const [k, label, cls] of [['have', 'in your playlist', 'have'], ['other', 'another version in your playlist', 'other'],
         ['missing', 'not in your playlist', 'none'], ['disliked', 'disliked', 'disliked']]) {
-        if (k === 'other' && !sh.other.songs) continue;   // left out once every other version is sorted out
-        if (k === 'missing' && !sh.missing.songs) continue;   // and once every song played is in the playlist or disliked
+        if ((k === 'other' || k === 'missing') && !worth(k)) continue;
         const t = el('div', 'tile share ' + cls);
         t.append(el('div', 'v', pc(sh[k].playPct)), el('div', 'k', `of plays ${label}`), el('div', 'k2', `${pc(sh[k].songPct)} of songs (${fmt(sh[k].songs)})`));
         g.append(t);
       }
       // The spot "not in your playlist" leaves goes to how long until a song comes back (Dan asked; see SomaFM rotation)
-      if (!sh.missing.songs && st.rateRepeatSecs) {
+      if (!worth('missing') && st.rateRepeatSecs) {
         const t = el('div', 'tile back');
         const secs = st.rateRepeatSecs;   // in hours with a decimal, so it fits on one line like the percentages
         t.append(el('div', 'v', secs < 3600 ? Stats.formatSpan(secs) : (secs / 3600).toFixed(1) + ' h'), el('div', 'k', 'until a song comes back'), el('div', 'k2', 'of listening, on average'));
         g.append(t);
       }
-      share.append(g, el('div', 'snote', '"Of plays" counts every play, so often-played songs weigh more; "of songs" counts each different song once.' + (sh.missing.songs ? ' "Not in your playlist" includes songs gone from it.' : '')));
+      share.append(g, el('div', 'snote', '"Of plays" counts every play, so often-played songs weigh more; "of songs" counts each different song once.' + (worth('missing') ? ' "Not in your playlist" includes songs gone from it.' : '')));
     }
 
     // Rotation

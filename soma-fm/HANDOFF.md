@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.24.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.24.1**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -299,6 +299,7 @@ all his data kept centrally (part 2, 3.22). He has a personal Cloudflare account
 | 3.23.0 | Daylight saving fix: a feed dated an hour off is moved back (`History.feedShift`, device and recorder), and what the Nov 1 glitch saved is repaired (`History.repair`). Replays across a gap count in the averages when in line with the song's others; one measured average instead of two. Play logs read down each column. |
 | 3.23.1 | The "not in your playlist" share tile is hidden while no song played is missing (Dan asked; it had been stuck at 0%), like "another version". |
 | 3.24.0 | In its place, a card with how long until a song comes back: the rotation headline in decimal hours (14.7 h) so it fits on one line at 600 px. Dan finds it one of the most interesting numbers. Page check serves an empty feed (`noFeed`) so only the seeded plays count. |
+| 3.24.1 | "Another version" and "not in your playlist" cards show only with at least 2 songs or 1% of plays (Dan: one song is better seen through its filter chip). Page check `feed` option serves a made-up live list. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |
