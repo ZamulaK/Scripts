@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.25.3
+// @version      3.26.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -1422,7 +1422,38 @@ const Cloud = (() => {
 // (removed: { marks: { key: ms }, dislikes: { key: ms } }); a mark or dislike set no later than its removal is dropped.
 const Sync = (() => {
   const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
-  const PARTS = ['marks', 'dislikes', 'favorites', 'categories', 'notes', 'archive', 'original', 'removed'];
+  const PARTS = ['marks', 'dislikes', 'favorites', 'categories', 'notes', 'archive', 'original', 'removed', 'shuffle'];
+  // 3.26: Shuffle's own record, so every device shows the same quota count and last shuffle. units: each device's count
+  // for its quota day ({ day, units, at }), summed for today; last: per playlist, the order before the last change
+  // ({ before: ids or null after putting it back, at }); run: what the last run did. The newer entry wins each time.
+  const num = v => (typeof v === 'number' && isFinite(v) && v >= 0 ? v : -1);
+  function newer(a, b) {
+    if (!a || !b) return a || b || null;
+    if (a.at !== b.at) return b.at > a.at ? b : a;
+    return canon(b) > canon(a) ? b : a;   // a tie gives the same answer whichever device merges
+  }
+  function cleanShuffle(s) {
+    const o = isObj(s) ? s : {}, units = {}, last = {};
+    if (isObj(o.units)) for (const k of Object.keys(o.units)) {
+      const u = o.units[k];
+      if (isObj(u) && typeof u.day === 'string' && num(u.units) >= 0 && num(u.at) > 0) units[k] = { day: u.day, units: u.units, at: u.at };
+    }
+    if (isObj(o.last)) for (const k of Object.keys(o.last)) {
+      const l = o.last[k], ids = isObj(l) && Array.isArray(l.before) ? Matcher.keep(l.before, x => typeof x === 'string') : null;
+      if (isObj(l) && num(l.at) > 0 && (l.before === null || (ids && ids.length === l.before.length))) last[k] = { before: ids, at: l.at };
+    }
+    const r = o.run;
+    const run = isObj(r) && num(r.at) > 0 ? { kind: String(r.kind || ''), at: r.at, units: Math.max(0, num(r.units)), moves: Math.max(0, num(r.moves)), complete: !!r.complete } : null;
+    return { units, last, run };
+  }
+  function mergeShuffle(a, b) {
+    const A = cleanShuffle(a), B = cleanShuffle(b), units = Object.assign({}, A.units), last = Object.assign({}, A.last);
+    for (const k of Object.keys(B.units)) units[k] = newer(units[k], B.units[k]);
+    for (const k of Object.keys(B.last)) last[k] = newer(last[k], B.last[k]);
+    return { units, last, run: newer(A.run, B.run) };
+  }
+  // Quota units counted on that day by all devices together
+  function unitsOn(units, day) { let n = 0; for (const k of Object.keys(units || {})) if (units[k] && units[k].day === day) n += Number(units[k].units) || 0; return n; }
   function cleanRemoved(r) {
     const out = { marks: {}, dislikes: {} };
     for (const kind of ['marks', 'dislikes']) {
@@ -1436,7 +1467,8 @@ const Sync = (() => {
     const d = isObj(doc) ? doc : {};
     const v = Backup.validate(Backup.build({ history: {}, marks: d.marks, dislikes: d.dislikes, favorites: d.favorites, categories: d.categories,
       notes: d.notes, archive: d.archive, original: d.original })).data;
-    return { marks: v.marks, dislikes: v.dislikes, favorites: v.favorites, categories: v.categories, notes: v.notes, archive: v.archive, original: v.original, removed: cleanRemoved(d.removed) };
+    return { marks: v.marks, dislikes: v.dislikes, favorites: v.favorites, categories: v.categories, notes: v.notes, archive: v.archive, original: v.original, removed: cleanRemoved(d.removed),
+      shuffle: cleanShuffle(d.shuffle) };
   }
   const later = (a, b) => { const out = Object.assign({}, a); for (const k of Object.keys(b || {})) out[k] = Math.max(out[k] || 0, b[k]); return out; };
   function merge(a, b) {
@@ -1448,7 +1480,7 @@ const Sync = (() => {
     for (const k of Object.keys(removed.dislikes)) if (k in dislikes && dislikes[k] <= removed.dislikes[k]) delete dislikes[k];
     return { marks, dislikes, favorites: Backup.mergeFavorites(a.favorites || {}, b.favorites || {}), categories: Backup.mergeCategories(a.categories || {}, b.categories || {}),
       notes: Backup.mergeNotes(a.notes || {}, b.notes || {}), archive: Backup.mergeArchive(a.archive || {}, b.archive || {}),
-      original: Backup.mergeOriginal(a.original || null, b.original || null), removed };
+      original: Backup.mergeOriginal(a.original || null, b.original || null), removed, shuffle: mergeShuffle(a.shuffle, b.shuffle) };
   }
   // The same JSON whatever order the keys are in
   function canon(v) {
@@ -1458,7 +1490,7 @@ const Sync = (() => {
   }
   const same = (a, b) => canon(a) === canon(b);
   const samePart = (a, b, part) => canon(a[part] === undefined ? null : a[part]) === canon(b[part] === undefined ? null : b[part]);
-  return { PARTS, clean, cleanRemoved, merge, canon, same, samePart };
+  return { PARTS, clean, cleanRemoved, cleanShuffle, mergeShuffle, unitsOn, merge, canon, same, samePart };
 })();
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -2257,21 +2289,49 @@ function main() {
 
   // The synced document (3.22): merged both ways; saved only from the version just read, else read again and merge again
   let syncStatus = GM_getValue(SSKEY, null), syncTimer = null;
+  // Shuffle's keys (used by Shuffle below, and synced as the "shuffle" part)
+  const JOBKEY = 'shuffle:job:' + PLAYLIST_ID, LASTKEY = 'shuffle:last:' + PLAYLIST_ID, USEDKEY = 'shuffle:units', RUNKEY = 'shuffle:lastRun';
+  // This browser's name in the quota count: made once, never synced
+  function deviceId() {
+    let d = GM_getValue('device:id', '');
+    if (!d) { const b = new Uint8Array(8); crypto.getRandomValues(b); for (let i = 0; i < b.length; i++) d += b[i].toString(16).padStart(2, '0'); GM_setValue('device:id', d); }
+    return d;
+  }
+  // Each device's quota count; before 3.26 it was this device's alone ({ day, units })
+  function getUnits() {
+    const u = GM_getValue(USEDKEY, null);
+    if (u && typeof u.day === 'string') { const m = {}; m[deviceId()] = { day: u.day, units: Number(u.units) || 0, at: Date.now() }; GM_setValue(USEDKEY, m); return m; }
+    return u && typeof u === 'object' ? u : {};
+  }
+  function shuffleState() {
+    const last = {}, l = GM_getValue(LASTKEY, null);
+    if (l) last[PLAYLIST_ID] = l;
+    return Sync.cleanShuffle({ units: getUnits(), last, run: GM_getValue(RUNKEY, null) });
+  }
   function localState() {
     return { marks: getMarks(), dislikes: getDislikes(), favorites: getFavs(), categories: getCats(), notes: getNotes(),
-      archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null), removed: getRemoved() };
+      archive: GM_getValue(AKEY, {}), original: GM_getValue(OKEY, null), removed: getRemoved(), shuffle: shuffleState() };
+  }
+  // The shuffle part is kept under three keys; only this playlist's last order is kept here
+  function applyShuffle(cur, st) {
+    let any = false;
+    for (const [k, a, b] of [[USEDKEY, cur.units, st.units], [LASTKEY, cur.last[PLAYLIST_ID] || null, st.last[PLAYLIST_ID] || null], [RUNKEY, cur.run, st.run]])
+      if (!Sync.same(a, b)) { GM_setValue(k, b); any = true; }
+    if (any) refreshQuota();
+    return any;
   }
   const STORE = { marks: 'marks', dislikes: 'dislikes', favorites: 'favorites', categories: 'categories', notes: 'notes', archive: AKEY, original: OKEY, removed: 'removed' };
   // Saves the parts that differ; returns true when any did
   function applyState(st) {
     const cur = localState();
     let any = false;
-    for (const part of Sync.PARTS) if (!Sync.samePart(cur, st, part)) { GM_setValue(STORE[part], st[part]); any = true; }
+    const shuf = applyShuffle(cur.shuffle, st.shuffle);
+    for (const part of Sync.PARTS) if (part !== 'shuffle' && !Sync.samePart(cur, st, part)) { GM_setValue(STORE[part], st[part]); any = true; }
     if (any) {
       archive = GM_getValue(AKEY, {}); if (!archive || typeof archive !== 'object' || Array.isArray(archive)) archive = {};
       goneCache = null; favCache = null; catCache = null; noteCache = null; statusCache.clear();
     }
-    return any;
+    return any || shuf;
   }
   async function syncState(c) {
     let changed = false;
@@ -2294,8 +2354,8 @@ function main() {
     GM_setValue(SSKEY, syncStatus);
     return changed;
   }
-  // After a change here: sync soon, once the taps have settled
-  function queueSync() {
+  // After a change here: sync soon, once the taps have settled (or after wait ms)
+  function queueSync(wait) {
     if (!cloudConf()) return;
     clearTimeout(syncTimer);
     syncTimer = setTimeout(async () => {
@@ -2306,7 +2366,7 @@ function main() {
       try { changed = await syncState(c); } finally { cloudBusy = false; }
       if (changed) quietRender();
       if ($('#backupbox').open) cloudShow();
-    }, 3000);
+    }, wait === undefined ? 3000 : wait);
   }
   // A problem worth a line in the header; '' when all is well
   function cloudWarning() {
@@ -3195,7 +3255,6 @@ function main() {
   // (quota, sign-in running out, closing the page) is finished the next time Shuffle opens. Kept for
   // putting things back: the order before the last shuffle, and the playlist's original order (saved
   // before the first shuffle, never overwritten, and carried in backups).
-  const JOBKEY = 'shuffle:job:' + PLAYLIST_ID, LASTKEY = 'shuffle:last:' + PLAYLIST_ID, USEDKEY = 'shuffle:units', RUNKEY = 'shuffle:lastRun';
   const KINDS = {
     shuffle: { head: 'New order', go: 'Shuffle the playlist', run: 'Shuffling your playlist…', name: 'A shuffle',
       done: 'Done. Your playlist is in the new order, and reading it back confirmed it.' },
@@ -3208,8 +3267,16 @@ function main() {
   const plain = (text, cls, fn) => { const b = el('button', cls, text); b.type = 'button'; b.onclick = fn; return b; };   // no "Working…": these show their own progress
   let shufToken = null, shufRunning = false, shufStop = false, waitTimer = null, sh = {}, runUnits = 0;
   const validToken = () => { const t = GM_getValue('signin:token', null); return t && t.token && t.exp > Date.now() ? t.token : null; };
-  const usedToday = () => { const u = GM_getValue(USEDKEY, null); return u && u.day === Shuffle.quotaDay(Date.now()) ? u.units : 0; };
-  const addUsed = n => { runUnits += n; GM_setValue(USEDKEY, { day: Shuffle.quotaDay(Date.now()), units: usedToday() + n }); };
+  // Today's units, all devices together when the cloud sync is on (3.26); each device adds to its own count
+  const usedToday = () => Sync.unitsOn(getUnits(), Shuffle.quotaDay(Date.now()));
+  function addUsed(n) {
+    runUnits += n;
+    const units = Object.assign({}, getUnits()), me = deviceId(), day = Shuffle.quotaDay(Date.now());
+    const mine = units[me] && units[me].day === day ? units[me].units : 0;
+    units[me] = { day, units: mine + n, at: Date.now() };
+    GM_setValue(USEDKEY, units);
+    queueSync();
+  }
   // Waits (ms) before trying a YouTube request again (3.19): Dan had "Couldn't talk to YouTube" near the end of a shuffle
   const API_WAITS = [2000, 5000, 15000, 30000], READBACK_WAITS = [5000, 15000];
   const ytTry = Shuffle.retrying((...a) => ytCall(...a), API_WAITS, ms => sleep(ms), (e, wait) => {
@@ -3243,9 +3310,14 @@ function main() {
   }
   // Local time of the next midnight Pacific
   const quotaReset = () => new Date(Date.now() + resetMins() * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  // YouTube doesn't tell an app how much quota is left, so this is the script's own count on this device.
-  // Google's count is in the Cloud Console, a few minutes behind. Folded under one line; stays open once opened.
+  // YouTube doesn't tell an app how much quota is left, so this is the script's own count: every device's, when the
+  // cloud sync is on, else this device's. Google's count is in the Cloud Console, a few minutes behind. Folded under
+  // one line; stays open once opened. Redrawn in place when a sync brings another device's count (refreshQuota).
   let quotaOpen = false;
+  function refreshQuota() {
+    const box = $('#shquota');
+    if (box) { box.textContent = ''; quotaInfo(box); }
+  }
   function quotaInfo(sec) {
     const used = usedToday(), left = Math.max(0, Shuffle.DAILY_UNITS - used), r = resetMins();
     const until = r >= 60 ? `${Math.floor(r / 60)} h ${r % 60} min` : `${r} min`;
@@ -3261,7 +3333,8 @@ function main() {
       const what = last.kind === 'shuffle' ? 'The last shuffle' : KINDS[last.kind] ? KINDS[last.kind].name : 'The last run';
       sec.append(el('div', 'sline', `${what} (${when(last.at / 1000)}) used about ${fmt(last.units)} units: ${fmt(last.moves)} move${last.moves === 1 ? '' : 's'} at ${Shuffle.UNITS_PER_MOVE} each, plus reading the playlist.${last.complete ? '' : ' It stopped partway.'}`));
     }
-    const note = el('div', 'snote', "Counted by this script on this device, so it doesn't include other devices or other apps using the same Google project. ");
+    const note = el('div', 'snote', cloudConf() ? "Counted by this script on all your devices (synced), so it doesn't include other apps using the same Google project. "
+      : "Counted by this script on this device, so it doesn't include other devices or other apps using the same Google project. ");
     const a = el('a', '', "Google's own count");
     a.href = 'https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas'; a.target = '_blank'; a.rel = 'noopener';
     note.append(a, " is in the Cloud Console (it's a few minutes behind).");
@@ -3384,7 +3457,7 @@ function main() {
   }
   function finished(job) {
     GM_setValue(JOBKEY, null);
-    GM_setValue(LASTKEY, job.kind === 'undo' ? null : { before: job.before, at: Date.now() });
+    GM_setValue(LASTKEY, { before: job.kind === 'undo' ? null : job.before, at: Date.now() });   // null after putting it back, so other devices hear of it too
   }
   async function go() {
     const job = { target: sh.target, before: sh.before, kind: sh.kind, at: sh.resumeOf || Date.now() };
@@ -3397,7 +3470,7 @@ function main() {
     catch (e) { err = e; }
     shufRunning = false;
     const n = sh.moves.length;
-    const saveRun = complete => GM_setValue(RUNKEY, { kind: job.kind, at: Date.now(), units: runUnits, moves: err ? err.done || 0 : res.done, complete });
+    const saveRun = complete => { GM_setValue(RUNKEY, { kind: job.kind, at: Date.now(), units: runUnits, moves: err ? err.done || 0 : res.done, complete }); queueSync(); };
     const after = ' Nothing was lost: every song is still there, partly in the new order. Open Shuffle again to finish.';
     if (err || res.stopped) saveRun(false);
     if (err) return shufShow('error', `${trouble(err)} ${fmt(err.done || 0)} of ${fmt(n)} moves were made.` + after);
@@ -3542,11 +3615,12 @@ function main() {
       say1(msg, 'err');
       row(plain(validToken() ? 'Try again' : 'Sign in again', 'ctl primary', shufStart));
     }
-    if (!/^(running|waiting|loading)$/.test(view)) { sec = el('div', 'ssec'); body.append(sec); quotaInfo(sec); }
+    if (!/^(running|waiting|loading)$/.test(view)) { sec = el('div', 'ssec'); sec.id = 'shquota'; body.append(sec); quotaInfo(sec); }
   }
   function openShuffle() {
     const d = $('#shufbox'); if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
     if (!shufRunning && !waitTimer) shufStart();
+    queueSync(0);   // the other devices' quota count and last shuffle, now rather than at the next check
   }
   $('#shuffle').onclick = openShuffle;
   $('#shclose').onclick = () => { const d = $('#shufbox'); d.close ? d.close() : d.removeAttribute('open'); };

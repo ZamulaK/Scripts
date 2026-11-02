@@ -306,6 +306,18 @@ function historyChecks() {
   check('sync: comparing ignores key order', Y.same({ a: 1, b: { c: [1, { d: 2, e: 3 }] } }, { b: { c: [1, { e: 3, d: 2 }] }, a: 1 }) && !Y.same({ a: 1 }, { a: 2 }));
   const cl = Y.clean({ marks: { ok: { v: 'have', at: 1 }, bad: { v: 'maybe' } }, favorites: { v1: { on: 'yes' } }, removed: { marks: { x: 5, y: 'no' } }, junk: 1 });
   check('sync: a document from the recorder is checked like a backup', Object.keys(cl.marks).join() === 'ok' && !Object.keys(cl.favorites).length && Object.keys(cl.removed.marks).join() === 'x' && !('junk' in cl));
+  // 3.26: Shuffle's quota count and last shuffle, shared by all devices (Dan saw a different count on each)
+  const shA = { units: { a: { day: '11/2/2026', units: 300, at: 10 }, b: { day: '11/1/2026', units: 900, at: 5 } }, last: { PL: { before: ['i1', 'i2'], at: 10 } }, run: { kind: 'shuffle', at: 10, units: 300, moves: 5, complete: true } };
+  const shB = { units: { b: { day: '11/2/2026', units: 200, at: 20 } }, last: { PL: { before: null, at: 30 } }, run: { kind: 'undo', at: 30, units: 250, moves: 4, complete: true } };
+  const shM = Y.mergeShuffle(shA, shB);
+  check('sync shuffle: each device keeps its newest count, and today counts every device', shM.units.a.units === 300 && shM.units.b.units === 200 && Y.unitsOn(shM.units, '11/2/2026') === 500 && Y.unitsOn(shM.units, '11/1/2026') === 0);
+  check('sync shuffle: the newer last order (even one put back) and the newer run win', shM.last.PL.before === null && shM.run.kind === 'undo');
+  check('sync shuffle: the same either way round, and again changes nothing', Y.same(shM, Y.mergeShuffle(shB, shA)) && Y.same(Y.mergeShuffle(shM, shM), shM));
+  const shTie = [{ units: { a: { day: 'd', units: 1, at: 7 } } }, { units: { a: { day: 'd', units: 2, at: 7 } } }];
+  check('sync shuffle: a tie gives the same answer whichever device merges', Y.same(Y.mergeShuffle(shTie[0], shTie[1]), Y.mergeShuffle(shTie[1], shTie[0])));
+  const shC = Y.cleanShuffle({ units: { a: { day: 'd', units: -1, at: 1 }, b: { day: 'd', units: 5, at: 1 }, c: 'x' }, last: { PL: { before: ['i', 3], at: 1 }, Q: { before: ['i'], at: 2 } }, run: { at: 'no' } });
+  check('sync shuffle: anything malformed is left out', Object.keys(shC.units).join() === 'b' && Object.keys(shC.last).join() === 'Q' && shC.run === null);
+  check('sync shuffle: an older document without it merges in as empty', Y.same(Y.merge({ shuffle: shA }, Y.clean({ marks: {} })).shuffle, Y.cleanShuffle(shA)));
   const empty = Y.clean(null);
   check('sync: no document yet is an empty one', !Object.keys(empty.marks).length && empty.original === null && Y.same(Y.merge(devA, empty).marks, devA.marks));
 

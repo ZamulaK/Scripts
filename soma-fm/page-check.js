@@ -795,6 +795,19 @@ const settle = page => page.evaluate(() => new Promise(r => requestAnimationFram
     check('Site: what the page saves is kept in this browser (IndexedDB)', saved >= hist.length, String(saved));
     check('Site: no script errors', s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
+    // 3.26: another device's quota count and last shuffle come with the synced document (Dan saw a different count on each)
+    const pacificDay = new Date().toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }), other = { day: pacificDay, units: 1234, at: Date.now() - 60000 };
+    api.doc = { version: api.doc.version + 1, state: Object.assign({}, api.doc.state, { shuffle: { units: { otherdevice: other }, last: {},
+      run: { kind: 'shuffle', at: Date.now() - 3600000, units: 1234, moves: 20, complete: true } } }) };
+    s = await openSite();
+    await inShadow(s.page, r => r.querySelector('#shuffle').click());
+    await s.page.waitForTimeout(1500);
+    const sq = await shufText(s.page), kept = api.doc.state.shuffle || {};
+    check('Site: Shuffle\'s quota count and last shuffle are shared by all devices (another device\'s 1,234 units show here, and stay in the document)',
+      /about 8,766 units left today/.test(sq) && /The last shuffle .* used about 1,234 units/.test(sq) && /on all your devices/.test(sq)
+      && kept.units && kept.units.otherdevice && kept.units.otherdevice.units === 1234 && kept.run && kept.run.units === 1234, sq.slice(-500) + ' ' + JSON.stringify(kept));
+    check('Site: no script errors with a shared quota count', s.errors.length === 0, s.errors.join(' | '));
+    await s.ctx.close();
     api.signedIn = false;
     s = await openSite();
     const boot = await s.page.evaluate(() => (document.getElementById('boot') || {}).textContent || '');

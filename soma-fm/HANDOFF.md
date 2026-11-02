@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.25.3**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**.
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -76,7 +76,7 @@ SomaFM page loads ──► main() hides SomaFM's layout, adds a viewport tag, m
 | `Stats` | yes | Everything in the Stats panel: counts, shares, rotation estimates, top lists, per-song play logs. |
 | `Shuffle` | yes (I/O injected) | Shuffling the real playlist: Fisher-Yates order, the move plan, reading the playlist and making the moves through the YouTube Data API, owner check. `call(method, resource, params, body)` is injected so it can be tested with a fake API. See §8a. |
 | `Cloud` | yes | The cloud recorder's setup code (`address#key`) and checking what it sends (`cleanPlays`, `cleanBreaks`) before it's merged. |
-| `Sync` | yes | The synced document (3.22): `clean` (checked like a backup), `merge` (backup rules key by key, plus removals for marks and dislikes), `same` (key-order-free compare). |
+| `Sync` | yes | The synced document (3.22): `clean` (checked like a backup), `merge` (backup rules key by key, plus removals for marks and dislikes), `same` (key-order-free compare). 3.26 adds the `shuffle` part: each device's quota count for its day (summed for today), the order before the last change, and the last run; newer entry wins. The unfinished-shuffle job stays per device. |
 | `Reader` | yes (I/O injected) | Reading the YouTube playlist: page parsing, the >100-song side-panel fallback, complete/incomplete reads. `read(get, post)` takes fetch functions so it can be tested with a fake YouTube. |
 | `main()` | no | Everything on the page: UI, storage, timers, dialogs, event handlers. Runs only under Tampermonkey (the file exports the modules instead when loaded by Node). |
 
@@ -260,7 +260,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
-- `npm run test:page`: 128 real-page checks (the last 8 load the site's own files against a stand-in `/api`), including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
+- `npm run test:page`: 130 real-page checks (the last 10 load the site's own files against a stand-in `/api`), including the Shuffle panel against a fake Google API (`page.route`), so Google is never contacted. It failed on the 3.10.0 build (Per page) and passes on 3.11.0.
 - `worker/`: `npm test` there (recorder against real SQLite via `node:sqlite`; the site's `/api` with a made-up Access key and stand-ins for SomaFM and YouTube). The page check fakes the recorder with `page.route`.
 - For a new UI feature, add a check to `page-check.js` in the same style.
 - Dan's real exported CSV is a good fixture for stats work (he can export again; it isn't in the repo).
@@ -324,6 +324,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 | 3.25.1 | Keep screen on (Awake) removed: the recorder records around the clock, so no device has to stay awake (Dan asked). |
 | 3.25.2 | A "not" mark made before the exactly matching video joined the playlist no longer hides it (`applyMark` `firstSeen`, from the remembered songs). A safeguard found while chasing two Billy Paul Williams songs on the site (they turned out to be the next item). |
 | 3.25.3 | 3.25.2 undone: it overrode a deliberate "not" mark and dislike. Lou Rawls's "[Away Team Reamix]" came back green on the plain version Dan added later, counting 152 songs in a 151-song playlist. A mark always stands again. "Reamix" (SomaFM's spelling) now counts as a remix, so that song is amber on its own. |
+| 3.26.0 | Shuffle's quota count, last shuffle and earlier order are synced (`Sync` `shuffle` part), so every device shows the same (Dan saw a different count on each). YouTube can't report the quota left, so it is still the script's own count, now of all devices. Each browser has a `device:id`; opening Shuffle syncs at once and the Quota section redraws. |
 | 3.15 | Categories (drop-down on "In playlist" cards; counts and a "No category yet" list in Stats; in backups); Shuffle limits runs of one category. "Latest play only" toggle. Much faster clicks: content-visibility on cards, stars and categories update in place (gotcha 14). |
 | 3.14 | ⭐ Favorites (cards, Stats, "Not heard yet"; in backups). Shuffle spreads favorites and versions of a song evenly and keeps an artist's, album's or channel's songs apart (§8a). |
 | 3.13.1 | Short or failed playlist reads are retried before showing anything; a still-short read keeps the fuller previous one. |
