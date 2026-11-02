@@ -24,6 +24,7 @@ song is already there, (2) find the ones he doesn't have, and (3) understand Som
 
 ## 2. Where Dan runs it
 
+- **Since Nov 2026: the Christmas Lounge site only** (§8c), on all his devices. The Tampermonkey script is **frozen**: Dan no longer uses it. The site still runs this same file, so changes here still ship to the site; Tampermonkey copies would update too, but none are in use.
 - **Tablet:** Quetta browser (Chromium-based) with Tampermonkey. Portrait width is about **600 CSS px**, and that's the main layout target.
 - **Laptop (next):** a desktop browser with Tampermonkey, kept running with PowerToys Awake for continuous recording.
   The site needs to be excluded from tab sleeping (Edge "Never put these sites to sleep" / Chrome "Always keep these sites active").
@@ -267,6 +268,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 
 ## 10. Open items / next steps
 
+0. **Website redesign (Nov 2026, Dan's main project).** Dan wants a standard modern website (normal navigation, modern UI, themes) rather than a wrapper around SomaFM's page. Three mockups with his real plays are at https://design.xmaslounge.pages.dev (branch `design`, behind Access): A Studio (sidebar dashboard), B Pocket (phone-first, tab bar), C Fireside (editorial, warm). Next: Dan picks or mixes; then build it at a test address (a Pages branch such as `next`, covered by the `*.xmaslounge.pages.dev` Access rule; preview deployments need their own secrets, `wrangler pages secret put ... --env preview`) while the current site keeps running. Plan: D1 as the one copy of the data (no per-browser copies to merge), real pages with addresses, the pure modules (Matcher, Stats, History, Shuffle) carried over.
 1. **Shuffle: first real run** (3.12.0). Dan chose to reorder the real playlist (§8a). Watch the first run for anything the fake API didn't show (deleted videos, sort setting).
 2. **Laptop setup** (above). Then merge the tablet backup into it.
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.
