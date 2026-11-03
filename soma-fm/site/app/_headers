@@ -1,0 +1,4 @@
+# Browsers ask again each time (a quick "not changed" when nothing is new), so a new deployment shows on the next
+# load instead of after the browser decides its saved copy is stale
+/*
+  Cache-Control: no-cache
