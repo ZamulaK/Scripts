@@ -496,10 +496,10 @@
     const t = stats();
     const tiles = `<div class="g2" style="margin-top:12px"><div class="box"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song comes back</span></div><div class="box"><b class="big">${fmt(D.plays.length)}</b><span class="k">plays recorded</span></div></div>`;
     const fav = inList(r) ? `<button class="pill" data-act="fav" data-i="${i}" aria-pressed="${isFav(r.item.id)}">${isFav(r.item.id) ? '★ Favorite' : '☆ Favorite'}</button>` : '';
-    const label = r.status === 'unknown' ? '' : ' · ' + esc(statusText(r));
+    const label = r.status === 'unknown' ? '' : st(r);   // the same colored status as the lists
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge · recorded around the clock') + `<div class="split"><div>
-      <div class="hero"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}${label}</small><h2>${esc(n.title)}</h2><p>${esc(n.artist)}${n.album ? ' · ' + esc(n.album) : ''}</p>
+      <div class="hero"><div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2>${esc(n.title)}</h2><p>${esc(n.artist)}${n.album ? ' · ' + esc(n.album) : ''}</p>
       <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener">▶ Open</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener">Search YouTube</a>`}${fav}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><button class="pill" data-act="row" data-i="${i}" aria-expanded="${open}">${plural(plays, 'play')} ${open ? '▴' : '▾'}</button></div></div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>

@@ -107,9 +107,9 @@ const overflow = page => page.evaluate(() => {
 (async () => {
   const browser = await chromium.launch();
   let s = await open(browser);
-  const now = await s.page.evaluate(() => ({ hero: (document.querySelector('.hero h2') || {}).textContent, tag: (document.querySelector('.hero small') || {}).textContent, just: document.querySelectorAll('.plays .pr').length,
+  const now = await s.page.evaluate(() => ({ hero: (document.querySelector('.hero h2') || {}).textContent, tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr').length,
     tiles: [...document.querySelectorAll('.g2 .box b.big')].map(b => b.textContent), tabs: [...document.querySelectorAll('.tabs a')].map(a => a.textContent.trim()).join() }));
-  check('Now: what\'s playing (from the feed), its status, two tiles and the plays just before', now.hero === hist[0][2] && /^Now playing · /.test(now.tag) && now.just === 7
+  check('Now: what\'s playing (from the feed), its status, two tiles and the plays just before', now.hero === hist[0][2] && now.tag === 'Now playing' && /^st (have|other|none|gone|disliked)$/.test(now.st) && now.stText.length > 3 && now.just === 7
     && now.tiles.length === 2 && /h$/.test(now.tiles[0]) && now.tiles[1] === '700' && now.tabs === 'Now,History,Stats,Shuffle,More', JSON.stringify(now));
   check('Loads the plays, the document, the playlist (the kept read, within 15 min) and the feed from /api', ['GET /api/state', 'GET /api/plays?channel=christmas&since=0', 'GET /api/feed?channel=christmas'].every(c => api.calls.indexOf(c) >= 0)
     && api.calls.some(c => /^GET \/api\/playlist\?list=.*&within=900$/.test(c)), api.calls.join());
