@@ -272,8 +272,7 @@ from complete reads only. Per device (localStorage `xl:*`): theme, Live, per pag
 sign-in key, unfinished job and device id. Addresses: `/`, `/history?status=&cat=&fav=1&latest=1&q=&page=`, `/stats`,
 `/shuffle`, `/more` (Pages serves index.html for every path, as there's no 404.html). Plays tables switch to columns by a
 container query (list ≥ 860 px), so the half-width lists on Now and Stats stay as rows. Restore offers Merge only (one copy:
-Replace/Undo would need to remove from D1; open question for Dan). Live updates also refresh Now (answering the open question
-provisionally; Dan to confirm). Tests: `npm run test:next` (`next-check.js`, 56 checks against a stand-in /api; `SHOTS=<dir>`
+Replace/Undo would need to remove from D1; Dan agreed Nov 2). Live updates also refresh Now (Dan's choice, Nov 2). Tests: `npm run test:next` (`next-check.js`, 56 checks against a stand-in /api; `SHOTS=<dir>`
 saves screenshots), worker tests cover `/change` and the playlist cache. Deploy: `node site/deploy-next.js` (branch `next`).
 Before it works there: preview secrets (below), and the OAuth client needs `https://next.xmaslounge.pages.dev` as a JavaScript
 origin and `https://next.xmaslounge.pages.dev/` as a redirect URI for Shuffle's sign-in.
@@ -334,8 +333,8 @@ Redeploy the mockups with `npx wrangler pages deploy ../site/design --project-na
 - **The Tampermonkey script is frozen** (Dan doesn't use it). Leave it working; the current site runs the same file.
 - Tests: keep the regression gates; add page checks for the new site against a stand-in `/api`, like §9's site checks.
 
-**Questions still open for Dan** (ask as plain text when they come up, not pick-lists): whether "Now" should auto-refresh
-like Live updates; whether the 10,000-play cap (HISTORY_MAX, about 3½ weeks; the season is about 4 months) should go now that D1 holds everything.
+**Decided with Dan (Nov 2):** Now refreshes with Live updates; the new site has no play cap (it shows every play D1 keeps;
+HISTORY_MAX stays only in the frozen userscript and today's site); restore is Merge only. Ask any new questions as plain text, not pick-lists.
 
 ## 9. Testing and regression gates
 
