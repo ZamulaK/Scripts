@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**. **Next session: start with §8d (build the new site from the approved Pocket v2 design, with Dan's two tweaks).**
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**. **Next session: start with §8d. The new site is built and live at next.xmaslounge.pages.dev; Dan is testing it and sending tweaks. Switch production when he says so.**
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -258,7 +258,7 @@ updating Tampermonkey on each device, and every key built into the site rather t
 - **Secrets** (not in the repo): `YT_KEY`, `GOOGLE_CLIENT_ID`, `ACCESS_TEAM`, `ACCESS_AUD`.
 - The recorder Worker keeps the 10-minute look and the key-protected endpoints the userscript uses. Pages can't run on a schedule.
 
-## 8d. Next: the new site, built from the Pocket v2 design (Nov 2026)
+## 8d. The new site, built from the Pocket v2 design (Nov 2026)
 
 **Build (Nov 2, first pass, all of the below):** `site/app/` (index.html, app.css, app.js; no build step). The page loads the
 userscript file as `/lib/soma-xmas-checker.user.js` with `window.module` set, so it hands over its modules instead of running
@@ -272,10 +272,30 @@ from complete reads only. Per device (localStorage `xl:*`): theme, Live, per pag
 sign-in key, unfinished job and device id. Addresses: `/`, `/history?status=&cat=&fav=1&latest=1&q=&page=`, `/stats`,
 `/shuffle`, `/more` (Pages serves index.html for every path, as there's no 404.html). Plays tables switch to columns by a
 container query (list ≥ 860 px), so the half-width lists on Now and Stats stay as rows. Restore offers Merge only (one copy:
-Replace/Undo would need to remove from D1; Dan agreed Nov 2). Live updates also refresh Now (Dan's choice, Nov 2). Tests: `npm run test:next` (`next-check.js`, 56 checks against a stand-in /api; `SHOTS=<dir>`
+Replace/Undo would need to remove from D1; Dan agreed Nov 2). Live updates also refresh Now (Dan's choice, Nov 2). Tests: `npm run test:next` (`next-check.js`, 73 checks against a stand-in /api; `SHOTS=<dir>`
 saves screenshots), worker tests cover `/change` and the playlist cache. Deploy: `node site/deploy-next.js` (branch `next`).
-Before it works there: preview secrets (below), and the OAuth client needs `https://next.xmaslounge.pages.dev` as a JavaScript
-origin and `https://next.xmaslounge.pages.dev/` as a redirect URI for Shuffle's sign-in.
+Set up (done Nov 2): the preview environment's four secrets (Dan set them with `node site/copy-secrets.js <file>`: one file of
+NAME=value lines; it checks all four look right before setting any, and never prints them; Cloudflare can't give secrets back, so
+they can't be copied from production), and the OAuth client has next.xmaslounge.pages.dev as origin and `/` redirect URI.
+`site/app/_headers` sends `Cache-Control: no-cache` so a deployment shows on the next load. Access lets Dan in without a prompt
+there because his session covers `*.xmaslounge.pages.dev` (checked: a request without it is sent to the Access login).
+(`design.xmaslounge.pages.dev` still serves the mockups; Dan once looked there by mistake.)
+
+**Dan's tweaks after the first build (Nov 2 evening), all live on next:**
+- Themes: dark only. Midnight (the default, whatever the device's setting; Frost removed: on his dark-mode devices it looked
+  the same as Midnight), Candy cane (made dark), Evergreen (new, green). Old saved 'midnight'/'' both mean Midnight.
+- History filters: the first row is All, In playlist, Not in playlist, ★ Favorites, Latest, All filters ▾. Below 900 px it
+  uses short names so it fits on one line at 600 px (In list, Not in list, ★, Latest, All ▾; the same shorts today's site
+  uses). "Latest play only" is in the panel's Status group (the Show group is gone).
+- Rows: round Open icon (songs you have) and Search icon (songs you don't; "other version" gets both) on the row itself; a
+  larger ☆/★ beside songs in the playlist that favorites without opening the row. Song name, artist and album wrap between
+  words (not cut off). Artist/length 14 px, date 12.5 px, album 13.5 px. Phones (< 600 px): the status as its dot alone.
+- Open row: one row of options (status tag, its choices, category, Add a note; no Open/Search/Favorite there now). A note shows
+  with a ✎ edit icon to its left.
+- Playlist line: "· checked N min ago" moves to the next line whole (`.nw` spans).
+- Stats: Songs by status right under the three playlist cards; the heard bar etc. under "Heard so far".
+- Now card: the status as the lists' colored dot and name, on a dark badge.
+- Now shows 7 plays under "Just played" (fixed, from the mockup; Dan asked what decides it, may want it changed).
 
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
@@ -346,7 +366,7 @@ HISTORY_MAX stays only in the frozen userscript and today's site); restore is Me
 
 ## 10. Open items / next steps
 
-0. **New site (Pocket v2): first build done Nov 2 (§8d, site/app).** Next: Dan sets the preview secrets and OAuth origin, deploy to next.xmaslounge.pages.dev, test on the tablet, then switch production.
+0. **New site (Pocket v2): built and live on next.xmaslounge.pages.dev (§8d).** Dan is testing on the tablet and sending tweaks. Gates for each change: `npm run test:next` (add a check per tweak) and the worker's `npm test`; then `node site/deploy-next.js`. Switch production (`node site/deploy-next.js main`) only when Dan says so; afterwards the old `site/public` + `site/deploy.js` can be retired with him.
 1. ~~Shuffle: first real run~~ done (Dan shuffles from the site; quota and last shuffle are synced since 3.26.0).
 2. ~~Laptop setup~~ no longer needed: the site records and syncs on every device.
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.
