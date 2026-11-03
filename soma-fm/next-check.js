@@ -120,13 +120,13 @@ const overflow = page => page.evaluate(() => {
 
   // History
   await tabTo(s.page, 'History');
-  let h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.firstChild.textContent.trim()), more: !!document.querySelector('.more-f'),
+  let h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.innerText.replace(/\s+\d[\d,]*$/, '').trim()), more: !!document.querySelector('.more-f'),
     rows: document.querySelectorAll('#plist .pr:not(.ph)').length, gaps: document.querySelectorAll('.gaprow').length, line: document.querySelector('.bar-line .grow').textContent, gone: (document.querySelector('#gonebox summary') || {}).textContent }));
-  check('History: four chips to start (All, In playlist, Not in playlist, Favorites) and All filters', h.url === '/history' && h.chips.join() === 'All,In playlist,Not in playlist,★ Favorites' && h.more, JSON.stringify(h));
+  check('History: five chips to start (All, In playlist, Not in playlist, Favorites, Latest: short at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,In playlist,Not in playlist,★ Favorites,Latest' && h.more, JSON.stringify(h));
   check('History: 50 plays a page, gap rows between plays, the playlist line and the gone-from-playlist notice', h.rows === 50 && h.gaps === 0 && /Xmas Mixed playlist · 61 songs \(1 unavailable left out\) · checked 2 min ago/.test(h.line) && /1 song is gone/.test(h.gone), JSON.stringify(h));
   await s.page.click('.more-f');
-  const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length }));
-  check('History: All filters opens Status / Favorites and categories / Show, with Clear all and Done', panel.heads === 'Status|Favorites and categories|Show' && panel.chips >= 12, JSON.stringify(panel));
+  const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length, latest: !!document.querySelector('.fpanel .grp:first-of-type [data-act="flatest"]') }));
+  check('History: All filters opens Status (with Latest play only) / Favorites and categories, with Clear all and Done', panel.heads === 'Status|Favorites and categories' && panel.latest && panel.chips >= 12, JSON.stringify(panel));
   await s.page.click('.fpanel .chip:has-text("Other version")');
   await s.page.click('.fpanel .chip:has-text("Jazz/Piano")');
   await s.page.click('.fpanel [data-act="fdone"]');
@@ -206,6 +206,7 @@ const overflow = page => page.evaluate(() => {
   const total = items.reduce((a, it) => a + it.secs, 0), mins = Math.round(total / 60), want = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
   check('Stats: total playlist time as h:mm, from the real lengths (tweak 1)', t.big[1] === want + 'total length (h:mm)', JSON.stringify(t.big) + ' want ' + want);
   check('Stats: songs by status, as a share of songs and of plays (tweak 2)', t.status.length >= 2 && t.status.every(x => /\d+ songs? · \d+%\s*\d+ plays? · \d+%/.test(x)), JSON.stringify(t.status));
+  check('Stats: Songs by status right under the playlist cards', t.heads[0] === 'Your playlist' && t.heads[1] === 'Songs by status' && t.heads[2] === 'Heard so far', t.heads.join('|'));
   check('Stats: every section', ['Your playlist', 'Categories', 'Songs by status', 'SomaFM rotation', 'Most played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
   await s.page.click('[data-act="topSort"][data-v="recent"]');
   check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most recently replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most recently replayed") + .plays .pr').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
@@ -213,7 +214,7 @@ const overflow = page => page.evaluate(() => {
   await s.ctx.close();
 
   // Every page at three widths, in each theme and in dark mode: nothing wider than the window
-  for (const [width, scheme, theme] of [[1024, 'light', undefined], [600, 'light', undefined], [600, 'dark', undefined], [360, 'light', undefined], [360, 'dark', 'midnight'], [600, 'light', 'candy']]) {
+  for (const [width, scheme, theme] of [[1024, 'light', undefined], [600, 'light', undefined], [600, 'dark', undefined], [360, 'light', undefined], [360, 'dark', 'candy'], [600, 'light', 'candy']]) {
     s = await open(browser, { width, scheme, theme, height: 900 });
     const bad = [];
     for (const tab of ['Now', 'History', 'Stats', 'Shuffle', 'More']) {
@@ -225,14 +226,14 @@ const overflow = page => page.evaluate(() => {
       if (process.env.SHOTS) await s.page.screenshot({ path: path.join(process.env.SHOTS, `${width}-${theme || scheme}-${tab.toLowerCase()}.png`), fullPage: true });
     }
     const look = await s.page.evaluate(() => ({ bg: getComputedStyle(document.body).backgroundColor, table: getComputedStyle(document.querySelector('.tabs')).position }));
-    check(`Layout ${width} px ${theme || (scheme === 'dark' ? 'dark (Midnight)' : 'Frost')}: every page fits, an open row too`, !bad.length && look.table === 'fixed', bad.join(' | '));
+    check(`Layout ${width} px ${theme || 'Midnight'} (device ${scheme}): every page fits, an open row too`, !bad.length && look.table === 'fixed', bad.join(' | '));
     if (width === 1024) {
       await tabTo(s.page, 'History');
       const cols = await s.page.evaluate(() => getComputedStyle(document.querySelector('.pr.ph')).display !== 'none' && [...document.querySelectorAll('.pr.ph div')].map(x => x.textContent).join());
       check('History from 900 px: a table, Time | Song | Status | Category | Plays | Actions', cols === 'Time,Song,Status,Category,Plays,Actions', String(cols));
     }
-    if (scheme === 'dark' && !theme) check('Dark mode: Midnight colors without choosing a theme', look.bg === 'rgb(11, 16, 32)', look.bg);
-    if (theme === 'candy') check('Candy cane theme remembered', look.bg === 'rgb(251, 243, 241)', look.bg);
+    if (!theme) check(`Midnight, dark, whatever the device is set to (${scheme})`, look.bg === 'rgb(11, 16, 32)', look.bg);
+    if (theme === 'candy') check('Candy cane, a dark theme, remembered', look.bg === 'rgb(23, 11, 13)', look.bg);
     check(`No script errors (${width} px)`, s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
   }
@@ -277,8 +278,9 @@ const overflow = page => page.evaluate(() => {
   const cf = await csv;
   const text = cf ? fs.readFileSync(await cf.path(), 'utf8') : '';
   check('More: Plays as CSV', /^﻿?Date,Time,Artist,Title,Album,Playlist status,After gap/.test(text) && text.split('\n').length > 700, text.slice(0, 80));
-  await s.page.click('[data-act="theme"][data-v="midnight"]');
-  check('More: choosing a theme changes it and keeps it on this device', await s.page.evaluate(() => document.documentElement.dataset.theme === 'midnight' && localStorage.getItem('xl:theme') === '"midnight"'));
+  const themes = await s.page.evaluate(() => [...document.querySelectorAll('.theme')].map(b => b.textContent.trim()).join());
+  await s.page.click('[data-act="theme"][data-v="candy"]');
+  check('More: two dark themes, Midnight and Candy cane; choosing one keeps it on this device', themes === 'Midnight,Candy cane' && await s.page.evaluate(() => document.documentElement.dataset.theme === 'candy' && localStorage.getItem('xl:theme') === '"candy"'), themes);
   check('No script errors (More)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
 

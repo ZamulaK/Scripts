@@ -1,9 +1,7 @@
-/* Christmas Lounge, Pocket v2 (approved Nov 2, 2026; mockup in ../design/pocket.html). Themes: Frost (light, the default),
-   Midnight (dark, also the automatic dark), Candy cane. Remembered per device (data-theme on <html>). */
-:root{--bg:#eef3f8;--card:#ffffff;--ink:#0f1b2a;--muted:#5b6b7d;--line:#dbe3ec;--accent:#2b6cb0;--on:#fff;--chip:#e2ebf5;--good:#1f8a5b;--warn:#a86b12;--bad:#c53030;--dis:#6b4f7a;--hero1:#2b6cb0;--hero2:#7fb3e6;--row:#f6f9fc;--star:#c98a00}
-:root[data-theme="midnight"]{--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a;--star:#f5c542}
-:root[data-theme="candy"]{--bg:#fbf3f1;--card:#ffffff;--ink:#2a1414;--muted:#7a5a58;--line:#f0dcd8;--accent:#c8102e;--on:#fff;--chip:#f8e3df;--good:#1f7a4d;--warn:#9a5d00;--bad:#c8102e;--dis:#7a4f6b;--hero1:#c8102e;--hero2:#1f7a4d;--row:#fdf8f7;--star:#c98a00}
-@media (prefers-color-scheme:dark){:root:not([data-theme]){--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a;--star:#f5c542}}
+/* Christmas Lounge, Pocket v2 (approved Nov 2, 2026; mockup in ../design/pocket.html). Dark themes only (Dan, Nov 2):
+   Midnight, the default, and Candy cane. Remembered per device (data-theme on <html>). */
+:root{color-scheme:dark;--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a;--star:#f5c542}
+:root[data-theme="candy"]{--bg:#170b0d;--card:#251316;--ink:#f7eceb;--muted:#c4a4a1;--line:#3e2227;--accent:#ff7a8a;--on:#1a0b0e;--chip:#341a1f;--good:#5fd39a;--warn:#f2bd5c;--bad:#ff8a80;--dis:#d9aed0;--hero1:#a3122a;--hero2:#1f6b45;--row:#2c171b;--star:#f5c542}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font:15px/1.45 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
@@ -50,6 +48,9 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 .chip .n{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--on)}
 .chip[aria-pressed="true"] .n{color:inherit;opacity:.8}
+/* A shorter name below 900 px (Latest play only → Latest), so the first row of filters fits on the tablet */
+.chip .narrow{display:none}
+@media (max-width:899px){.chip .wide{display:none}.chip .narrow{display:inline}}
 .quick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
 .more-f{display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--muted);background:none;border-radius:999px;padding:6px 12px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--ink);white-space:nowrap}
 .more-f .badge{background:var(--accent);color:var(--on);border-radius:999px;font-size:11px;padding:1px 7px}

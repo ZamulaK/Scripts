@@ -519,7 +519,7 @@
       st: (k, l) => `<button class="chip" aria-pressed="${S.status.has(k)}" data-act="fstatus" data-v="${k}">${l} <span class="n">${fmt(count(k))}</span></button>`,
       fav: () => `<button class="chip" aria-pressed="${S.favOnly}" data-act="ffav">★ Favorites <span class="n">${fmt(listed.filter(x => isFav(x.r.item.id)).length)}</span></button>`,
       cat: (k, l) => `<button class="chip" aria-pressed="${S.cats.has(k)}" data-act="fcat" data-v="${k}">${l} <span class="n">${fmt(catN(k))}</span></button>`,
-      latest: () => `<button class="chip" aria-pressed="${S.latest}" data-act="flatest" title="One row per song, at its most recent play">Latest play only</button>`,
+      latest: () => `<button class="chip" aria-pressed="${S.latest}" data-act="flatest" title="One row per song, at its most recent play" aria-label="Latest play only"><span class="wide">Latest play only</span><span class="narrow">Latest</span></button>`,
     };
     const active = S.status.size + S.cats.size + (S.favOnly ? 1 : 0) + (S.latest ? 1 : 0);
     let filters = '';
@@ -527,16 +527,14 @@
       if (S.allFilters) {
         // "No category" is left out once every playlist song has one, unless it's on
         const cats = CATS2.filter(([k]) => k !== 'uncat' || catN('uncat') || S.cats.has('uncat'));
-        filters = `<div class="fpanel" role="group" aria-label="All filters"><h5>Status</h5><div class="grp">${C.all()}${STATUS.map(([k, l]) => C.st(k, l)).join('')}</div>
+        filters = `<div class="fpanel" role="group" aria-label="All filters"><h5>Status</h5><div class="grp">${C.all()}${STATUS.map(([k, l]) => C.st(k, l)).join('')}${C.latest()}</div>
           <h5>Favorites and categories</h5><div class="grp">${C.fav()}${cats.map(([k, n]) => C.cat(k, n)).join('')}</div>
-          <h5>Show</h5><div class="grp">${C.latest()}</div>
           <div class="end"><button class="pill" ${active ? '' : 'disabled'} data-act="fclear">Clear all</button><button class="pill primary" data-act="fdone">Done</button></div></div>`;
       } else {
-        // A few to start with (All, In playlist, Not in playlist, Favorites), plus any other filter that's on
-        const q = [C.all(), C.st('have', 'In playlist'), C.st('none', 'Not in playlist'), C.fav()];
+        // A few to start with (All, In playlist, Not in playlist, Favorites, Latest), plus any other filter that's on
+        const q = [C.all(), C.st('have', 'In playlist'), C.st('none', 'Not in playlist'), C.fav(), C.latest()];
         for (const [k, l] of STATUS) if (k !== 'have' && k !== 'none' && S.status.has(k)) q.push(C.st(k, l));
         for (const [k, , sh] of CATS2) if (S.cats.has(k)) q.push(C.cat(k, sh));
-        if (S.latest) q.push(C.latest());
         filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false">All filters${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button></div>`;
       }
     }
@@ -581,7 +579,11 @@
     else {
       const heard = P.heard, notHeard = P.notHeard;
       left = `<h3>Your playlist</h3><div class="g3"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmm(P.total)}</b><span class="k">total length (h:mm)</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k">average song</span></div></div>
-      <div class="box" style="margin-top:12px"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
+      <h3>Songs by status</h3><div class="box">${t.labeledSongs ? ['have', 'other', 'none', 'gone', 'disliked'].filter(k => t.breakdown[k]).map(k => {
+        const b = t.breakdown[k];   // Dan's tweak 2: each status as a share of the different songs and of all plays
+        return `<div class="kv stat">${st({ status: k })}<span class="r"><span><b>${plural(b.songs, 'song')}</b> · ${pct(b.songs, t.labeledSongs)}</span><span><b>${plural(b.plays, 'play')}</b> · ${pct(b.plays, t.labeledPlays)}</span></span></div>`;
+      }).join('') + `<div class="snote">Of ${plural(t.labeledSongs, 'different song')} and ${plural(t.labeledPlays, 'play')}. Plays count every time a song came on, so often-played songs weigh more.</div>` : '<div class="snote">No plays recorded yet.</div>'}</div>
+      <h3>Heard so far</h3><div class="box"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
         ${notHeard.length ? `<details class="sub"><summary>Not heard yet: ${fmt(notHeard.length)}</summary><ul>${notHeard.map(it => `<li><span class="nh">${esc(it.title)}</span><span class="acts">${starBtn(it.id, it.title)}<a class="pill" href="${ytWatch(it.id)}" target="_blank" rel="noopener">Open</a></span></li>`).join('')}</ul></details>` : '<div class="kv"><span>Not heard yet</span><b>0</b></div>'}
         <div class="kv"><span>Favorites</span><b>${fmt(favN)}</b></div>
         ${P.longest ? `<div class="kv"><span>Longest</span><span class="r"><b>${History.formatClock(P.longest.secs)}</b> · ${esc(P.longest.title)}</span></div><div class="kv"><span>Shortest</span><span class="r"><b>${History.formatClock(P.shortest.secs)}</b> · ${esc(P.shortest.title)}</span></div>` : ''}
@@ -589,10 +591,7 @@
         <div class="snote">Heard counts automatic matches and linked songs. Unlinked “I have it” marks don't say which video, so they aren't counted.</div></div>
       <h3>Categories</h3><div class="box">${CATS.map(([k, n]) => `<div class="kv"><span>${n}</span><b>${fmt(catCount[k] || 0)}</b></div>`).join('')}
         ${none.length ? `<details class="sub"><summary>No category yet: ${fmt(none.length)}</summary><ul>${none.map(it => `<li><span class="nh">${esc(it.title)}</span><span class="acts"><button class="menubtn" data-act="catmenuId" data-v="${esc(it.id)}" data-name="${esc(it.title)}" aria-haspopup="listbox">Category… <span class="caret">▾</span></button></span></li>`).join('')}</ul></details>` : '<div class="kv"><span>No category yet</span><b>0</b></div>'}</div>
-      <h3>Songs by status</h3><div class="box">${t.labeledSongs ? ['have', 'other', 'none', 'gone', 'disliked'].filter(k => t.breakdown[k]).map(k => {
-        const b = t.breakdown[k];   // Dan's tweak 2: each status as a share of the different songs and of all plays
-        return `<div class="kv stat">${st({ status: k })}<span class="r"><span><b>${plural(b.songs, 'song')}</b> · ${pct(b.songs, t.labeledSongs)}</span><span><b>${plural(b.plays, 'play')}</b> · ${pct(b.plays, t.labeledPlays)}</span></span></div>`;
-      }).join('') + `<div class="snote">Of ${plural(t.labeledSongs, 'different song')} and ${plural(t.labeledPlays, 'play')}. Plays count every time a song came on, so often-played songs weigh more.</div>` : '<div class="snote">No plays recorded yet.</div>'}</div>`;
+`;
     }
     const firsts = t.recent ? Math.round(t.recentFirsts / t.recent * 100) : 0;
     const right = !t.plays ? '<h3>SomaFM rotation</h3><div class="box">No plays recorded yet.</div>' : `<h3>SomaFM rotation</h3><div class="g2"><div class="box"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.unique)}</b><span class="k">different songs played</span></div></div>
@@ -610,8 +609,8 @@
   const starBtn = (id, title) => `<button class="star" data-act="star" data-v="${esc(id)}" aria-pressed="${isFav(id)}" aria-label="${isFav(id) ? 'Remove from favorites' : 'Add to favorites'}: ${esc(title)}">${isFav(id) ? '★' : '☆'}</button>`;
 
   R.more = () => {
-    const th = document.documentElement.dataset.theme || '';
-    const T = [['', 'Frost', 'linear-gradient(135deg,#2b6cb0,#7fb3e6)'], ['midnight', 'Midnight', 'linear-gradient(135deg,#283a8f,#6a3fb5)'], ['candy', 'Candy cane', 'linear-gradient(135deg,#c8102e,#1f7a4d)']];
+    const th = document.documentElement.dataset.theme === 'candy' ? 'candy' : '';
+    const T = [['', 'Midnight', 'linear-gradient(135deg,#283a8f,#6a3fb5)'], ['candy', 'Candy cane', 'linear-gradient(135deg,#a3122a,#1f6b45)']];
     const r = D.lastRun;
     const rec = r ? (r.ok ? `The recorder last read SomaFM's song list at ${esc(when(r.at))}.` : `The recorder couldn't read SomaFM's song list at ${esc(when(r.at))} (${esc(r.note)})${r.lastOk ? '; last good read ' + esc(when(r.lastOk)) : ''}.`) : '';
     const w = warning();
@@ -628,7 +627,7 @@
     }
     const msg = m => m ? `<div class="msg ${m.cls || ''}" style="padding:0 14px 12px">${esc(m.text)}</div>` : '';
     return head('Settings and your data') + `<div class="split"><div><h3>Theme</h3><div class="themes">${T.map(([k, l, g]) => `<button class="theme ${th === k ? 'on' : ''}" data-act="theme" data-v="${k}" aria-pressed="${th === k}"><i style="background:${g}"></i>${l}</button>`).join('')}</div>
-      <p class="hint">Frost follows your device into Midnight when it's set to dark. Remembered on this device.</p>
+      <p class="hint">Remembered on this device.</p>
       <h3>Your data</h3><div class="box"><div class="snote" style="margin-top:0">Kept in one place on your Cloudflare account: every device shows the same, and each change is saved as you make it.</div>
         <div class="kv"><span>Read ${D.stateAt ? ago(D.stateAt) : '—'}${D.err.save ? '' : queued || inflight ? ' · saving…' : ''}</span><button class="pill" data-act="reload">Read again now</button></div>
         ${w ? `<div class="msg err">⚠ ${esc(w)}</div>` : ''}${rec ? `<div class="snote">${rec}</div>` : ''}
