@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Christmas Lounge · Design C</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1b1412;--paper:#251c19;--ink:#f3e9df;--muted:#bba99a;--line:#3a2d28;--accent:#e8a35a;--accent-ink:#1b1412;--good:#9fd18b;--warn:#e8c05a;--bad:#f08b7a;--glow:radial-gradient(1200px 500px at 80% -10%,rgba(232,163,90,.18),transparent 60%)}
+:root[data-theme="snow"]{--bg:#faf7f2;--paper:#ffffff;--ink:#2a2420;--muted:#7d7066;--line:#ebe3d9;--accent:#a8432a;--accent-ink:#fff;--good:#2f7a3e;--warn:#9a6a00;--bad:#a8432a;--glow:radial-gradient(1200px 500px at 80% -10%,rgba(168,67,42,.08),transparent 60%)}
+:root[data-theme="evergreen"]{--bg:#0f1d17;--paper:#152820;--ink:#eaf2ec;--muted:#a3b8ab;--line:#22392f;--accent:#e2c275;--accent-ink:#0f1d17;--good:#8fd1a2;--warn:#e2c275;--bad:#f09a8a;--glow:radial-gradient(1200px 500px at 80% -10%,rgba(226,194,117,.14),transparent 60%)}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.55 "DM Sans",system-ui,sans-serif;background:var(--glow),var(--bg);background-attachment:fixed;color:var(--ink)}
+.top{display:flex;align-items:center;gap:28px;padding:18px 32px;border-bottom:1px solid var(--line);position:sticky;top:0;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(10px);z-index:5}
+.logo{font-family:Fraunces,serif;font-size:22px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.logo em{color:var(--accent);font-style:normal}
+.menu{display:flex;gap:4px;flex:1;overflow-x:auto;scrollbar-width:none}
+.menu a{color:var(--muted);text-decoration:none;padding:7px 12px;border-radius:999px;font-weight:500;white-space:nowrap}
+.menu a.on{color:var(--accent-ink);background:var(--accent)}
+.themes{display:flex;gap:6px}
+.themes button{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);cursor:pointer}
+.themes button.on{border-color:var(--ink)}
+main{max-width:1040px;margin:0 auto;padding:40px 32px 80px}
+.eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--accent);font-weight:700}
+h1{font-family:Fraunces,serif;font-weight:700;font-size:clamp(34px,6vw,56px);line-height:1.05;margin:10px 0 8px;letter-spacing:-.02em}
+.by{font-size:19px;color:var(--muted)}
+.hero{display:grid;grid-template-columns:1.4fr 1fr;gap:40px;align-items:end;padding-bottom:36px;border-bottom:1px solid var(--line)}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.fact b{font-family:Fraunces,serif;font-size:34px;display:block;line-height:1}
+.fact span{color:var(--muted);font-size:14px}
+.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.tag{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--muted)}
+.tag.have{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.tag.other,.tag.gone{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.tag.none,.tag.disliked{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+h2{font-family:Fraunces,serif;font-size:26px;margin:40px 0 16px}
+.hour{display:grid;grid-template-columns:90px 1fr;gap:20px;padding:14px 0;border-bottom:1px solid var(--line)}
+.hour>span{font-family:Fraunces,serif;font-size:20px;color:var(--accent)}
+.play{display:flex;gap:16px;align-items:baseline;padding:6px 0}
+.play .t{min-width:62px;color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+.play .w{flex:1}
+.play .w b{font-weight:700}
+.play .w span{color:var(--muted)}
+.play .s{font-size:12.5px}
+.s.have{color:var(--good)}.s.other,.s.gone{color:var(--warn)}.s.none,.s.disliked{color:var(--bad)}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.filters button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:6px 14px;font:inherit;font-size:14px;cursor:pointer}
+.filters button.on{border-color:var(--accent);color:var(--accent)}
+.panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:22px}
+.panel h3{font-family:Fraunces,serif;margin:0 0 10px;font-size:20px}
+.line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line)}
+.line:last-child{border-bottom:0}
+.quote{font-family:Fraunces,serif;font-size:20px;line-height:1.35;margin:0}
+.cta{display:inline-block;background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:12px 22px;font:inherit;font-weight:700;cursor:pointer;margin:6px 8px 0 0}
+.cta.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.spark{display:flex;align-items:end;gap:3px;height:60px;margin-top:10px}
+.spark i{flex:1;background:var(--accent);opacity:.75;border-radius:3px 3px 0 0}
+.mock{position:fixed;right:14px;bottom:14px;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 10px;border-radius:8px;opacity:.85}
+@media (max-width:760px){.top{padding:12px 16px;gap:12px;flex-wrap:wrap}.menu{order:3;flex-basis:100%}main{padding:24px 16px 70px}.hero{grid-template-columns:1fr;gap:24px}.hour{grid-template-columns:1fr;gap:4px}}
+</style>
+</head>
+<body>
+<div class="top"><div class="logo">Christmas <em>Lounge</em></div><nav class="menu" id="menu"></nav><div class="themes" id="themes"></div></div>
+<main id="main"></main>
+<div class="mock">Design C · Fireside — mockup</div>
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+const { LABEL, esc, time, day, ago, initials, hue, fmt, CAT, store } = XLH, D = XL;
+const root = document.documentElement;
+const saved = store.get('c-theme'); if (saved) root.dataset.theme = saved;
+const VIEWS = [['tonight', 'Tonight'], ['log', 'The log'], ['numbers', 'By the numbers'], ['shuffle', 'Shuffle'], ['settings', 'Settings']];
+const THEMES = [['', '#e8a35a', 'Fireside'], ['snow', '#faf7f2', 'Snowfall'], ['evergreen', '#1f4a37', 'Evergreen']];
+let filter = 'all';
+function hours(list) {
+  const g = []; for (const p of list) { const h = new Date(p.at * 1000).toLocaleTimeString([], { hour: 'numeric' }); if (!g.length || g[g.length - 1][0] !== h) g.push([h, []]); g[g.length - 1][1].push(p); }
+  return g.map(([h, ps]) => `<div class="hour"><span>${h}</span><div>${ps.map(p => `<div class="play"><span class="t">${time(p.at)}</span><div class="w"><b>${esc(p.title)}</b> <span>— ${esc(p.artist)}</span>${p.fav ? ' <span style="color:var(--accent)">★</span>' : ''}</div><span class="s ${p.status}">${LABEL[p.status]}</span></div>`).join('')}</div></div>`).join('');
+}
+const R = {
+  tonight() {
+    const n = D.now, t = D.totals;
+    return `<section class="hero"><div><div class="eyebrow">On the air now · ${ago(n.at)}</div><h1>${esc(n.title)}</h1><div class="by">${esc(n.artist)}, from <i>${esc(n.album)}</i></div>
+      <div class="tags"><span class="tag ${n.status}">${LABEL[n.status]}</span><span class="tag">Heard ${n.plays} times</span>${n.cat ? `<span class="tag">${CAT[n.cat]}</span>` : ''}</div></div>
+      <div class="facts"><div class="fact"><b>${t.backHours} h</b><span>until a song comes back</span></div><div class="fact"><b>${fmt(t.plays)}</b><span>plays logged</span></div>
+      <div class="fact"><b>${t.playlist}</b><span>in your playlist</span></div><div class="fact"><b>${t.favorites}</b><span>favorites</span></div></div></section>
+      <h2>Earlier tonight</h2>${hours(D.plays.slice(1, 14))}`;
+  },
+  log() {
+    const list = D.plays.filter(p => filter === 'all' || p.status === filter);
+    const f = [['all', 'Everything'], ['have', 'In playlist'], ['other', 'Other version'], ['none', 'Not in playlist'], ['disliked', 'Disliked']]
+      .map(([k, l]) => `<button class="${filter === k ? 'on' : ''}" onclick="filter='${k}';draw()">${l}</button>`).join('');
+    return `<div class="eyebrow">Every play, hour by hour</div><h1>The log</h1><div class="filters">${f}</div>${hours(list)}`;
+  },
+  numbers() {
+    const t = D.totals, by = t.by, tot = Object.values(by).reduce((a, b) => a + b, 0), cats = Object.entries(t.cats).sort((a, b) => b[1] - a[1]);
+    const bars = Array.from({ length: 24 }, (_, i) => 30 + Math.round(40 * Math.abs(Math.sin(i * 1.7 + 2))));
+    return `<div class="eyebrow">Since ${day(t.since)}</div><h1>By the numbers</h1>
+      <div class="panels"><div class="panel"><h3>The rotation</h3><p class="quote">A song you hear now comes back about <b>${t.backHours} hours</b> later.</p><div class="spark">${bars.map(h => `<i style="height:${h}%"></i>`).join('')}</div><span style="color:var(--muted);font-size:13px">Plays per hour, last day (sample)</span></div>
+      <div class="panel"><h3>Your playlist</h3>${Object.entries(by).map(([k, v]) => `<div class="line"><span>${LABEL[k]}</span><b>${v} · ${Math.round(v / tot * 100)}%</b></div>`).join('')}</div>
+      <div class="panel"><h3>Categories</h3>${cats.map(([k, v]) => `<div class="line"><span>${CAT[k]}</span><b>${v}</b></div>`).join('')}</div></div>`;
+  },
+  shuffle() {
+    return `<div class="eyebrow">Your YouTube playlist</div><h1>Shuffle</h1><div class="panels"><div class="panel"><h3>A new order for ${D.totals.playlist} songs</h3>
+      <p style="color:var(--muted)">Favorites, artists and categories spread through the list. About 140 moves, roughly 7,200 of today's 10,000 quota units.</p>
+      <button class="cta">Plan a new order</button><button class="cta ghost">Earlier order</button></div>
+      <div class="panel"><h3>Quota</h3><div class="line"><span>Left today</span><b>about 10,000</b></div><div class="line"><span>Resets</span><b>midnight Pacific</b></div><div class="line"><span>Last shuffle</span><b>${day(D.plays[30].at)}</b></div></div></div>`;
+  },
+  settings() {
+    return `<div class="eyebrow">Make it yours</div><h1>Settings</h1><div class="panels"><div class="panel"><h3>Theme</h3>${THEMES.map(([k, c, l]) => `<div class="line" style="cursor:pointer" onclick="setTheme('${k}')"><span>${l}</span><b>${(root.dataset.theme || '') === k ? '●' : '○'}</b></div>`).join('')}</div>
+      <div class="panel"><h3>Your data</h3><p style="color:var(--muted)">Kept on your Cloudflare account; every device sees the same.</p><button class="cta ghost">Download a backup</button><button class="cta ghost">Export CSV</button></div></div>`;
+  }
+};
+const DEF = 'tonight';
+let view = location.hash.slice(1) || DEF;
+function draw() {
+  if (!R[view]) view = DEF;
+  document.getElementById('menu').innerHTML = VIEWS.map(([k, l]) => `<a class="${view === k ? 'on' : ''}" href="#${k}">${l}</a>`).join('');
+  document.getElementById('themes').innerHTML = THEMES.map(([k, c, l]) => `<button class="${(root.dataset.theme || '') === k ? 'on' : ''}" style="background:${c}" title="${l}" aria-label="${l} theme" onclick="setTheme('${k}')"></button>`).join('');
+  document.getElementById('main').innerHTML = R[view]();
+}
+function setTheme(t) { if (t) root.dataset.theme = t; else delete root.dataset.theme; store.set('c-theme', t); draw(); }
+addEventListener('hashchange', () => { view = location.hash.slice(1) || 'tonight'; draw(); scrollTo(0, 0); });
+draw();
+</script>
+</body>
+</html>

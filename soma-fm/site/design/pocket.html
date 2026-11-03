@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Christmas Lounge · Pocket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef3f8;--card:#ffffff;--ink:#0f1b2a;--muted:#5b6b7d;--line:#dbe3ec;--accent:#2b6cb0;--on:#fff;--chip:#e2ebf5;--good:#1f8a5b;--warn:#b7791f;--bad:#c53030;--dis:#6b4f7a;--hero1:#2b6cb0;--hero2:#7fb3e6;--row:#f6f9fc}
+:root[data-theme="midnight"]{--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a}
+:root[data-theme="candy"]{--bg:#fbf3f1;--card:#ffffff;--ink:#2a1414;--muted:#7a5a58;--line:#f0dcd8;--accent:#c8102e;--on:#fff;--chip:#f8e3df;--good:#1f7a4d;--warn:#b26b00;--bad:#c8102e;--dis:#7a4f6b;--hero1:#c8102e;--hero2:#1f7a4d;--row:#fdf8f7}
+@media (prefers-color-scheme:dark){:root:not([data-theme]){--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 "Plus Jakarta Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+button,select,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:16px 16px 100px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 2px 14px}
+header.top b{font-size:20px;font-weight:800;letter-spacing:-.02em}
+header.top .sub{font-size:12.5px;color:var(--muted)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 4px color-mix(in srgb,var(--good) 25%,transparent)}
+.hero{border-radius:24px;padding:22px;color:#fff;background:linear-gradient(135deg,var(--hero1),var(--hero2));position:relative;overflow:hidden}
+.hero:after{content:"❄";position:absolute;right:-10px;top:-30px;font-size:140px;opacity:.12}
+.hero small{text-transform:uppercase;letter-spacing:.12em;font-size:11px;opacity:.85}
+.hero h2{margin:8px 0 2px;font-size:24px;line-height:1.2}
+.hero p{margin:0;opacity:.9}
+.hero .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:var(--chip);color:var(--ink);text-decoration:none;white-space:nowrap}
+.pill.primary{background:var(--accent);color:var(--on)}
+.pill.good{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.pill.bad{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.hero .pill{background:rgba(255,255,255,.18);color:#fff}
+.hero .pill.solid{background:#fff;color:var(--hero1)}
+h3{font-size:15px;margin:22px 2px 10px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer}
+.bar-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card);border-radius:16px;padding:10px 12px;font-size:13.5px;margin-bottom:12px}
+.bar-line .grow{flex:1;min-width:180px;color:var(--muted)}
+.bar-line .grow b{color:var(--ink)}
+.toggle{display:inline-flex;align-items:center;gap:8px;border:0;background:var(--chip);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.toggle i{width:30px;height:18px;border-radius:999px;background:var(--line);position:relative;transition:.15s}
+.toggle i:after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:.15s}
+.toggle[aria-pressed="true"] i{background:var(--accent)}
+.toggle[aria-pressed="true"] i:after{left:14px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
+.chip{flex:none;display:inline-flex;align-items:center;gap:7px;background:var(--chip);color:var(--ink);border:0;border-radius:999px;padding:7px 13px;font-size:13.5px;font-weight:600;cursor:pointer}
+.chip .n{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--on)}
+.chip[aria-pressed="true"] .n{color:inherit;opacity:.8}
+.chip.sep{margin-left:6px}
+.quick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.more-f{display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--muted);background:none;border-radius:999px;padding:6px 12px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--ink)}
+.more-f .badge{background:var(--accent);color:var(--on);border-radius:999px;font-size:11px;padding:1px 7px}
+.fpanel{background:var(--card);border-radius:18px;padding:14px;margin-bottom:10px}
+.fpanel h5{margin:4px 2px 8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.fpanel .grp{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.fpanel .end{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.find{display:flex;gap:8px;margin:4px 0 12px}
+.find input{flex:1;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:10px 14px}
+.warn{background:color-mix(in srgb,var(--warn) 14%,var(--card));border-radius:16px;padding:12px 14px;margin-bottom:12px;font-size:14px}
+.warn summary{cursor:pointer;font-weight:700}
+/* Plays: a list of rows on a phone, a table of columns from 900 px */
+.plays{background:var(--card);border-radius:20px;overflow:hidden}
+.pr.ph{display:none}
+.pr{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid var(--line);cursor:pointer}
+.pr:first-of-type{border-top:0}
+.pr:hover{background:var(--row)}
+.pr.open{background:var(--row)}
+.c-time{font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;line-height:1.25}
+.c-time small{display:block;font-weight:500;color:var(--muted);font-size:11.5px}
+.now-tag{display:inline-block;background:var(--accent);color:var(--on);border-radius:6px;padding:1px 6px;font-size:10.5px;font-weight:800;letter-spacing:.04em;margin-bottom:3px}
+.c-song{min-width:0}
+.c-song b{display:block;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-song .by{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-song .alb{display:none;color:var(--muted);font-size:12.5px}
+.ic{font-size:12px;margin-left:4px}
+.ic.fav{color:#e3a008}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.st:before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+.st.have{color:var(--good)}.st.other,.st.gone{color:var(--warn)}.st.none{color:var(--bad)}.st.disliked{color:var(--dis)}
+.c-status,.c-cat,.c-plays,.c-act{display:none}
+.m-side{text-align:right;font-size:12px;color:var(--muted);white-space:nowrap}
+.m-side .st{font-size:11.5px}
+.detail{grid-column:1/-1;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:4px 0 2px;cursor:default}
+.detail .meta{color:var(--muted);font-size:13px;margin-bottom:10px}
+.detail .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.detail select{border:1px solid var(--line);background:var(--chip);border-radius:999px;padding:6px 10px;font-size:13px}
+.detail textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--bg);min-height:60px;resize:vertical}
+.note{border-left:3px solid var(--accent);background:var(--chip);border-radius:8px;padding:8px 10px;font-size:13.5px;margin-bottom:10px;white-space:pre-wrap}
+.log{columns:9rem;column-gap:1rem;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;margin:6px 0 0;padding:0;list-style:none}
+.log li{break-inside:avoid;padding:2px 0}
+.log li.cur{color:var(--ink);font-weight:700}
+.gaprow{padding:8px 14px;font-size:12.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);border-top:1px dashed var(--line)}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:13.5px;color:var(--muted)}
+.pager select{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 10px}
+.foot{font-size:12.5px;color:var(--muted);margin-top:14px;text-align:center}
+@media (min-width:900px){
+  .pr.ph{display:grid;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--muted);border-bottom:1px solid var(--line);padding:10px 14px;cursor:default}
+  .ph,.pr{grid-template-columns:92px minmax(220px,1fr) 128px 120px 64px 150px}
+  .ph:hover{background:none}
+  .c-status,.c-cat,.c-plays,.c-act{display:block}
+  .c-plays{font-variant-numeric:tabular-nums;font-weight:700}
+  .c-act{display:flex;gap:6px;justify-content:flex-end}
+  .c-song .alb{display:block}
+  .m-side{display:none}
+  .c-cat{font-size:13px;color:var(--muted)}
+}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.box{background:var(--card);border-radius:20px;padding:16px}
+.box b.big{display:block;font-size:28px;font-weight:800;letter-spacing:-.03em}
+.box span.k{color:var(--muted);font-size:13px}
+.box h4{margin:0 0 10px;font-size:15px}
+.meter{height:12px;border-radius:8px;background:var(--chip);overflow:hidden;margin:10px 0 6px}
+.meter i{display:block;height:100%;background:var(--accent)}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.kv:first-of-type{border-top:0}
+.list{background:var(--card);border-radius:20px;overflow:hidden}
+.item{display:flex;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item .tx{flex:1;min-width:0}
+.item .tx b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.item .tx small{color:var(--muted);display:block}
+.big-btn{width:100%;padding:15px;border-radius:16px;border:0;background:var(--accent);color:var(--on);font-weight:700;font-size:16px;cursor:pointer}
+.big-btn.alt{background:var(--chip);color:var(--ink);margin-top:10px}
+.themes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.theme{border-radius:16px;padding:12px;border:2px solid var(--line);cursor:pointer;background:var(--card);text-align:left}
+.theme.on{border-color:var(--accent)}
+.theme i{display:block;height:34px;border-radius:10px;margin-bottom:8px}
+.seg{display:inline-flex;background:var(--chip);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--card);color:var(--ink)}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:5}
+.tabs div{display:flex;max-width:640px;width:100%;justify-content:space-around}
+.tabs a{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:12px}
+.tabs a.on{color:var(--accent)}
+.tabs svg{width:22px;height:22px}
+.mock{position:fixed;bottom:84px;right:10px;background:var(--ink);color:var(--bg);font-size:12px;padding:5px 9px;border-radius:8px;opacity:.85;z-index:6}
+@media (min-width:900px){.split{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}.split h3:first-child{margin-top:0}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<nav class="tabs"><div id="tabs"></div></nav>
+<div class="mock">Pocket, version 2 — mockup</div>
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+const { LABEL, esc, time, day, short, ago, initials, hue, fmt, CATS, CAT, store } = XLH, D = XL;
+const root = document.documentElement;
+const savedTheme = store.get('p-theme'); if (savedTheme) root.dataset.theme = savedTheme;
+const I = {
+  now: '<circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4z"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  stats: '<path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/>',
+  shuffle: '<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
+  more: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>'
+};
+const TABS = [['now', 'Now'], ['history', 'History'], ['stats', 'Stats'], ['shuffle', 'Shuffle'], ['more', 'More']];
+const head = sub => `<header class="top"><div><b>Christmas Lounge</b><br><span class="sub">${sub}</span></div><span class="live"><i></i>Recording</span></header>`;
+const st = s => `<span class="st ${s}">${LABEL[s]}</span>`;
+
+// History state (the real site keeps these per device, like today's checker)
+const S = { allFilters: false, status: new Set(), favOnly: false, cats: new Set(), latest: false, q: '', page: 0, per: 50, open: null, live: true, noteFor: null };
+const STATUS = [['none', 'Not in playlist'], ['other', 'Other version'], ['have', 'In playlist'], ['disliked', 'Disliked']];
+function latestRows() { const seen = new Set(), out = []; for (const p of D.plays) if (!seen.has(p.key)) { seen.add(p.key); out.push(p); } return out; }
+function shownRows() {
+  let r = S.latest ? latestRows() : D.plays;
+  if (S.status.size) r = r.filter(p => S.status.has(p.status) || (p.status === 'gone' && S.status.has('none')));
+  if (S.cats.size) r = r.filter(p => p.status === 'have' && S.cats.has(p.cat || 'uncat'));
+  if (S.favOnly) r = r.filter(p => p.fav);
+  if (S.q) r = r.filter(p => (p.title + ' ' + p.artist + ' ' + p.album).toLowerCase().includes(S.q));
+  return r;
+}
+// What a song's row offers, by its state (the same choices as today's cards)
+function actions(p) {
+  const open = p.item && p.status !== 'gone' && p.marked !== 'not' && p.status !== 'disliked' ? `<a class="pill primary" href="https://www.youtube.com/watch?v=${p.item.id}" target="_blank" rel="noopener">▶ Open</a>` : '';
+  const search = `<a class="pill" href="https://www.youtube.com/results?search_query=${encodeURIComponent(p.artist + ' ' + p.title)}" target="_blank" rel="noopener">Search YouTube</a>`;
+  const b = (t, c = '') => `<button class="pill ${c}">${t}</button>`;
+  if (p.status === 'disliked') return search + b('Undo dislike');
+  if (p.marked === 'have' && p.linked) return open + b('Unlink');
+  if (p.marked === 'have') return open + b('Link song') + b('Undo');
+  if (p.marked === 'not') return search + b('Undo') + b('👎 Dislike', 'bad');
+  if (p.status === 'have') return open + b('Wrong video?');
+  if (p.status === 'gone') return search + b('✓ I have it', 'good');
+  if (p.status === 'other') return search + b('✓ I have it', 'good') + b('✗ Not this one', 'bad');
+  return search + b('✓ I have it', 'good') + b('👎 Dislike', 'bad');
+}
+// Rows are named by number in onclick, so song titles with quotes stay out of the code
+const IDS = [];
+function rid(id) { let i = IDS.indexOf(id); if (i < 0) { IDS.push(id); i = IDS.length - 1; } return i; }
+function toggleRow(i) { const id = IDS[i]; S.open = S.open === id ? null : id; S.noteFor = null; draw(); }
+function detail(p) {
+  const id = p.key + '@' + p.at;
+  const has = p.item && p.status !== 'disliked' && p.marked !== 'not' ? `<div class="meta">${p.status === 'gone' ? 'You had' : p.linked ? 'Linked to' : 'You have'}: <b>${esc(p.item.title)}</b>${p.item.ch ? ' — ' + esc(p.item.ch) : ''}</div>` : '';
+  const cat = p.status === 'have' ? `<select aria-label="Category">${['<option value="">No category</option>'].concat(CATS.map(([k, n]) => `<option ${p.cat === k ? 'selected' : ''}>${n}</option>`)).join('')}</select>` : '';
+  const fav = p.status === 'have' ? `<button class="pill">${p.fav ? '★ Favorite' : '☆ Favorite'}</button>` : '';
+  const note = S.noteFor === id ? `<textarea placeholder="A note about this song">${esc(p.note)}</textarea><div class="row" style="margin-top:8px"><button class="pill primary">Save note</button><button class="pill" onclick="S.noteFor=null;draw();event.stopPropagation()">Cancel</button></div>`
+    : `${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}<div class="row"><button class="pill" onclick="S.noteFor=IDS[${rid(id)}];draw();event.stopPropagation()">✎ ${p.note ? 'Edit note' : 'Add a note'}</button></div>`;
+  const log = p.plays > 1 ? `<div class="meta" style="margin:10px 0 0">All ${p.plays} plays${p.plays > p.times.length ? ` (newest ${p.times.length} shown)` : ''}</div><ul class="log">${p.times.map(t => `<li class="${t === p.at ? 'cur' : ''}">${short(t)} ${time(t)}</li>`).join('')}</ul>` : '';
+  return `<div class="detail" onclick="event.stopPropagation()">${has}<div class="row">${actions(p)}${fav}${cat}</div>${note}${log}</div>`;
+}
+function playRow(p, isNow) {
+  const id = p.key + '@' + p.at, open = S.open === id;
+  const icons = (p.fav ? '<span class="ic fav" title="Favorite">★</span>' : '') + (p.note ? '<span class="ic" title="Has a note">✎</span>' : '');
+  return `<div class="pr ${open ? 'open' : ''}" onclick="toggleRow(${rid(id)})">
+    <div class="c-time">${isNow ? '<span class="now-tag">NOW</span><br>' : ''}${time(p.at)}<small>${short(p.at)}</small></div>
+    <div class="c-song"><b>${esc(p.title)}${icons}</b><div class="by">${esc(p.artist)}</div><div class="alb">${esc(p.album)}</div></div>
+    <div class="c-status">${st(p.status)}</div>
+    <div class="c-cat">${p.status === 'have' ? esc(CAT[p.cat] || 'No category') : '—'}</div>
+    <div class="c-plays">${p.plays}×</div>
+    <div class="c-act">${p.item && p.status === 'have' ? `<a class="pill" href="https://www.youtube.com/watch?v=${p.item.id}" target="_blank" rel="noopener" onclick="event.stopPropagation()">▶ Open</a>` : ''}<button class="pill" aria-label="More">${open ? '▴' : '▾'}</button></div>
+    <div class="m-side">${st(p.status)}<br>${p.plays}× ${open ? '▴' : '▾'}</div>
+    ${open ? detail(p) : ''}</div>${p.gap && !S.latest ? '<div class="gaprow">Not recording here — plays in this stretch were missed</div>' : ''}`;
+}
+const R = {
+  now() {
+    const n = D.now;
+    return head('SomaFM Christmas Lounge · recorded around the clock') + `<div class="split"><div>
+      <div class="hero"><small>Now playing · ${LABEL[n.status]}</small><h2>${esc(n.title)}</h2><p>${esc(n.artist)} · ${esc(n.album)}</p>
+      <div class="acts">${n.item ? `<a class="pill solid" href="https://www.youtube.com/watch?v=${n.item.id}" target="_blank" rel="noopener">▶ Open</a>` : ''}<button class="pill">${n.fav ? '★ Favorite' : '☆ Favorite'}</button><button class="pill">✎ Note</button><button class="pill">${n.plays} plays</button></div></div>
+      <div class="g2" style="margin-top:12px"><div class="box"><b class="big">${D.totals.backHours} h</b><span class="k">until a song comes back</span></div><div class="box"><b class="big">${fmt(D.totals.plays)}</b><span class="k">plays recorded</span></div></div></div>
+      <div><h3>Just played <a onclick="location.hash='history'">See all</a></h3><div class="plays">${D.plays.slice(1, 8).map(p => playRow(p, false)).join('')}</div></div></div>`;
+  },
+  history() {
+    const all = S.latest ? latestRows() : D.plays, rows = shownRows();
+    const pages = Math.max(1, Math.ceil(rows.length / S.per)); if (S.page >= pages) S.page = pages - 1;
+    const page = rows.slice(S.page * S.per, (S.page + 1) * S.per);
+    const count = k => all.filter(p => p.status === k || (k === 'none' && p.status === 'gone')).length;
+    const inList = all.filter(p => p.status === 'have');
+    const C = {
+      all: () => `<button class="chip" aria-pressed="${!S.status.size}" onclick="S.status.clear();S.page=0;draw()">All <span class="n">${fmt(all.length)}</span></button>`,
+      st: (k, l) => `<button class="chip" aria-pressed="${S.status.has(k)}" onclick="S.status.has('${k}')?S.status.delete('${k}'):S.status.add('${k}');if(S.status.size===4)S.status.clear();S.page=0;draw()">${l} <span class="n">${fmt(count(k))}</span></button>`,
+      fav: () => `<button class="chip" aria-pressed="${S.favOnly}" onclick="S.favOnly=!S.favOnly;S.page=0;draw()">★ Favorites <span class="n">${fmt(inList.filter(p => p.fav).length)}</span></button>`,
+      cat: (k, l) => `<button class="chip" aria-pressed="${S.cats.has(k)}" onclick="S.cats.has('${k}')?S.cats.delete('${k}'):S.cats.add('${k}');S.page=0;draw()">${l} <span class="n">${fmt(inList.filter(p => (p.cat || 'uncat') === k).length)}</span></button>`,
+      latest: () => `<button class="chip" aria-pressed="${S.latest}" onclick="S.latest=!S.latest;S.page=0;draw()" title="One row per song, at its most recent play">Latest play only</button>`
+    };
+    const CATS2 = CATS.concat([['uncat', 'No category', 'None']]);
+    const active = S.status.size + S.cats.size + (S.favOnly ? 1 : 0) + (S.latest ? 1 : 0);
+    let filters;
+    if (S.allFilters) {
+      filters = `<div class="fpanel"><h5>Status</h5><div class="grp">${C.all()}${STATUS.map(([k, l]) => C.st(k, l)).join('')}</div>
+        <h5>Favorites and categories</h5><div class="grp">${C.fav()}${CATS2.map(([k, n]) => C.cat(k, n)).join('')}</div>
+        <h5>Show</h5><div class="grp">${C.latest()}</div>
+        <div class="end"><button class="pill" ${active ? '' : 'disabled'} onclick="S.status.clear();S.cats.clear();S.favOnly=false;S.latest=false;S.page=0;draw()">Clear all</button><button class="pill primary" onclick="S.allFilters=false;draw()">Done</button></div></div>`;
+    } else {
+      // A few to start with: All, In playlist, Not in playlist and Favorites, plus any other filter that's on
+      const q = [C.all(), C.st('have', 'In playlist'), C.st('none', 'Not in playlist'), C.fav()];
+      for (const [k, l] of STATUS) if (k !== 'have' && k !== 'none' && S.status.has(k)) q.push(C.st(k, l));
+      for (const [k, , sh] of CATS2) if (S.cats.has(k)) q.push(C.cat(k, sh));
+      if (S.latest) q.push(C.latest());
+      filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" aria-expanded="false" onclick="S.allFilters=true;draw()">All filters${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button></div>`;
+    }
+    const gone = D.gone.length ? `<details class="warn"><summary>⚠ ${D.gone.length} song${D.gone.length === 1 ? ' is' : 's are'} gone from your playlist</summary>${D.gone.map(g => `<div class="kv"><span>${esc(g.title)}</span><span><button class="pill">Search YouTube</button> <button class="pill">Dismiss</button></span></div>`).join('')}</details>` : '';
+    return head('Every play, newest first') + `
+      <div class="bar-line"><span class="grow"><b>Christmas lounge</b> playlist · ${D.totals.playlist} songs · checked 3 min ago</span>
+        <button class="pill">↻ Refresh playlist</button><button class="toggle" aria-pressed="${S.live}" onclick="S.live=!S.live;draw()"><i></i>Live updates</button></div>
+      ${gone}${filters}
+      <div class="find"><input type="search" placeholder="Search plays: song, artist or album" value="${esc(S.q)}" oninput="S.q=this.value.toLowerCase();S.page=0;draw(true)"></div>
+      <div class="plays"><div class="pr ph"><div>Time</div><div>Song</div><div>Status</div><div>Category</div><div>Plays</div><div style="text-align:right">Actions</div></div>
+      ${page.length ? page.map((p, i) => playRow(p, S.page === 0 && i === 0 && p === D.plays[0])).join('') : '<div class="pr" style="cursor:default"><div></div><div class="c-song"><span class="by">No plays match.</span></div></div>'}</div>
+      <div class="pager"><button class="pill" ${S.page ? '' : 'disabled'} onclick="S.page--;draw();scrollTo(0,0)">‹ Newer</button>
+        <span>${rows.length ? `${fmt(S.page * S.per + 1)}–${fmt(S.page * S.per + page.length)} of ${fmt(rows.length)}` : ''}</span>
+        <span>Per page <select onchange="S.per=+this.value;S.page=0;draw()">${[25, 50, 100, 250].map(n => `<option ${S.per === n ? 'selected' : ''}>${n}</option>`).join('')}</select></span>
+        <button class="pill" ${S.page < pages - 1 ? '' : 'disabled'} onclick="S.page++;draw();scrollTo(0,0)">Older ›</button></div>
+      <div class="foot">Recording since ${day(D.totals.since)} · ${fmt(D.totals.plays)} plays · ${D.totals.gaps} gaps · (mockup: newest ${D.plays.length} plays)</div>`;
+  },
+  stats() {
+    const t = D.totals, by = t.by, tot = Object.values(by).reduce((a, b) => a + b, 0);
+    const top = (S.topSort === 'recent' ? D.top.slice().sort((a, b) => b.at - a.at) : D.top);
+    return head('Since ' + day(t.since)) + `<div class="split"><div>
+      <h3>Your playlist</h3><div class="g3"><div class="box"><b class="big">${t.playlist}</b><span class="k">songs</span></div><div class="box"><b class="big">~9 h</b><span class="k">total length</span></div><div class="box"><b class="big">3:32</b><span class="k">average song</span></div></div>
+      <div class="box" style="margin-top:12px"><div class="kv"><span>Heard on SomaFM so far</span><b>${t.heard} · ${Math.round(t.heard / t.playlist * 100)}%</b></div><div class="meter"><i style="width:${t.heard / t.playlist * 100}%"></i></div>
+        <div class="kv"><span>Not heard yet</span><b>${D.notHeard.length}</b></div><div class="kv"><span>Favorites</span><b>${t.favorites}</b></div></div>
+      <h3>Categories</h3><div class="box">${CATS.map(([k, n]) => `<div class="kv"><span>${n}</span><b>${t.cats[k]}</b></div>`).join('')}<div class="kv"><span>No category yet</span><b>${t.cats.uncat}</b></div></div>
+      <h3>Songs by status</h3><div class="box">${Object.entries(by).map(([k, v]) => `<div class="kv">${st(k)}<b>${v} · ${Math.round(v / tot * 100)}%</b></div>`).join('')}</div></div>
+      <div><h3>SomaFM rotation</h3><div class="g2"><div class="box"><b class="big">${t.backHours} h</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.songs)}</b><span class="k">different songs played</span></div></div>
+      <h3>Most played <span class="seg"><button class="${S.topSort !== 'recent' ? 'on' : ''}" onclick="S.topSort='plays';draw()">Most plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" onclick="S.topSort='recent';draw()">Latest</button></span></h3>
+      <div class="plays">${top.map(p => playRow(p, false)).join('')}</div>
+      <h3>Recording</h3><div class="box"><div class="kv"><span>Since</span><b>${day(t.since)}</b></div><div class="kv"><span>Plays saved</span><b>${fmt(t.plays)}</b></div><div class="kv"><span>Gaps (station or recorder down)</span><b>${t.gaps}</b></div></div></div></div>`;
+  },
+  shuffle() {
+    return head('Reorder your YouTube playlist') + `<div class="split"><div><div class="box"><h4>A new order for ${D.totals.playlist} songs</h4><span class="k">Favorites, artists, albums and categories spread out. About 140 moves, roughly 7,200 quota units.</span>
+      <div style="margin-top:14px"><button class="big-btn">Plan a new order</button><button class="big-btn alt">Show the earlier order</button><button class="big-btn alt">Put back the original order</button></div></div>
+      <div class="box" style="margin-top:12px"><div class="kv"><span>Original order</span><span><button class="pill">Download (CSV)</button></span></div><div class="kv"><span>Signed in with Google</span><span><button class="pill">Sign out</button></span></div></div></div>
+      <div><div class="box"><h4>Quota today</h4><div class="meter"><i style="width:4%"></i></div><div class="kv"><span>Left today (all your devices)</span><b>about 9,600 of 10,000</b></div><div class="kv"><span>Resets</span><b>midnight Pacific</b></div>
+        <div class="kv"><span>Last shuffle</span><b>${day(D.plays[30].at)}</b></div><div class="kv"><span>It used</span><b>about 7,150 units · 141 moves</b></div>
+        <div class="kv"><span>Google's own count</span><a class="pill" href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas" target="_blank" rel="noopener">Cloud Console</a></div></div>
+      <p class="foot" style="text-align:left">Play the playlist with YouTube's shuffle off, sorted Manual.</p></div></div>`;
+  },
+  more() {
+    const th = root.dataset.theme || '';
+    const T = [['', 'Frost', 'linear-gradient(135deg,#2b6cb0,#7fb3e6)'], ['midnight', 'Midnight', 'linear-gradient(135deg,#283a8f,#6a3fb5)'], ['candy', 'Candy cane', 'linear-gradient(135deg,#c8102e,#1f7a4d)']];
+    return head('Settings and your data') + `<div class="split"><div><h3>Theme</h3><div class="themes">${T.map(([k, l, g]) => `<button class="theme ${th === k ? 'on' : ''}" onclick="setTheme('${k}')"><i style="background:${g}"></i>${l}</button>`).join('')}</div>
+      <h3>Sync</h3><div class="box"><div class="kv"><span>Your data is kept on your Cloudflare account; every device sees the same</span></div><div class="kv"><span>Last synced 2 min ago</span><button class="pill">Sync now</button></div></div></div>
+      <div><h3>Backup and restore</h3><div class="list"><div class="item"><div class="tx"><b>Download a backup</b><small>Plays, marks, favorites, categories, notes</small></div><button class="pill">Download</button></div>
+      <div class="item"><div class="tx"><b>Copy a backup</b><small>To paste somewhere safe</small></div><button class="pill">Copy</button></div>
+      <div class="item"><div class="tx"><b>Restore from a backup</b><small>Choose a file or paste one; it's merged in, and can be undone</small></div><button class="pill">Choose…</button></div></div>
+      <h3>Export</h3><div class="list"><div class="item"><div class="tx"><b>Plays as CSV</b><small>For a spreadsheet</small></div><button class="pill">Download</button><button class="pill">Copy</button></div></div></div></div>`;
+  }
+};
+const DEF = 'now';
+let view = location.hash.slice(1) || DEF;
+function draw(keepSearch) {
+  if (!R[view]) view = DEF;
+  document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => `<a class="${view === k ? 'on' : ''}" href="#${k}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${I[k]}</svg>${l}</a>`).join('');
+  document.getElementById('app').innerHTML = R[view]();
+  if (keepSearch) { const s = document.querySelector('.find input'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+}
+function setTheme(t) { if (t) root.dataset.theme = t; else delete root.dataset.theme; store.set('p-theme', t); draw(); }
+addEventListener('hashchange', () => { view = location.hash.slice(1) || DEF; S.open = null; draw(); scrollTo(0, 0); });
+draw();
+</script>
+</body>
+</html>

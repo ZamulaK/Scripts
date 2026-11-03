@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**.
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**. **Next session: start with §8d (build the new site from the approved Pocket v2 design, with Dan's two tweaks).**
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -258,6 +258,67 @@ updating Tampermonkey on each device, and every key built into the site rather t
 - **Secrets** (not in the repo): `YT_KEY`, `GOOGLE_CLIENT_ID`, `ACCESS_TEAM`, `ACCESS_AUD`.
 - The recorder Worker keeps the 10-minute look and the key-protected endpoints the userscript uses. Pages can't run on a schedule.
 
+## 8d. Next: the new site, built from the Pocket v2 design (Nov 2026)
+
+**Status:** designed and approved; not started. Dan: "this design is good enough to start building the full site". This is his
+only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
+
+**The design to build:** `site/design/pocket.html` (open `site/design/index.html`; a, b, c are the designs not chosen). Live
+copy at https://design.xmaslounge.pages.dev/pocket.html (behind Access). The mockups need `site/design/data.js`, Dan's real
+plays, which is **not in git** (personal notes and listening data): run `node site/design/mkdata.js` after saving two read-only
+D1 queries as `state.json` and `plays.json` beside it, then delete those two files:
+```
+cd worker
+npx wrangler d1 execute soma --remote --json --command "SELECT body FROM docs WHERE name='state'" > ../site/design/state.json
+npx wrangler d1 execute soma --remote --json --command "SELECT at, artist, title, album, gap FROM plays WHERE channel='christmas' ORDER BY at DESC" > ../site/design/plays.json
+```
+Redeploy the mockups with `npx wrangler pages deploy ../site/design --project-name xmaslounge --branch design --commit-dirty=true` (from worker/).
+
+**What Pocket v2 is (what Dan approved):**
+- Five tabs in a bottom bar: **Now** (now-playing card with Open, Favorite, Note, plays; two number tiles; "Just played"),
+  **History**, **Stats**, **Shuffle**, **More** (themes, sync, backup and restore, CSV export).
+- **History:** playlist line with Refresh playlist and a Live updates switch; the "gone from playlist" notice when there are any;
+  **filters: only four chips at first (All, In playlist, Not in playlist, ★ Favorites) plus any other filter that's on, and an
+  "All filters ▾" button (shows "N on") opening a panel grouped as Status / Favorites and categories / Show (Latest play only),
+  with Clear all and Done.** Dan asked for this instead of scrolling chip rows: minimal at first, everything one tap away.
+  Then a search box (new), the plays, Newer/Older paging with 25/50/100/250 per page, and the recording line.
+- **Plays: Time is its own column** (Dan asked). From 900 px wide it's a table: Time | Song (title, artist, album) | Status |
+  Category | Plays | Actions (Open, ▾). On a phone: Time on the left, song in the middle, status and play count on the right.
+  Gap rows ("Not recording here") stay between plays. Clicking a row opens: the video you have, the same per-status choices
+  as today's cards (Open, Wrong video?, I have it, Not this one, Dislike, Undo, Link song, Unlink, Search YouTube),
+  Favorite, the category picker, the note (view, add, edit), and every play of the song.
+- **Stats:** Your playlist (songs, total length, average song, heard bar, not heard yet, favorites), categories (with "No
+  category yet"), songs by status, SomaFM rotation (comes back in ~14.7 h, different songs), most played (sort: most
+  plays / latest, rows open like History), recording (since, plays, gaps).
+- **Shuffle:** plan a new order, earlier order, original order (and download it), sign-in, quota today across devices,
+  last shuffle and what it used, link to Google's count.
+- **Themes:** Frost (light, default), Midnight (dark, also the automatic dark), Candy cane. Remembered per device.
+
+**Dan's tweaks to include from the start (Nov 2):**
+1. **Total playlist time as h:mm, e.g. "9:32"** (9 hours 32 minutes), from the real lengths, instead of the mockup's "~9 h".
+2. **Songs by status as a share of all plays too, not only of songs:** e.g. In playlist X% of songs and Y% of plays, Disliked
+   likewise. (Today's Stats share tiles already show `playPct` and `songPct` from `Stats.compute`; the mockup showed songs only.)
+
+**Plan agreed so far:**
+- **Build at a test address while the current site keeps running**: a Pages branch (e.g. `next` →
+  next.xmaslounge.pages.dev), already covered by the `*.xmaslounge.pages.dev` Access rule. Preview deployments use the
+  *preview* environment: set its secrets too (`npx wrangler pages secret put YT_KEY --project-name xmaslounge --env preview`,
+  same for GOOGLE_CLIENT_ID, ACCESS_TEAM, ACCESS_AUD; Dan enters them himself) and check the D1 binding applies to preview.
+  Switch production over only when it does everything today's site does.
+- **D1 as the one copy of the data**: no per-browser copies to merge (the source of the device-to-device bugs). The browser
+  asks `/api` for what it shows and sends each change (mark, dislike, favorite, category, note, dismiss) as it happens.
+  Keep the existing tables and `/state` document readable by today's site until the switch, so both can run side by side;
+  don't change their format in a way the current site can't read.
+- **Carry over the pure, tested modules** (Matcher, Stats, History, Shuffle, Archive, Sync's rules) rather than rewriting
+  them; the outer page is new. No more prototype.js workarounds needed in new code (that was SomaFM's page), but the old
+  file must keep them while it still runs.
+- **Real pages with addresses** (#history, #stats … or paths), the back button works, filters can live in the address.
+- **The Tampermonkey script is frozen** (Dan doesn't use it). Leave it working; the current site runs the same file.
+- Tests: keep the regression gates; add page checks for the new site against a stand-in `/api`, like §9's site checks.
+
+**Questions still open for Dan** (ask as plain text when they come up, not pick-lists): whether "Now" should auto-refresh
+like Live updates; whether the 10,000-play cap (HISTORY_MAX, about 3½ weeks; the season is about 4 months) should go now that D1 holds everything.
+
 ## 9. Testing and regression gates
 
 - `npm test`: about 375 checks across both runs (matching cases from every reported miss, marks, unavailable videos, history merge and gaps, linking, gone songs, reader with a fake YouTube, stats, backup/merge, shuffle plans and runs against a fake API, source check). **Every bug fix adds a test that fails before the fix.**
@@ -268,9 +329,9 @@ updating Tampermonkey on each device, and every key built into the site rather t
 
 ## 10. Open items / next steps
 
-0. **Website redesign (Nov 2026, Dan's main project).** Dan wants a standard modern website (normal navigation, modern UI, themes) rather than a wrapper around SomaFM's page. Three mockups with his real plays are at https://design.xmaslounge.pages.dev (branch `design`, behind Access): A Studio (sidebar dashboard), B Pocket (phone-first, tab bar), C Fireside (editorial, warm). Dan picked **Pocket** (Nov 2); version 2 is pocket.html there: every filter and option from the current site, a table on wide screens with Time as its own column (Time, Song, Status, Category, Plays, Actions), rows that open for actions, category, note and every play, and a few filter chips with an All filters panel instead of scrolling rows. Next: then build it at a test address (a Pages branch such as `next`, covered by the `*.xmaslounge.pages.dev` Access rule; preview deployments need their own secrets, `wrangler pages secret put ... --env preview`) while the current site keeps running. Plan: D1 as the one copy of the data (no per-browser copies to merge), real pages with addresses, the pure modules (Matcher, Stats, History, Shuffle) carried over.
-1. **Shuffle: first real run** (3.12.0). Dan chose to reorder the real playlist (§8a). Watch the first run for anything the fake API didn't show (deleted videos, sort setting).
-2. **Laptop setup** (above). Then merge the tablet backup into it.
+0. **NEXT SESSION, FIRST TASK: build the new site (Pocket v2) — see §8d.** Dan approved the design on Nov 2 with two tweaks.
+1. ~~Shuffle: first real run~~ done (Dan shuffles from the site; quota and last shuffle are synced since 3.26.0).
+2. ~~Laptop setup~~ no longer needed: the site records and syncs on every device.
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.
 
 ## 11. Working with Dan

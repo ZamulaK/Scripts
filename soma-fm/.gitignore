@@ -7,3 +7,6 @@ soma-xmas-checker-backup-*.json
 .dev.vars
 # the userscript is copied into the site when it's deployed (site/deploy.js)
 site/public/soma-xmas-checker.user.js
+site/design/data.js
+site/design/state.json
+site/design/plays.json
