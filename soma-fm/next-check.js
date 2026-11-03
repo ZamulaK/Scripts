@@ -122,7 +122,7 @@ const overflow = page => page.evaluate(() => {
   await tabTo(s.page, 'History');
   let h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.innerText.replace(/\s+\d[\d,]*$/, '').trim()), more: !!document.querySelector('.more-f'),
     rows: document.querySelectorAll('#plist .pr:not(.ph)').length, gaps: document.querySelectorAll('.gaprow').length, line: document.querySelector('.bar-line .grow').textContent, gone: (document.querySelector('#gonebox summary') || {}).textContent }));
-  check('History: five chips to start (All, In playlist, Not in playlist, Favorites, Latest: short at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,In playlist,Not in playlist,★ Favorites,Latest' && h.more, JSON.stringify(h));
+  check('History: five chips to start (All, In playlist, Not in playlist, Favorites, Latest; short names at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,In list,Not in list,★,Latest' && h.more, JSON.stringify(h));
   check('History: 50 plays a page, gap rows between plays, the playlist line and the gone-from-playlist notice', h.rows === 50 && h.gaps === 0 && /Xmas Mixed playlist · 61 songs \(1 unavailable left out\) · checked 2 min ago/.test(h.line) && /1 song is gone/.test(h.gone), JSON.stringify(h));
   await s.page.click('.more-f');
   const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length, latest: !!document.querySelector('.fpanel .grp:first-of-type [data-act="flatest"]') }));
@@ -133,7 +133,7 @@ const overflow = page => page.evaluate(() => {
   h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.firstChild.textContent.trim()).join(), badge: (document.querySelector('.more-f .badge') || {}).textContent }));
   check('History: filters that are on stay among the chips, with "N on", and live in the address', h.url === '/history?status=other&cat=jazz' && /Other version/.test(h.chips) && /Jazz/.test(h.chips) && h.badge === '2 on', JSON.stringify(h));
   await s.page.click('.more-f'); await s.page.click('[data-act="fclear"]'); await s.page.click('[data-act="fdone"]');
-  await s.page.click('.quick .chip:has-text("Not in playlist")');
+  await s.page.click('.quick .chip[data-v="none"]');
   const none = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph) .m-side .st')].map(x => x.textContent));
   check('History: Not in playlist shows only those (and songs gone from it)', none.length > 0 && none.every(t => /Not in playlist|Gone from playlist/.test(t)), [...new Set(none)].join());
   await s.page.fill('#find', 'rotation song 1');
@@ -146,8 +146,11 @@ const overflow = page => page.evaluate(() => {
   // A song's row: its choices, and each change sent to /api/change
   const rowFor = title => s.page.locator('#plist .pr:not(.ph)', { has: s.page.locator(`.c-song b:text-is("${title}")`) }).first();
   await rowFor('Rotation Song 2').click();
-  let d = await s.page.evaluate(() => { const x = document.querySelector('.pr.open .detail'); return x && { buttons: [...x.querySelectorAll('.row button, .row a')].map(b => b.textContent.trim()), log: x.querySelectorAll('.log li').length }; });
-  check('Row: tapping opens Search YouTube, I have it, Dislike, a note, and every play of the song', d && ['Search YouTube', '✓ I have it', '👎 Dislike', '✎ Add a note'].every(b => d.buttons.indexOf(b) >= 0) && d.log > 1, JSON.stringify(d));
+  let d = await s.page.evaluate(() => { const x = document.querySelector('.pr.open .detail'); return x && { rows: x.querySelectorAll('.row').length, buttons: [...x.querySelectorAll('.row button, .row a')].map(b => b.textContent.trim()), log: x.querySelectorAll('.log li').length }; });
+  check('Row: tapping opens I have it, Dislike and Add a note in one row, and every play of the song', d && d.rows === 1 && d.buttons.join() === '✓ I have it,👎 Dislike,✎ Add a note' && d.log > 1, JSON.stringify(d));
+  const icons = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph)')].map(r => ({ st: r.querySelector('.m-side .st').textContent, open: !!r.querySelector('.c-go a.open'), search: !!r.querySelector('.c-go a[href*="results?search_query"]'), star: !!r.querySelector('.c-song .star') })));
+  check('Rows: an Open icon for songs you have, a Search icon for ones you don\'t (both for another version), a star on songs in the playlist',
+    icons.every(x => x.st === 'In playlist' ? x.open && !x.search && x.star : x.st === 'Not in playlist' ? !x.open && x.search && !x.star : x.st === 'Different mix' || x.st === 'Other version' ? x.open && x.search : true), JSON.stringify(icons.slice(0, 6)));
   await s.page.click('.pr.open [data-act="pick"]');
   const pick = await s.page.evaluate(() => ({ q: document.activeElement.id, n: document.querySelectorAll('.choice').length }));
   await s.page.fill('#pick-q', 'marshmallow');
@@ -161,11 +164,13 @@ const overflow = page => page.evaluate(() => {
   let ch = api.changes[0] || {};
   check('Row: choosing links it, sent as one change: the mark with the video, and the row is In playlist', ch.marks && ch.marks[key] && ch.marks[key].v === 'have' && /^[\w-]{11}$/.test(ch.marks[key].id)
     && api.doc.marks[key] && await rowFor('Rotation Song 2').locator('.m-side .st').textContent() === 'In playlist', JSON.stringify(ch));
-  await rowFor('Rotation Song 2').click();
-  await s.page.click('.pr.open [data-act="fav"]');
+  const wasOpen = await s.page.evaluate(() => !!document.querySelector('.pr.open'));
+  await rowFor('Rotation Song 2').locator('.star').click();
   await s.page.waitForTimeout(300);
   const vid = api.doc.marks[key].id;
-  check('Row: ☆ Favorite stars the linked video', api.doc.favorites[vid] && api.doc.favorites[vid].on === true && await s.page.locator('.pr.open [data-act="fav"]').textContent() === '★ Favorite');
+  check('Row: the ☆ on the row stars the linked video, without opening or closing the row', api.doc.favorites[vid] && api.doc.favorites[vid].on === true
+    && await rowFor('Rotation Song 2').locator('.star').textContent() === '★' && await s.page.evaluate(() => !!document.querySelector('.pr.open')) === wasOpen);
+  if (!wasOpen) await rowFor('Rotation Song 2').locator('.c-time').click();
   await s.page.click('.pr.open [data-act="catmenu"]');
   await s.page.click('.menu button:has-text("Mellow")');
   await s.page.waitForTimeout(300);
@@ -175,7 +180,11 @@ const overflow = page => page.evaluate(() => {
   await s.page.fill('#note-text', 'Found it on YouTube');
   await s.page.click('[data-act="noteSave"]');
   await s.page.waitForTimeout(300);
-  check('Row: the note is saved and shown', api.doc.notes[key] && api.doc.notes[key].t === 'Found it on YouTube' && await s.page.locator('.pr.open .note').textContent() === 'Found it on YouTube');
+  check('Row: the note is saved and shown, with an edit icon beside it (Add a note gone)', api.doc.notes[key] && api.doc.notes[key].t === 'Found it on YouTube' && await s.page.locator('.pr.open .note').textContent() === 'Found it on YouTube'
+    && await s.page.locator('.pr.open .notewrap .icon[data-act="note"]').count() === 1 && await s.page.locator('.pr.open .row [data-act="note"]').count() === 0);
+  await s.page.click('.pr.open .notewrap .icon');
+  check('Row: the edit icon opens the note to edit', await s.page.evaluate(() => document.activeElement.id === 'note-text' && document.activeElement.value === 'Found it on YouTube'));
+  await s.page.click('[data-act="noteCancel"]');
   await s.page.click('.pr.open [data-act="unlink"]');
   await s.page.waitForTimeout(300);
   check('Row: Unlink keeps "I have it" without the video', api.doc.marks[key] && api.doc.marks[key].v === 'have' && !api.doc.marks[key].id, JSON.stringify(api.doc.marks[key]));
@@ -214,7 +223,7 @@ const overflow = page => page.evaluate(() => {
   await s.ctx.close();
 
   // Every page at three widths, in each theme and in dark mode: nothing wider than the window
-  for (const [width, scheme, theme] of [[1024, 'light', undefined], [600, 'light', undefined], [600, 'dark', undefined], [360, 'light', undefined], [360, 'dark', 'candy'], [600, 'light', 'candy']]) {
+  for (const [width, scheme, theme] of [[1024, 'light', undefined], [600, 'light', undefined], [600, 'dark', undefined], [360, 'light', undefined], [360, 'dark', 'candy'], [600, 'light', 'candy'], [600, 'dark', 'evergreen']]) {
     s = await open(browser, { width, scheme, theme, height: 900 });
     const bad = [];
     for (const tab of ['Now', 'History', 'Stats', 'Shuffle', 'More']) {
@@ -234,6 +243,26 @@ const overflow = page => page.evaluate(() => {
     }
     if (!theme) check(`Midnight, dark, whatever the device is set to (${scheme})`, look.bg === 'rgb(11, 16, 32)', look.bg);
     if (theme === 'candy') check('Candy cane, a dark theme, remembered', look.bg === 'rgb(23, 11, 13)', look.bg);
+    if (width === 360) {
+      await tabTo(s.page, 'History');
+      const dots = await s.page.evaluate(() => [...document.querySelectorAll('#plist .m-side .st')].slice(0, 5).map(x => ({ w: Math.round(x.querySelector('.stl').getBoundingClientRect().width), name: x.textContent })));
+      const cut = await s.page.evaluate(() => [...document.querySelectorAll('#plist .c-song b, #plist .c-song .by')].filter(e => e.scrollWidth > e.clientWidth + 1).length);
+      check('Phone (360 px): song names and artists wrap, none cut off', cut === 0, String(cut));
+      check('Phone (360 px): History rows show the status as its dot alone, the name kept for screen readers', dots.length && dots.every(d => d.w <= 1 && d.name.length > 1), JSON.stringify(dots));
+    }
+    if (width === 600 && !theme && scheme === 'light') {
+      await tabTo(s.page, 'History');
+      const shown = await s.page.evaluate(() => Math.round(document.querySelector('#plist .m-side .st .stl').getBoundingClientRect().width));
+      check('Tablet (600 px): the status names stay', shown > 30, String(shown));
+    }
+    if (theme === 'evergreen') check('Evergreen, the green one, remembered', look.bg === 'rgb(8, 20, 14)', look.bg);
+    if (width === 600 && !theme && scheme === 'light') {
+      await tabTo(s.page, 'History');
+      const top = await s.page.evaluate(() => { const q = document.querySelector('.quick'), kids = [...q.children]; return { lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, last: kids[kids.length - 1].innerText.trim(), w: q.clientWidth, ws: kids.map(k => Math.round(k.getBoundingClientRect().width)).join('+') }; });
+      const line = await s.page.evaluate(() => { const g = document.querySelector('.bar-line .grow'), c = [...g.querySelectorAll('.nw')].pop(); return c.getClientRects().length; });
+      check('600 px: "checked … ago" moves to the next line whole, never split', line === 1, String(line));
+      check('600 px: the first row of filters fits on one line, ending in "All ▾"', top.lines === 1 && top.last.replace(/\s+/g, ' ') === 'All ▾', JSON.stringify(top));
+    }
     check(`No script errors (${width} px)`, s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
   }
@@ -280,7 +309,7 @@ const overflow = page => page.evaluate(() => {
   check('More: Plays as CSV', /^﻿?Date,Time,Artist,Title,Album,Playlist status,After gap/.test(text) && text.split('\n').length > 700, text.slice(0, 80));
   const themes = await s.page.evaluate(() => [...document.querySelectorAll('.theme')].map(b => b.textContent.trim()).join());
   await s.page.click('[data-act="theme"][data-v="candy"]');
-  check('More: two dark themes, Midnight and Candy cane; choosing one keeps it on this device', themes === 'Midnight,Candy cane' && await s.page.evaluate(() => document.documentElement.dataset.theme === 'candy' && localStorage.getItem('xl:theme') === '"candy"'), themes);
+  check('More: three dark themes, Midnight, Candy cane and Evergreen; choosing one keeps it on this device', themes === 'Midnight,Candy cane,Evergreen' && await s.page.evaluate(() => document.documentElement.dataset.theme === 'candy' && localStorage.getItem('xl:theme') === '"candy"'), themes);
   check('No script errors (More)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
 

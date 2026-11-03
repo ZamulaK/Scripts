@@ -1,7 +1,8 @@
 /* Christmas Lounge, Pocket v2 (approved Nov 2, 2026; mockup in ../design/pocket.html). Dark themes only (Dan, Nov 2):
-   Midnight, the default, and Candy cane. Remembered per device (data-theme on <html>). */
+   Midnight, the default, Candy cane and Evergreen. Remembered per device (data-theme on <html>). */
 :root{color-scheme:dark;--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a;--star:#f5c542}
 :root[data-theme="candy"]{--bg:#170b0d;--card:#251316;--ink:#f7eceb;--muted:#c4a4a1;--line:#3e2227;--accent:#ff7a8a;--on:#1a0b0e;--chip:#341a1f;--good:#5fd39a;--warn:#f2bd5c;--bad:#ff8a80;--dis:#d9aed0;--hero1:#a3122a;--hero2:#1f6b45;--row:#2c171b;--star:#f5c542}
+:root[data-theme="evergreen"]{--bg:#08140e;--card:#112119;--ink:#eaf4ed;--muted:#a0bcaa;--line:#1f3a2b;--accent:#72e0a2;--on:#06120c;--chip:#183024;--good:#8be3b0;--warn:#f2bd5c;--bad:#ff8a80;--dis:#cdb3dc;--hero1:#17734a;--hero2:#0c3a28;--row:#152b20;--star:#f5c542}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font:15px/1.45 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
@@ -48,9 +49,12 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 .chip .n{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--on)}
 .chip[aria-pressed="true"] .n{color:inherit;opacity:.8}
-/* A shorter name below 900 px (Latest play only → Latest), so the first row of filters fits on the tablet */
-.chip .narrow{display:none}
-@media (max-width:899px){.chip .wide{display:none}.chip .narrow{display:inline}}
+/* Shorter names below 900 px (Latest play only → Latest, All filters → All), so the first row of filters fits on the tablet */
+.narrow{display:none}
+@media (max-width:899px){.wide{display:none}.narrow{display:inline}
+  .quick{gap:6px}.quick .chip{padding:6px 10px;font-size:13px;gap:5px}.quick .more-f{padding:5px 10px;font-size:13px}}
+/* Pieces of a line that move to the next line whole rather than break ("checked 2 min ago") */
+.nw{white-space:nowrap;display:inline-block}
 .quick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
 .more-f{display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--muted);background:none;border-radius:999px;padding:6px 12px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--ink);white-space:nowrap}
 .more-f .badge{background:var(--accent);color:var(--on);border-radius:999px;font-size:11px;padding:1px 7px}
@@ -71,7 +75,7 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
    half-width columns on Now and Stats keep the list) */
 .plays{background:var(--card);border-radius:20px;overflow:hidden;container-type:inline-size}
 .pr.ph{display:none}
-.pr{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid var(--line);cursor:pointer}
+.pr{display:grid;grid-template-columns:64px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid var(--line);cursor:pointer}
 .pr:first-child{border-top:0}
 .pr:hover{background:var(--row)}
 .pr.open{background:var(--row)}
@@ -82,9 +86,13 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 .c-time small{display:block;font-weight:500;color:var(--muted);font-size:11.5px}
 .now-tag{display:inline-block;background:var(--accent);color:var(--on);border-radius:6px;padding:1px 6px;font-size:10.5px;font-weight:800;letter-spacing:.04em;margin-bottom:3px}
 .c-song{min-width:0}
-.c-song b{display:block;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.c-song .by{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.c-song .alb{display:none;color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Song, artist and album wrap rather than being cut off (Dan, Nov 2); the star stays beside the first line */
+.c-song .t{display:flex;align-items:flex-start;gap:2px;min-width:0}
+.c-song .t b{min-width:0}
+.pr .star{font-size:20px;padding:0 5px;flex:none;line-height:1;margin-top:-1px}
+.c-song b{display:block;font-weight:650;overflow-wrap:break-word;line-height:1.3}
+.c-song .by{color:var(--muted);font-size:13px;overflow-wrap:break-word}
+.c-song .alb{display:none;color:var(--muted);font-size:12.5px;overflow-wrap:break-word}
 .ic{font-size:12px;margin-left:4px;font-weight:400}
 .ic.fav{color:var(--star)}
 .st{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;white-space:nowrap}
@@ -92,8 +100,20 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 .st.have{color:var(--good)}.st.other,.st.gone{color:var(--warn)}.st.none{color:var(--bad)}.st.disliked{color:var(--dis)}.st.unknown{color:var(--muted)}
 .st.unknown:before{display:none}
 .c-status,.c-cat,.c-plays,.c-act{display:none}
+.c-go{display:flex;gap:6px;justify-content:flex-end}
+/* Round icon buttons: Open and Search on each row, Edit beside a note */
+.icon{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:50%;border:0;background:var(--chip);color:var(--ink);cursor:pointer;flex:none;text-decoration:none;font-size:15px}
+.icon svg{width:17px;height:17px}
+.icon.open{background:var(--accent);color:var(--on)}
+.icon.open svg{margin-left:2px}
+.notewrap{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px}
+.notewrap .note{flex:1;margin:0}
+.notewrap .icon{width:32px;height:32px}
 .m-side{text-align:right;font-size:12px;color:var(--muted);white-space:nowrap}
 .m-side .st{font-size:11.5px}
+/* Phones (under 600 px): the rows' status as its dot alone, to save room (Dan, Nov 2) */
+@media (max-width:599px){.pr{grid-template-columns:50px minmax(0,1fr) auto auto;gap:8px;padding:10px 12px}.c-time{font-size:12px}.pr .icon{width:32px;height:32px}}
+@media (max-width:599px){.m-side .st .stl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.m-side .st:before{width:11px;height:11px}}
 .detail{grid-column:1/-1;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:4px 0 2px;cursor:default;min-width:0}
 .detail .meta{color:var(--muted);font-size:13px;margin-bottom:10px;overflow-wrap:anywhere}
 .detail .meta b{color:var(--ink);font-weight:600}
@@ -136,7 +156,8 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 .foot{font-size:12.5px;color:var(--muted);margin-top:14px;text-align:center}
 @container (min-width:860px){
   .pr.ph{display:grid;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--muted);border-bottom:1px solid var(--line);padding:10px 14px;cursor:default}
-  .ph,.pr{grid-template-columns:92px minmax(220px,1fr) 128px 120px 64px 150px}
+  .ph,.pr{grid-template-columns:92px minmax(220px,1fr) 128px 120px 64px 84px 40px}
+  .pr.ph div:last-child{grid-column:span 2}
   .ph:hover{background:none}
   .c-status,.c-cat,.c-plays,.c-act{display:block}
   .c-plays{font-variant-numeric:tabular-nums;font-weight:700}
