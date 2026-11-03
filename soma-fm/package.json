@@ -5,7 +5,8 @@
   "description": "Tampermonkey userscript: SomaFM Christmas Lounge plays vs. the Xmas Mixed YouTube playlist",
   "scripts": {
     "test": "node soma-xmas-checker.test.js",
-    "test:page": "node page-check.js"
+    "test:page": "node page-check.js",
+    "test:next": "node next-check.js"
   },
   "devDependencies": {
     "playwright": "1.47.2"

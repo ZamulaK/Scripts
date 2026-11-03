@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Christmas Lounge</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%84%3C/text%3E%3C/svg%3E">
+<script>try { var t = JSON.parse(localStorage.getItem('xl:theme') || '""'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap" id="app"><div class="boot">Loading Christmas Lounge…</div></div>
+<nav class="tabs" aria-label="Pages"><div id="tabs"></div></nav>
+<div class="working" id="working" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span>Working…</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<!-- The checker's tested modules (Matcher, History, Stats, Shuffle, Sync…): the userscript file, which hands them over
+     instead of running when it sees "module" (site/deploy-next.js copies it into lib/) -->
+<script>window.module = { exports: {} };</script>
+<script src="/lib/soma-xmas-checker.user.js"></script>
+<script>window.XM = window.module.exports; delete window.module;</script>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -188,6 +188,41 @@ check('site: a bad playlist id is refused', (await site('/playlist?list=../x')).
 res = await site('/state', { method: 'PUT', body: { base: 0, state: { marks: {} } } });
 check('site: the synced document and plays, without the recorder key', res.status === 200 && (await (await site('/state')).json()).version === 1
   && (await (await site('/plays?channel=christmas&since=0')).json()).plays.length === 1);
+// The new site (site/app) sends each change on its own, merged into the one document here
+const chEnv = Object.assign({}, siteEnv, { DB: fakeD1() });
+const ch = patch => site('/change', { method: 'POST', body: { patch }, env: chEnv });
+res = await ch({ marks: { 'a|one': { v: 'have', at: 100, id: 'v1' } }, favorites: { v1: { on: true, at: 100 } } });
+body = await res.json();
+check('change: the first one makes the document', res.status === 200 && body.version === 1 && body.changed && body.state.marks['a|one'].id === 'v1' && body.state.favorites.v1.on, JSON.stringify(body));
+// Today's site saves its own merge in between, from version 1
+await site('/state', { method: 'PUT', env: chEnv, body: { base: 1, state: Object.assign({}, body.state, { notes: { 'b|two': { t: 'from the old site', at: 150 } } }) } });
+res = await ch({ notes: { 'a|one': { t: 'hello', at: 200 } } });
+body = await res.json();
+check('change: merged into what another device saved, nothing of theirs lost', res.status === 200 && body.version === 3 && body.state.notes['a|one'].t === 'hello'
+  && body.state.notes['b|two'].t === 'from the old site' && body.state.marks['a|one'].v === 'have', JSON.stringify(body));
+res = await ch({ removed: { marks: { 'a|one': 300 } } });
+body = await res.json();
+check('change: a cleared mark is removed and remembered as removed, so a device merging later doesn\'t bring it back',
+  !('a|one' in body.state.marks) && body.state.removed.marks['a|one'] === 300);
+res = await ch({ marks: { 'a|one': { v: 'have', at: 250 } } });
+body = await res.json();
+check('change: an older change than the removal doesn\'t bring it back; the same document is kept', body.changed === false && body.version === 4 && !('a|one' in body.state.marks));
+res = await ch({ favorites: { v1: { on: false, at: 50 } }, categories: { v1: { c: 'jazz', at: 400 } } });
+body = await res.json();
+check('change: newer wins key by key', body.state.favorites.v1.on === true && body.state.categories.v1.c === 'jazz');
+const oldSite = await (await site('/state', { env: chEnv })).json();
+check('change: today\'s site reads the same document and version', oldSite.version === body.version && oldSite.state.categories.v1.c === 'jazz' && oldSite.state.notes['b|two'].t === 'from the old site');
+check('change: anything but { patch } is refused', (await site('/change', { method: 'POST', body: { marks: {} }, env: chEnv })).status === 400);
+check('change: needs the Access sign-in', (await site('/change', { method: 'POST', body: { patch: {} }, env: chEnv, token: null })).status === 401);
+// The playlist read is kept, so pages opened soon after don't spend quota units again
+const reads = () => outside.filter(u => u.includes('/youtube/v3/playlistItems')).length;
+const r0 = reads();
+const p1 = await (await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt&within=900', { env: chEnv })).json();
+const p2 = await (await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt&within=900', { env: chEnv })).json();
+const p3 = await (await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt', { env: chEnv })).json();
+check('playlist: within gives the kept read while it\'s recent, without asking YouTube; without it, a fresh read',
+  reads() - r0 === 4 && !p1.cached && p2.cached && p2.items.length === 2 && p2.at === p1.at - p1.at % 1000 && !p3.cached && p3.at > 0, JSON.stringify({ n: reads() - r0, p1: p1.at, p2: p2.at }));
+
 // Nov 1: the API's "Billy Paul - Topic" kept two Billy Paul Williams songs from matching on the site
 check('credited artists from an auto-generated video\'s description, else nothing', creditedArtists('Provided to YouTube by X\n\nChristmas Eve · Members Only\n\nAlbum') === 'Members Only'
   && creditedArtists('Provided to YouTube by X\n\nSong · A · B\n\nAlbum') === 'A, B' && creditedArtists('My own upload') === '' && creditedArtists('') === '');

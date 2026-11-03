@@ -260,7 +260,25 @@ updating Tampermonkey on each device, and every key built into the site rather t
 
 ## 8d. Next: the new site, built from the Pocket v2 design (Nov 2026)
 
-**Status:** designed and approved; not started. Dan: "this design is good enough to start building the full site". This is his
+**Build (Nov 2, first pass, all of the below):** `site/app/` (index.html, app.css, app.js; no build step). The page loads the
+userscript file as `/lib/soma-xmas-checker.user.js` with `window.module` set, so it hands over its modules instead of running
+(`window.XM`). Nothing of Dan's data is stored in the browser: plays come from `/api/plays` (all of them, no 10,000 cap), the
+document from `/api/state`, and each change goes to the new `POST /api/change { patch }` (`worker/src/site.js`), which merges
+the partial document into the stored one with `Sync.merge` under the version check, so today's site keeps reading the same
+document. The page shows a change at once (merged locally), sends one request at a time (later changes wait and merge), retries
+with a warning, and asks before closing with an unsaved change. `/api/playlist?within=900` serves the server's last read when
+it's under 15 minutes old (reads cost quota units Shuffle shares). Archive updates (gone songs) are sent as an `archive` patch
+from complete reads only. Per device (localStorage `xl:*`): theme, Live, per page, last History filters, top sort, Shuffle's
+sign-in key, unfinished job and device id. Addresses: `/`, `/history?status=&cat=&fav=1&latest=1&q=&page=`, `/stats`,
+`/shuffle`, `/more` (Pages serves index.html for every path, as there's no 404.html). Plays tables switch to columns by a
+container query (list ≥ 860 px), so the half-width lists on Now and Stats stay as rows. Restore offers Merge only (one copy:
+Replace/Undo would need to remove from D1; open question for Dan). Live updates also refresh Now (answering the open question
+provisionally; Dan to confirm). Tests: `npm run test:next` (`next-check.js`, 56 checks against a stand-in /api; `SHOTS=<dir>`
+saves screenshots), worker tests cover `/change` and the playlist cache. Deploy: `node site/deploy-next.js` (branch `next`).
+Before it works there: preview secrets (below), and the OAuth client needs `https://next.xmaslounge.pages.dev` as a JavaScript
+origin and `https://next.xmaslounge.pages.dev/` as a redirect URI for Shuffle's sign-in.
+
+**Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
 
 **The design to build:** `site/design/pocket.html` (open `site/design/index.html`; a, b, c are the designs not chosen). Live
@@ -329,7 +347,7 @@ like Live updates; whether the 10,000-play cap (HISTORY_MAX, about 3½ weeks; th
 
 ## 10. Open items / next steps
 
-0. **NEXT SESSION, FIRST TASK: build the new site (Pocket v2) — see §8d.** Dan approved the design on Nov 2 with two tweaks.
+0. **New site (Pocket v2): first build done Nov 2 (§8d, site/app).** Next: Dan sets the preview secrets and OAuth origin, deploy to next.xmaslounge.pages.dev, test on the tablet, then switch production.
 1. ~~Shuffle: first real run~~ done (Dan shuffles from the site; quota and last shuffle are synced since 3.26.0).
 2. ~~Laptop setup~~ no longer needed: the site records and syncs on every device.
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.

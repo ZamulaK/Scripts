@@ -10,3 +10,5 @@ site/public/soma-xmas-checker.user.js
 site/design/data.js
 site/design/state.json
 site/design/plays.json
+# the new site gets the same copy when it is deployed (site/deploy-next.js)
+site/app/lib/

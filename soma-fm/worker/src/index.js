@@ -63,7 +63,7 @@ function authorized(req, env) {
   for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ got.charCodeAt(i);
   return diff === 0;
 }
-async function body(req, max) {
+export async function body(req, max) {
   const text = await req.text();
   if (text.length > max) throw Object.assign(new Error('too large'), { status: 413 });
   try { return JSON.parse(text); } catch (e) { throw Object.assign(new Error('not JSON'), { status: 400 }); }
