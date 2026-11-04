@@ -87,10 +87,13 @@
 
   async function api(path, opts = {}) {
     let r;
+    // Reads give up after 30 s (one frozen in a sleeping tab would otherwise hang on); changes and playlist reads get 2 minutes
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null, cut = ctl && setTimeout(() => ctl.abort(), (opts.method && opts.method !== 'GET') || /^\/playlist/.test(path) ? 120000 : 30000);
     try {
-      r = await fetch('/api' + path, { method: opts.method || 'GET', cache: 'no-store',
+      r = await fetch('/api' + path, { method: opts.method || 'GET', cache: 'no-store', signal: ctl ? ctl.signal : undefined,
         headers: opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
-    } catch (e) { throw new Error("the site couldn't be reached (if the sign-in ran out, reload the page)"); }
+    } catch (e) { throw new Error(ctl && ctl.signal.aborted ? 'the site took too long to answer' : "the site couldn't be reached (if the sign-in ran out, reload the page)"); }
+    finally { clearTimeout(cut); }
     if (r.status === 401) throw new Error('the sign-in ran out: reload the page');
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw Object.assign(new Error(d.error || 'the site answered ' + r.status), { status: r.status });
@@ -289,20 +292,35 @@
   }
 
   // Live updates: every minute while the page is in sight (the recorder keeps recording either way)
-  let liveOn = LS.get('live', true) !== false, liveTimer = null, ticking = false;
+  let liveOn = LS.get('live', true) !== false, liveTimer = null, ticking = 0;
   async function tick(force) {
-    if (ticking || (!force && document.hidden)) return;
-    ticking = true;
+    // A read that's been going for over 20 s was cut off while the tab slept (a phone freezes background tabs mid-request):
+    // it no longer holds the next one back. Reading twice is harmless: plays and documents merge.
+    if ((ticking && Date.now() - ticking < 20000) || (!force && document.hidden)) return false;
+    const mine = ticking = Date.now();
     try {
       await loadFeed();
       await loadPlays();
       if (force || Date.now() - D.stateAt > STATE_MINUTES * 60000) await loadState();
       if (Date.now() - D.playlistAt > PLAYLIST_MINUTES * 60000) await loadPlaylist(false);
-    } finally { ticking = false; }
+    } finally { if (ticking === mine) ticking = 0; }
     quietRender();
+    return !D.err.plays;
   }
   function schedule() { clearInterval(liveTimer); if (liveOn) liveTimer = setInterval(() => tick(false), LIVE_SECONDS * 1000); }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && liveOn) tick(false); });
+  // Back to a tab that was out of sight (or restored from the back/forward cache, or back online): read now, and once more
+  // a few seconds later if that failed (the network is often still waking up then) (Dan, Nov 4)
+  let hiddenAt = document.hidden ? Date.now() : 0;
+  function resume() {
+    if (document.hidden || !liveOn) return;
+    tick(true).then(ok => { if (!ok) setTimeout(() => tick(true), 4000); });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (Date.now() - hiddenAt > 15000) resume(); else if (liveOn) tick(false);
+  });
+  addEventListener('pageshow', e => { if (e.persisted) resume(); });
+  addEventListener('online', resume);
 
   // A problem worth a line at the top; '' when all is well
   function warning() {
@@ -379,7 +397,7 @@
   const tabHref = k => k === 'now' ? '/' : k === 'history' ? '/history' + LS.get('histq', '') : '/' + k;
   function head(sub) {
     const w = warning(), bad = !!w && !D.err.save;
-    return `<header class="top"><div><b>Christmas Lounge</b><br><span class="sub">${esc(sub)}</span></div>` +
+    return `<header class="top"><div><div class="ttl"><b>Christmas Lounge</b><button class="icon hre" data-act="reload" aria-label="Read the latest now" title="Read the latest now">${ico('refresh')}</button></div><span class="sub">${esc(sub)}</span></div>` +
       `<a class="live ${w ? 'bad' : ''}" href="/more" data-nav title="${esc(w || 'The recorder reads SomaFM\'s song list every 10 minutes')}"><i></i>${w ? (bad ? 'Check recording' : 'Not saved yet') : 'Recording'}</a></header>` +
       (w ? `<div class="warn ${D.err.save || D.err.state || D.err.plays ? 'err' : ''}" role="status">⚠ ${esc(w)}</div>` : '');
   }
@@ -411,7 +429,7 @@
   }
   // Open (the video you have) and Search YouTube as icons on the row itself, so the row needn't be opened for them.
   // An "other version" song has both: Open compares with the version you have; Search finds the one SomaFM played.
-  const SVG = { open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>' };
+  const SVG = { open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
   const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
   // Open or closed: the chevron turns over (and fills) while the row is open; the CSS does it from .open
   const chev = on => `<span class="chev ${on ? 'on' : ''}" aria-hidden="true">${ico('chev')}</span>`;
@@ -498,19 +516,21 @@
   const R = {};
   R.now = () => {
     const all = rows();
-    if (!all.length) return head('SomaFM Christmas Lounge · recorded around the clock') + `<div class="box">${D.loaded.plays ? 'No plays recorded yet.' : 'Loading the plays…'}</div>`;
+    if (!all.length) return head('SomaFM Christmas Lounge') + `<div class="box">${D.loaded.plays ? 'No plays recorded yet.' : 'Loading the plays…'}</div>`;
     const n = (D.nowAt && all.find(p => p.at === D.nowAt)) || all[0], playing = n.at === D.nowAt;
     const r = statusOf(n.key, n.artist, n.title), i = rid(Object.assign({ id: rowId(n, 'hero:') }, n)), id = ROWS[i].id;
     const open = S.open === id, plays = counts.get(n.key) || 0;
     const t = stats();
-    const tiles = `<div class="g2" style="margin-top:12px"><div class="box"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song comes back</span></div><div class="box"><b class="big">${fmt(D.plays.length)}</b><span class="k">plays recorded</span></div></div>`;
+    // Dan, Nov 4: each count with its words beside it (under it when there's no room); shorter words on a phone
+    const tiles = `<div class="g2" style="margin-top:12px"><div class="box"><div class="tl"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song repeats</span></div></div>` +
+      `<div class="box"><div class="tl"><b class="big">${fmt(D.plays.length)}</b><span class="k"><span class="lw">plays recorded</span><span class="ln">plays</span></span></div><div class="tl tl2"><b>${fmt(t.unique)}</b><span class="k"><span class="lw">distinct songs</span><span class="ln">songs</span></span></div></div></div>`;
     // Favorite: a star beside the song's name (Dan, Nov 4), so the buttons fit on one line on a phone
     const f = inList(r) && isFav(r.item.id);
     const fav = inList(r) ? `<button class="star" data-act="fav" data-i="${i}" aria-pressed="${f}" aria-label="${f ? 'Remove from favorites' : 'Add to favorites'}: ${esc(n.title)}" title="${f ? 'Favorite. Tap to remove.' : 'Add to favorites'}">${f ? '★' : '☆'}</button>` : '';
     const label = r.status === 'unknown' ? '' : st(r);   // the same colored status as the lists
     const note = noteOf(n.key);
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
-    return head('SomaFM Christmas Lounge · recorded around the clock') + `<div class="split"><div>
+    return head('SomaFM Christmas Lounge') + `<div class="split"><div>
       <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}"><div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2><span>${esc(n.title)}</span>${fav}</h2><p>${esc(n.artist)}${n.album ? ' · ' + esc(n.album) : ''}</p>
       <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop>▶ Open</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount">${plural(plays, 'play')} ${chev()}</span></div>
       ${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
@@ -613,10 +633,7 @@
     else {
       const heard = P.heard, notHeard = P.notHeard;
       left = `<h3>Your playlist</h3><div class="g3"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmm(P.total)}</b><span class="k">total length (h:mm)</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k">average song</span></div></div>
-      <h3>Songs by status</h3>${inOut(t)}<div class="box">${t.labeledSongs ? ['have', 'other', 'none', 'gone', 'disliked'].filter(k => t.breakdown[k]).map(k => {
-        const b = t.breakdown[k];   // Dan's tweak 2: each status as a share of the different songs and of all plays
-        return `<div class="kv stat">${st({ status: k })}<span class="r"><span><b>${plural(b.songs, 'song')}</b> · ${pct(b.songs, t.labeledSongs)}</span><span><b>${plural(b.plays, 'play')}</b> · ${pct(b.plays, t.labeledPlays)}</span></span></div>`;
-      }).join('') + `<div class="snote">Of ${plural(t.labeledSongs, 'different song')} and ${plural(t.labeledPlays, 'play')}. Plays count every time a song came on, so often-played songs weigh more.</div>` : '<div class="snote">No plays recorded yet.</div>'}</div>
+      <h3>Songs by status</h3>${inOut(t)}${statusBox(t)}
       <h3>Heard so far</h3><div class="box"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
         ${notHeard.length ? `<details class="sub"><summary>Not heard yet: ${fmt(notHeard.length)}</summary><ul>${notHeard.map(it => `<li><span class="nh">${esc(it.title)}</span><span class="acts">${starBtn(it.id, it.title)}<a class="pill" href="${ytWatch(it.id)}" target="_blank" rel="noopener">Open</a></span></li>`).join('')}</ul></details>` : '<div class="kv"><span>Not heard yet</span><b>0</b></div>'}
         <div class="kv"><span>Favorites</span><b>${fmt(favN)}</b></div>
@@ -648,6 +665,18 @@
     const card = (n, dn, of, what) => `<div class="box io"><div class="io-in"><b class="big good">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">of ${what} in your playlist</span><span class="ln">of ${what} in playlist</span></span><span class="io-n">${fmt(n)} of ${fmt(of)}</span></span></div>` +
       `<div class="io-dis"><b>${pct(dn, of)}</b> disliked <span class="io-n">· ${fmt(dn)}</span></div></div>`;
     return `<div class="g2" style="margin-bottom:12px">${card(h.songs, d.songs, t.labeledSongs, 'songs')}${card(h.plays, d.plays, t.labeledPlays, 'plays')}</div>`;
+  }
+  // The other statuses, each as a share of the different songs and of all plays (Dan's tweak 2). In playlist and Disliked
+  // are in the cards above, so this box lists only other versions, not in playlist and gone, and only when there are any
+  // (Dan, Nov 4).
+  function statusBox(t) {
+    if (!t.labeledSongs) return '<div class="box"><div class="snote">No plays recorded yet.</div></div>';
+    const ks = ['other', 'none', 'gone'].filter(k => t.breakdown[k] && t.breakdown[k].songs);
+    if (!ks.length) return '';
+    return `<div class="box">${ks.map(k => {
+      const b = t.breakdown[k];
+      return `<div class="kv stat">${st({ status: k })}<span class="r"><span><b>${plural(b.songs, 'song')}</b> · ${pct(b.songs, t.labeledSongs)}</span><span><b>${plural(b.plays, 'play')}</b> · ${pct(b.plays, t.labeledPlays)}</span></span></div>`;
+    }).join('')}<div class="snote">Of ${plural(t.labeledSongs, 'different song')} and ${plural(t.labeledPlays, 'play')}. Plays count every time a song came on, so often-played songs weigh more.</div></div>`;
   }
   const starBtn = (id, title) => `<button class="star" data-act="star" data-v="${esc(id)}" aria-pressed="${isFav(id)}" aria-label="${isFav(id) ? 'Remove from favorites' : 'Add to favorites'}: ${esc(title)}">${isFav(id) ? '★' : '☆'}</button>`;
 

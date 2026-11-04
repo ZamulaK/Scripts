@@ -14,6 +14,11 @@ a{color:var(--accent)}
 .wrap{max-width:1180px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right)) 100px max(16px,env(safe-area-inset-left))}
 header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 2px 14px}
 header.top b{font-size:20px;font-weight:800;letter-spacing:-.02em}
+/* Read the latest now, beside the title (Dan, Nov 4) */
+header.top .ttl{display:flex;align-items:center;gap:8px;white-space:nowrap}
+@media (max-width:399px){header.top{gap:8px}header.top b{font-size:19px}header.top .ttl{gap:6px}}
+header.top .hre{width:30px;height:30px;color:var(--muted)}
+header.top .hre svg{width:16px;height:16px}
 header.top .sub{font-size:12.5px;color:var(--muted)}
 .live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;white-space:nowrap}
 .live i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 4px color-mix(in srgb,var(--good) 25%,transparent)}
@@ -207,6 +212,10 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 /* Phones: the three cards stay on one row (Dan, Nov 4) */
 @media (max-width:599px){.g3{gap:8px}.g3 .box{padding:12px 10px;border-radius:16px}.g3 .box b.big{font-size:21px}.g3 .box span.k{font-size:12px;display:block;line-height:1.3}}
 .box b.big.good{color:var(--good)}
+/* Now's two cards: a count with its words beside it, wrapping under it when there's no room */
+.tl{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px}
+.tl2{margin-top:4px}
+.tl2 b{font-size:22px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 /* Stats: in your playlist and disliked (Dan, Nov 4). The words sit beside the % on wider screens, under it on a phone
    (one line, cut short if need be); the disliked share large, right below */
 .io-in{display:flex;align-items:center;gap:10px;min-width:0}

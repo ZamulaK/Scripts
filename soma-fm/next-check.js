@@ -214,7 +214,7 @@ const overflow = page => page.evaluate(() => {
     heads: [...document.querySelectorAll('h3')].map(x => x.firstChild.textContent.trim()) }));
   const total = items.reduce((a, it) => a + it.secs, 0), mins = Math.round(total / 60), want = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
   check('Stats: total playlist time as h:mm, from the real lengths (tweak 1)', t.big[1] === want + 'total length (h:mm)', JSON.stringify(t.big) + ' want ' + want);
-  check('Stats: songs by status, as a share of songs and of plays (tweak 2)', t.status.length >= 2 && t.status.every(x => /\d+ songs? · \d+%\s*\d+ plays? · \d+%/.test(x)), JSON.stringify(t.status));
+  check('Stats: songs by status, as a share of songs and of plays (tweak 2), leaving In playlist and Disliked to the cards', t.status.length >= 2 && t.status.every(x => !/^(In playlist|Disliked)/.test(x) && /\d+ songs? · \d+%\s*\d+ plays? · \d+%/.test(x)), JSON.stringify(t.status));
   check('Stats: Songs by status right under the playlist cards', t.heads[0] === 'Your playlist' && t.heads[1] === 'Songs by status' && t.heads[2] === 'Heard so far', t.heads.join('|'));
   check('Stats: every section', ['Your playlist', 'Categories', 'Songs by status', 'SomaFM rotation', 'Most played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
   await s.page.click('[data-act="topSort"][data-v="recent"]');
@@ -229,6 +229,23 @@ const overflow = page => page.evaluate(() => {
     s = await open(browser, { width: 360 });
     const root = await s.page.evaluate(() => { const c = getComputedStyle(document.documentElement); return [c.getPropertyValue('--muted').trim(), c.getPropertyValue('--faint').trim()]; });
     check('Text in three levels: secondary text brighter, the old color kept for the third level', root[0] === '#bcc6db' && root[1] === '#97a3bd', root.join());
+    check('Now: the line under the title is just "SomaFM Christmas Lounge"', await s.page.locator('header.top .sub').textContent() === 'SomaFM Christmas Lounge');
+    const tileText = pg => pg.evaluate(() => [...document.querySelectorAll('.g2 .box')].slice(0, 2).map(b => b.innerText.replace(/\s+/g, ' ').trim()));
+    const tl360 = await tileText(s.page);
+    const w600 = await open(browser, { width: 600 }), tl600 = await tileText(w600.page);
+    const beside = await w600.page.evaluate(() => [...document.querySelectorAll('.g2 .tl')].every(r => { const b = r.querySelector('b').getBoundingClientRect(), k = r.querySelector('.k').getBoundingClientRect(); return k.left > b.right - 1 && Math.abs(k.bottom - b.bottom) < 8; }));
+    await w600.ctx.close();
+    check('Now cards: "until a song repeats"; plays and distinct songs, short words on a phone', /^[\d.]+ h until a song repeats$/.test(tl360[0]) && /^700 plays \d+ songs$/.test(tl360[1]) && /^700 plays recorded \d+ distinct songs$/.test(tl600[1]), JSON.stringify({ tl360, tl600 }));
+    check('Now cards (600 px): the words beside each count', beside);
+    const feeds = () => api.calls.filter(c => /^GET \/api\/feed/.test(c)).length;
+    let f0 = feeds();
+    await s.page.click('header.top .hre');
+    await s.page.waitForTimeout(500);
+    check('The ↻ beside the title reads the latest now', feeds() > f0 && /Read again/.test(await s.page.locator('#toast').textContent()), String(feeds() - f0));
+    f0 = feeds();
+    await s.page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    await s.page.waitForTimeout(500);
+    check('A tab brought back (from the back/forward cache here) reads the latest at once', feeds() > f0, String(feeds() - f0));
     const hero = await s.page.evaluate(() => { const acts = [...document.querySelectorAll('.hero .acts > *')];
       return { note: (document.querySelector('.hero .hnote') || {}).textContent, lines: new Set(acts.map(a => Math.round(a.getBoundingClientRect().top))).size, right: Math.max(...acts.map(a => a.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right,
         have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]') }; });
@@ -280,13 +297,16 @@ const overflow = page => page.evaluate(() => {
     await s.ctx.close();
     // Not in playlist is left off the first row while there are none: every such song disliked
     const saved = JSON.parse(JSON.stringify(api.doc));
-    for (const p of hist) { const k = X.markKey(p[1], p[2]); if (X.check(p[1], p[2], items).status !== 'have') api.doc.dislikes[k] = Date.now(); }
+    for (const p of hist) { const k = X.markKey(p[1], p[2]); const st = X.check(p[1], p[2], items).status; if (st === 'other') api.doc.marks[k] = { v: 'have', at: Date.now() }; else if (st !== 'have') api.doc.dislikes[k] = Date.now(); }
     delete api.doc.archive.goneVideo1;   // a song gone from the playlist counts as not in it too
     s = await open(browser, { path: '/history' });
     const nz = await s.page.evaluate(() => ({ quick: [...document.querySelectorAll('.quick .chip')].map(c => c.dataset.v || c.dataset.act).join(), none: (document.querySelector('.quick [data-v="none"]') || {}).outerHTML }));
     await s.page.click('.more-f');
     const nzPanel = await s.page.evaluate(() => { const c = document.querySelector('.fpanel [data-v="none"]'); return c && { zero: c.classList.contains('zero'), last: c === [...c.parentElement.children].pop() || c.nextElementSibling.classList.contains('zero') }; });
     check('Filters: Not in playlist left off the first row with none in it, dim at the end in All filters', !nz.none && nzPanel && nzPanel.zero && nzPanel.last, JSON.stringify({ nz, nzPanel }));
+    await tabTo(s.page, 'Stats');
+    const sb = await s.page.evaluate(() => ({ rows: [...document.querySelectorAll('.kv.stat')].map(x => x.textContent).join('|') || 0, cards: document.querySelectorAll('.box.io').length }));
+    check('Stats: no Songs by status box when nothing is an other version or not in the playlist (the cards stay)', sb.rows === 0 && sb.cards === 2, JSON.stringify(sb));
     await s.ctx.close();
     api.doc = saved;
   }

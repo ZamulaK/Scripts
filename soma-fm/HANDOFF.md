@@ -317,6 +317,15 @@ there because his session covers `*.xmaslounge.pages.dev` (checked: a request wi
 - Later the same day: the Now card opens and closes like a row (tap anywhere on it; "N plays" + the chevron at the end of
   its buttons; Open/Search keep data-stop), and the date under a row's time went back to the secondary (--muted) color.
 
+**Third round (Nov 4, evening), live on next:** Dan confirmed "artist" meant album. Songs by status lists only Other version,
+Not in playlist and Gone (In playlist and Disliked are in the cards) and is left out when none of those has a song. Now: the
+subtitle is just "SomaFM Christmas Lounge"; the cards read "3.6 h until a song repeats" and "700 plays recorded / 60 distinct
+songs" (words beside each count; "plays" / "songs" under 600 px). A ↻ beside the title reads the latest now (same as More →
+Read again now). Coming back to a tab (hidden 15 s or more, a back/forward-cache restore, or back online) now reads with force,
+and once more 4 s later if that failed; a read stuck over 20 s (frozen in a sleeping tab) no longer holds the next one back,
+and /api reads give up after 30 s (changes and playlist reads 2 min). Dan saw a returning tab a few minutes behind until he
+reloaded; the likely cause was a request frozen mid-flight keeping  set. Check with him that it's gone.
+
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
 
