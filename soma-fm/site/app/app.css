@@ -7,8 +7,8 @@
 /* Xmas Red and Xmas Green in a Material style (Dan, Nov 4: both felt too strongly red and green): near-neutral surfaces with
    a faint hue and a pale accent with just a tint of the color; the one place with strong color is the Now card, red to green
    for Xmas Red and green to red for Xmas Green */
-:root[data-theme="candy"]{--bg:#191113;--card:#251c1e;--ink:#f1dedf;--muted:#dac3c4;--faint:#a68f91;--line:#3d3133;--accent:#ecc8c9;--on:#2d1416;--chip:#31272a;--good:#6fdc9e;--warn:#f2bd5c;--bad:#ff8a80;--dis:#d9b6d4;--hero1:#b3192f;--hero2:#16764a;--row:#2b2224;--star:#f5c542}
-:root[data-theme="evergreen"]{--bg:#101511;--card:#1b211d;--ink:#e0e4de;--muted:#c3cbc3;--faint:#8e978e;--line:#323a34;--accent:#c2dfca;--on:#12291b;--chip:#262d28;--good:#6fdc98;--warn:#f2bd5c;--bad:#ff8a80;--dis:#cdb6dc;--hero1:#16764a;--hero2:#b3192f;--row:#212823;--star:#f5c542}
+:root[data-theme="candy"]{--bg:#191113;--card:#251c1e;--ink:#f1dedf;--muted:#dac3c4;--faint:#a68f91;--line:#3d3133;--accent:#ecc8c9;--on:#2d1416;--chip:#31272a;--good:#6fdc9e;--warn:#f2bd5c;--bad:#ff8a80;--dis:#d9b6d4;--hero1:#c8102e;--hero2:#0b7d42;--row:#2b2224;--star:#f5c542}
+:root[data-theme="evergreen"]{--bg:#101511;--card:#1b211d;--ink:#e0e4de;--muted:#c3cbc3;--faint:#8e978e;--line:#323a34;--accent:#c2dfca;--on:#12291b;--chip:#262d28;--good:#6fdc98;--warn:#f2bd5c;--bad:#ff8a80;--dis:#cdb6dc;--hero1:#0b7d42;--hero2:#c8102e;--row:#212823;--star:#f5c542}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font:15px/1.45 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
@@ -29,6 +29,8 @@ header.top .sub{font-size:12.5px;color:var(--muted)}
 .live.bad i{background:var(--warn);box-shadow:0 0 0 4px color-mix(in srgb,var(--warn) 25%,transparent)}
 .live.bad{color:var(--warn);font-weight:700}
 .hero{border-radius:24px;padding:22px;color:#fff;background:linear-gradient(135deg,var(--hero1),var(--hero2));position:relative;overflow:hidden}
+/* Xmas Red and Green: richer colors, and a short blend between them, so there is little of the brownish in-between (Dan) */
+:root[data-theme] .hero{background:linear-gradient(135deg,var(--hero1) 0 40%,var(--hero2) 60% 100%)}
 .hero:after{content:"❄";position:absolute;right:-10px;top:-30px;font-size:140px;opacity:.12;pointer-events:none}
 .hero small{text-transform:uppercase;letter-spacing:.12em;font-size:11px;opacity:.9}
 /* The status on the Now card: the lists' colored dot and name, on a dark badge so the colors read on any theme's gradient */
