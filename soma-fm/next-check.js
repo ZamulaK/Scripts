@@ -267,6 +267,13 @@ const overflow = page => page.evaluate(() => {
     check('Lists: the date under a time in the brighter secondary text', await first.evaluate(r => getComputedStyle(r.querySelector('.c-time small')).color) === 'rgb(188, 198, 219)');
     const ln = await first.evaluate(r => { const n = r.querySelector('.lnote'); return n && { t: n.textContent, cls: n.className, color: getComputedStyle(n).color, icon: !!r.querySelector('.c-song .ic') }; });
     check('Lists: a song\'s note shows its first line under the song, in the third text level', ln && ln.t === 'First line of the note' && /\bone\b/.test(ln.cls) && ln.color === 'rgb(151, 163, 189)' && !ln.icon, JSON.stringify(ln));
+    // The list's rows: the time on one line, at the top; the icon and the status on one line, the count and chevron below
+    const lay = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph)')].slice(0, 8).map(r => {
+      const R = e => e.getBoundingClientRect(), tm = r.querySelector('.c-time'), clock = [...tm.childNodes].find(n => n.nodeType === 3 && /[0-9]:[0-9][0-9]/.test(n.textContent)), rg = document.createRange(); rg.selectNodeContents(clock);
+      const go = r.querySelector('.c-go'), st = R(r.querySelector('.m-st')), cnt = R(r.querySelector('.m-cnt')), song = R(r.querySelector('.c-song'));
+      return { timeLines: rg.getClientRects().length, timeTop: Math.abs(R(tm).top - song.top) < 2, sameLine: !go.children.length || Math.abs((R(go).top + R(go).bottom) / 2 - (st.top + st.bottom) / 2) < 4, below: cnt.top >= st.bottom - 1, songRight: song.right <= R(go.children.length ? go : r.querySelector('.m-st')).left };
+    }));
+    check('Rows (360 px): time on one line at the top, the icon beside the status, the count below them', lay.length && lay.every(x => x.timeLines === 1 && x.timeTop && x.sameLine && x.below && x.songRight), JSON.stringify(lay.slice(0, 3)));
     const turn = el => el.evaluate(r => getComputedStyle(r.querySelector('.m-side .chev svg')).transform);
     const closedT = await turn(first);
     await first.locator('.c-time').click();
@@ -298,6 +305,8 @@ const overflow = page => page.evaluate(() => {
     check('Stats (360 px): "Between replays", the short name on a phone', await s.page.evaluate(() => [...document.querySelectorAll('.kv')].some(x => x.firstElementChild.innerText.trim() === 'Between replays')));
     check('Stats: the replay average and median each on a line of their own, only the figures bold', rep && rep.length === 2 && / average$/.test(rep[0].t) && / median$/.test(rep[1].t) && rep[1].top > rep[0].top && rep.every(x => /^[\d ]+$/.test(x.bold)), JSON.stringify(rep));
     check('Stats (360 px): the three playlist cards on one row', st3.tops === 1, String(st3.tops));
+    const sh = await s.page.evaluate(() => { const kv = [...document.querySelectorAll('.kv')].find(x => /^Shortest/.test(x.textContent)); return kv && [...kv.querySelectorAll('.chunk')].map(c => ({ t: c.textContent, lines: Math.round(c.getBoundingClientRect().height / parseFloat(getComputedStyle(c).lineHeight || 18)) })); });
+    check('Stats: Longest and Shortest titles wrap at " - " and before "(", each piece whole', sh && sh.length >= 2 && sh.every((c, k) => k || /·/.test(c.t)) && sh.some(c => /^Winter Wonderland$|^\(/.test(c.t)), JSON.stringify(sh));
     check('Stats (360 px): in playlist and disliked, laid out alike: the %, the words under it on one line (not bold), the count below', st3.io.length === 2
       && /^\d+% of songs in playlist \d+ of 60 \d+% of songs disliked \d+ of 60$/.test(st3.io[0].text) && /^\d+% of plays in playlist \d+ of 700 \d+% of plays disliked \d+ of 700$/.test(st3.io[1].text) && st3.io.every(x => x.below && x.oneLine && x.dis && x.weight === '400'), JSON.stringify(st3.io));
     const io600 = await (async () => { const w = await open(browser, { width: 600, path: '/stats' }); const r = await w.page.evaluate(() => [...document.querySelectorAll('.box.io')].map(b => ({ text: b.innerText.replace(/\s+/g, ' ').trim(), beside: b.querySelector('.io-l').getBoundingClientRect().left > b.querySelector('b.big').getBoundingClientRect().right }))); await w.ctx.close(); return r; })();

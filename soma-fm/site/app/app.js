@@ -425,7 +425,7 @@
       <div class="c-plays">${fmt(n)}×</div>
       <div class="c-go">${quickLinks(p, r)}</div>
       <div class="c-act">${chev()}</div>
-      <div class="m-side">${st(r)}<span class="cnt">${fmt(n)}× ${chev()}</span></div>
+      <div class="m-side m-st">${st(r)}</div><div class="m-side m-cnt"><span class="cnt">${fmt(n)}× ${chev()}</span></div>
       ${open ? detail(ROWS[i], r, i) : ''}</div>`;
   }
   // Open (the video you have) and Search YouTube as icons on the row itself, so the row needn't be opened for them.
@@ -638,7 +638,7 @@
       <h3>Heard so far</h3><div class="box"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
         ${notHeard.length ? `<details class="sub"><summary>Not heard yet: ${fmt(notHeard.length)}</summary><ul>${notHeard.map(it => `<li><span class="nh">${esc(it.title)}</span><span class="acts">${starBtn(it.id, it.title)}<a class="pill" href="${ytWatch(it.id)}" target="_blank" rel="noopener">Open</a></span></li>`).join('')}</ul></details>` : '<div class="kv"><span>Not heard yet</span><b>0</b></div>'}
         <div class="kv"><span>Favorites</span><b>${fmt(favN)}</b></div>
-        ${P.longest ? `<div class="kv"><span>Longest</span><span class="r"><b>${History.formatClock(P.longest.secs)}</b> · ${esc(P.longest.title)}</span></div><div class="kv"><span>Shortest</span><span class="r"><b>${History.formatClock(P.shortest.secs)}</b> · ${esc(P.shortest.title)}</span></div>` : ''}
+        ${P.longest ? `<div class="kv"><span>Longest</span><span class="r">${chunks(`<b>${History.formatClock(P.longest.secs)}</b> · `, P.longest.title)}</span></div><div class="kv"><span>Shortest</span><span class="r">${chunks(`<b>${History.formatClock(P.shortest.secs)}</b> · `, P.shortest.title)}</span></div>` : ''}
         ${P.unknown ? `<div class="snote">Length unknown for ${plural(P.unknown, 'song')}.</div>` : ''}
         <div class="snote">Heard counts automatic matches and linked songs. Unlinked “I have it” marks don't say which video, so they aren't counted.</div></div>
       <h3>Categories</h3><div class="box">${CATS.map(([k, n]) => `<div class="kv"><span>${n}</span><b>${fmt(catCount[k] || 0)}</b></div>`).join('')}
@@ -679,6 +679,12 @@
       const b = t.breakdown[k];
       return `<div class="kv stat">${st({ status: k })}<span class="r"><span><b>${plural(b.songs, 'song')}</b> · ${pct(b.songs, t.labeledSongs)}</span><span><b>${plural(b.plays, 'play')}</b> · ${pct(b.plays, t.labeledPlays)}</span></span></div>`;
     }).join('')}<div class="snote">Of ${plural(t.labeledSongs, 'different song')} and ${plural(t.labeledPlays, 'play')}. Plays count every time a song came on, so often-played songs weigh more.</div></div>`;
+  }
+  // A song title in pieces that wrap whole where they can: after " - " and before "(" ("Burl Ives - Have A Holly Jolly
+  // Christmas" breaks at the dash, "The Nutcracker Suite (Remastered 1996)" before the bracket); lead goes on the first piece
+  function chunks(lead, title) {
+    const parts = String(title || '').split(/(?<= - )|(?= \()/).map(x => x.trim()).filter(Boolean);
+    return parts.map((x, k) => `<span class="chunk">${k ? '' : lead}${esc(x)}</span>`).join(' ');
   }
   const starBtn = (id, title) => `<button class="star" data-act="star" data-v="${esc(id)}" aria-pressed="${isFav(id)}" aria-label="${isFav(id) ? 'Remove from favorites' : 'Add to favorites'}: ${esc(title)}">${isFav(id) ? '★' : '☆'}</button>`;
 
