@@ -155,13 +155,13 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 /* Phones (under 600 px): the rows' status as its dot alone, to save room (Dan, Nov 2) */
 @media (max-width:599px){.pr{grid-template-columns:50px minmax(0,1fr) auto auto;gap:8px;padding:10px 12px}.c-time{font-size:12px}.pr .icon{width:32px;height:32px}}
 @media (max-width:599px){.m-side .st .stl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.m-side .st:before{width:11px;height:11px}}
-/* The list (not the table): the time on one line at the top; at the right end, the Open/Search icon and the status on one
+/* The list (not the table): the time on one line (24-hour hh:mm on phones); at the right end, the Open/Search icon and the status on one
    line, the play count and chevron under them, so the song gets the room in between (Dan, Nov 4) */
 @container (max-width:859px){
   .pr{grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"time song go st" "time song cnt cnt";row-gap:4px}
-  .pr > .c-time{grid-area:time;align-self:start;white-space:nowrap}
+  .pr > .c-time{grid-area:time;white-space:nowrap}
   .pr > .c-time small{white-space:nowrap}
-  .pr > .c-song{grid-area:song;align-self:start}
+  .pr > .c-song{grid-area:song}
   .pr > .c-go{grid-area:go}
   .pr > .m-st{grid-area:st;justify-content:center}
   .pr > .m-cnt{grid-area:cnt;justify-self:end}
@@ -313,3 +313,6 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 /* A title's pieces in Stats (Longest, Shortest): each wraps whole where it can, at " - " and before "(" (Dan, Nov 4) */
 .chunk{display:inline-block}
+/* The time in the lists: 12-hour, or 24-hour hh:mm on phones to save room (Dan, Nov 4) */
+.t24{display:none}
+@media (max-width:599px){.c-time .t12{display:none}.c-time .t24{display:inline}}

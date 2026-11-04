@@ -28,6 +28,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = n => Number(n || 0).toLocaleString('en-US');
   const time = at => new Date(at * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const time24 = at => { const d = new Date(at * 1000); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };   // 24-hour hh:mm, for the lists on phones (Dan, Nov 4)
   const day = at => new Date(at * 1000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   const short = at => new Date(at * 1000).toLocaleDateString([], { month: 'numeric', day: 'numeric' });
   const when = at => History.formatDate(at) + ' ' + History.formatTime(at);
@@ -418,7 +419,7 @@
     const icons = note && !lnote ? '<span class="ic" title="Has a note">✎</span>' : '';
     const len = songLength(p.key, r);
     return `<div class="pr ${open ? 'open' : ''} ${S.flash === p.key ? 'flash' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">
-      <div class="c-time">${isNow ? '<span class="now-tag">NOW</span><br>' : ''}${time(p.at)}<small>${short(p.at)}</small></div>
+      <div class="c-time">${isNow ? '<span class="now-tag">NOW</span><br>' : ''}<span class="t12">${time(p.at)}</span><span class="t24">${time24(p.at)}</span><small>${short(p.at)}</small></div>
       <div class="c-song"><div class="t"><b>${esc(p.title)}</b>${star}${icons}</div><div class="by">${esc(p.artist)}${len ? ` · ${len.measured ? '~' : ''}${History.formatClock(len.secs)}` : ''}</div>${p.album ? `<div class="alb">${esc(p.album)}</div>` : ''}${lnote}</div>
       <div class="c-status">${st(r)}</div>
       <div class="c-cat">${inList(r) ? esc(CAT[catOf(r.item.id)] || 'No category') : '—'}</div>
@@ -603,7 +604,7 @@
       : D.playlistLoading && !D.items.length ? `<span class="grow">Reading “${PLAYLIST_NAME}”…</span>`
       : `<span class="grow"><b>${PLAYLIST_NAME}</b> playlist <span class="nw">· ${fmt(D.items.length)} songs</span>${D.hidden ? ` <span class="nw">(${D.hidden} unavailable left out)</span>` : ''} <span class="nw">· checked ${ago(D.playlistAt)}</span></span>`;
     const gaps = D.plays.filter(p => p[4]).length;
-    return head('Every play, newest first') + `
+    return head('SomaFM station play history') + `
       <div class="bar-line">${pl}<button class="pill" data-act="refresh">↻ Refresh playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live updates</button></div>
       ${D.archiveNote ? `<div class="warn">⚠ ${esc(D.archiveNote)}</div>` : ''}${goneBox}${filters}
       <div class="find"><input type="search" id="find" placeholder="Search plays: song, artist or album" value="${esc(S.q)}" aria-label="Search plays"></div>

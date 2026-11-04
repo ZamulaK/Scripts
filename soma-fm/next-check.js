@@ -267,13 +267,13 @@ const overflow = page => page.evaluate(() => {
     check('Lists: the date under a time in the brighter secondary text', await first.evaluate(r => getComputedStyle(r.querySelector('.c-time small')).color) === 'rgb(188, 198, 219)');
     const ln = await first.evaluate(r => { const n = r.querySelector('.lnote'); return n && { t: n.textContent, cls: n.className, color: getComputedStyle(n).color, icon: !!r.querySelector('.c-song .ic') }; });
     check('Lists: a song\'s note shows its first line under the song, in the third text level', ln && ln.t === 'First line of the note' && /\bone\b/.test(ln.cls) && ln.color === 'rgb(151, 163, 189)' && !ln.icon, JSON.stringify(ln));
-    // The list's rows: the time on one line, at the top; the icon and the status on one line, the count and chevron below
+    // The list's rows: the time as 24-hour hh:mm on one line (phones); the icon and the status on one line, the count and chevron below
     const lay = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph)')].slice(0, 8).map(r => {
-      const R = e => e.getBoundingClientRect(), tm = r.querySelector('.c-time'), clock = [...tm.childNodes].find(n => n.nodeType === 3 && /[0-9]:[0-9][0-9]/.test(n.textContent)), rg = document.createRange(); rg.selectNodeContents(clock);
+      const R = e => e.getBoundingClientRect(), tm = r.querySelector('.c-time'), clock = tm.querySelector('.t24');
       const go = r.querySelector('.c-go'), st = R(r.querySelector('.m-st')), cnt = R(r.querySelector('.m-cnt')), song = R(r.querySelector('.c-song'));
-      return { timeLines: rg.getClientRects().length, timeTop: Math.abs(R(tm).top - song.top) < 2, sameLine: !go.children.length || Math.abs((R(go).top + R(go).bottom) / 2 - (st.top + st.bottom) / 2) < 4, below: cnt.top >= st.bottom - 1, songRight: song.right <= R(go.children.length ? go : r.querySelector('.m-st')).left };
+      return { timeLines: clock.getClientRects().length, t24: clock.textContent, hidden12: getComputedStyle(tm.querySelector('.t12')).display === 'none', sameLine: !go.children.length || Math.abs((R(go).top + R(go).bottom) / 2 - (st.top + st.bottom) / 2) < 4, below: cnt.top >= st.bottom - 1, songRight: song.right <= R(go.children.length ? go : r.querySelector('.m-st')).left };
     }));
-    check('Rows (360 px): time on one line at the top, the icon beside the status, the count below them', lay.length && lay.every(x => x.timeLines === 1 && x.timeTop && x.sameLine && x.below && x.songRight), JSON.stringify(lay.slice(0, 3)));
+    check('Rows (360 px): 24-hour time (hh:mm) on one line, the icon beside the status, the count below them', lay.length && lay.every(x => x.timeLines === 1 && /^[0-2][0-9]:[0-5][0-9]$/.test(x.t24) && x.hidden12 && x.sameLine && x.below && x.songRight), JSON.stringify(lay.slice(0, 3)));
     const turn = el => el.evaluate(r => getComputedStyle(r.querySelector('.m-side .chev svg')).transform);
     const closedT = await turn(first);
     await first.locator('.c-time').click();
@@ -362,6 +362,9 @@ const overflow = page => page.evaluate(() => {
       await tabTo(s.page, 'History');
       const shown = await s.page.evaluate(() => Math.round(document.querySelector('#plist .m-side .st .stl').getBoundingClientRect().width));
       check('Tablet (600 px): the status names stay', shown > 30, String(shown));
+      const t12 = await s.page.evaluate(() => document.querySelector('#plist .pr:not(.ph) .c-time').innerText.split('\n').filter(x => /\d:\d\d/.test(x))[0]);
+      check('Tablet (600 px): the time stays 12-hour', /^\d{1,2}:\d\d [AP]M$/.test(t12), t12);
+      check('History: the line under the title is "SomaFM station play history"', await s.page.locator('header.top .sub').textContent() === 'SomaFM station play history');
     }
     if (theme === 'evergreen') check('Evergreen, the green one, remembered', look.bg === 'rgb(8, 20, 14)', look.bg);
     if (width === 600 && !theme && scheme === 'light') {
