@@ -3,8 +3,10 @@
    Text in three levels (Dan, Nov 4): --ink, --muted (secondary, made brighter) and --faint (third level: the old --muted,
    for notes in the lists and footnotes). */
 :root{color-scheme:dark;--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#bcc6db;--faint:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a;--star:#f5c542}
-:root[data-theme="candy"]{--bg:#170b0d;--card:#251316;--ink:#f7eceb;--muted:#dfc6c3;--faint:#c4a4a1;--line:#3e2227;--accent:#ff7a8a;--on:#1a0b0e;--chip:#341a1f;--good:#5fd39a;--warn:#f2bd5c;--bad:#ff8a80;--dis:#d9aed0;--hero1:#a3122a;--hero2:#1f6b45;--row:#2c171b;--star:#f5c542}
-:root[data-theme="evergreen"]{--bg:#08140e;--card:#112119;--ink:#eaf4ed;--muted:#c3d8ca;--faint:#a0bcaa;--line:#1f3a2b;--accent:#72e0a2;--on:#06120c;--chip:#183024;--good:#8be3b0;--warn:#f2bd5c;--bad:#ff8a80;--dis:#cdb3dc;--hero1:#17734a;--hero2:#0c3a28;--row:#152b20;--star:#f5c542}
+/* Candy cane and Evergreen in a Material style (Dan, Nov 4: both felt too strongly red and green): near-neutral surfaces with
+   a faint hue, the color kept for the accent (a soft, light tone), the Now card and the statuses */
+:root[data-theme="candy"]{--bg:#191113;--card:#251c1e;--ink:#f1dedf;--muted:#dac3c4;--faint:#a68f91;--line:#3d3133;--accent:#ffb3b5;--on:#561d22;--chip:#31272a;--good:#6fdc9e;--warn:#f2bd5c;--bad:#ff8a80;--dis:#d9b6d4;--hero1:#8a2c36;--hero2:#2f5443;--row:#2b2224;--star:#f5c542}
+:root[data-theme="evergreen"]{--bg:#101511;--card:#1b211d;--ink:#e0e4de;--muted:#c3cbc3;--faint:#8e978e;--line:#323a34;--accent:#8fd5a6;--on:#00391f;--chip:#262d28;--good:#6fdc98;--warn:#f2bd5c;--bad:#ff8a80;--dis:#cdb6dc;--hero1:#2c5a40;--hero2:#173326;--row:#212823;--star:#f5c542}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font:15px/1.45 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
