@@ -216,7 +216,10 @@ const overflow = page => page.evaluate(() => {
   check('Stats: total playlist time as h:mm, from the real lengths (tweak 1)', t.big[1] === want + 'total length (h:mm)', JSON.stringify(t.big) + ' want ' + want);
   check('Stats: songs by status, as a share of songs and of plays (tweak 2), leaving In playlist and Disliked to the cards', t.status.length >= 2 && t.status.every(x => !/^(In playlist|Disliked)/.test(x) && /\d+ songs? · \d+%\s*\d+ plays? · \d+%/.test(x)), JSON.stringify(t.status));
   check('Stats: Songs by status right under the playlist cards', t.heads[0] === 'Your playlist' && t.heads[1] === 'Songs by status' && t.heads[2] === 'Heard so far', t.heads.join('|'));
-  check('Stats: every section', ['Your playlist', 'Categories', 'Songs by status', 'SomaFM rotation', 'Most played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
+  // "Of the last 100 plays, heard for the first time": left out at 0; otherwise split only at its comma, the figures on one line
+  const ft = await s.page.evaluate(() => { const kv = [...document.querySelectorAll('.kv')].find(x => /heard for the first time/.test(x.textContent)); return kv ? { v: kv.querySelector('b').textContent, parts: kv.querySelectorAll('span.nw').length, oneLine: kv.querySelector('b').getClientRects().length === 1 } : null; });
+  check('Stats: the first-time share left out at 0, else broken only at the comma', ft === null || (!/^0 /.test(ft.v) && ft.parts === 2 && ft.oneLine), JSON.stringify(ft));
+  check('Stats: every section',['Your playlist', 'Categories', 'Songs by status', 'SomaFM rotation', 'Most played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
   await s.page.click('[data-act="topSort"][data-v="recent"]');
   check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most recently replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most recently replayed") + .plays .pr').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
   check('No script errors (Stats)', s.errors.length === 0, s.errors.join(' | '));
@@ -291,8 +294,9 @@ const overflow = page => page.evaluate(() => {
     const st3 = await s.page.evaluate(() => ({ tops: new Set([...document.querySelectorAll('.g3 .box')].map(b => Math.round(b.getBoundingClientRect().top))).size,
       io: [...document.querySelectorAll('.box.io')].map(b => { const pc = b.querySelector('b.big').getBoundingClientRect(), l = b.querySelector('.io-l'), lr = l.getBoundingClientRect();
         return { text: b.innerText.replace(/\s+/g, ' ').trim(), below: lr.top >= pc.bottom - 1, oneLine: l.getClientRects().length === 1 && lr.height < 24, dis: !!b.querySelector('.io-in.dis b.big'), weight: getComputedStyle(l).fontWeight }; }) }));
-    const rep = await s.page.evaluate(() => { const kv = [...document.querySelectorAll('.kv')].find(x => /Between a song/.test(x.textContent)); return kv && [...kv.querySelectorAll('b.lines span')].map(x => ({ t: x.textContent, top: Math.round(x.getBoundingClientRect().top) })); });
-    check('Stats: the replay average and median each on a line of their own', rep && rep.length === 2 && / average$/.test(rep[0].t) && / median$/.test(rep[1].t) && rep[1].top > rep[0].top, JSON.stringify(rep));
+    const rep = await s.page.evaluate(() => { const kv = [...document.querySelectorAll('.kv')].find(x => /Between/.test(x.textContent)); return kv && [...kv.querySelectorAll('.lines > span')].map(x => ({ t: x.textContent, top: Math.round(x.getBoundingClientRect().top), bold: [...x.querySelectorAll('b')].map(b => b.textContent).join(' ') })); });
+    check('Stats (360 px): "Between replays", the short name on a phone', await s.page.evaluate(() => [...document.querySelectorAll('.kv')].some(x => x.firstElementChild.innerText.trim() === 'Between replays')));
+    check('Stats: the replay average and median each on a line of their own, only the figures bold', rep && rep.length === 2 && / average$/.test(rep[0].t) && / median$/.test(rep[1].t) && rep[1].top > rep[0].top && rep.every(x => /^[\d ]+$/.test(x.bold)), JSON.stringify(rep));
     check('Stats (360 px): the three playlist cards on one row', st3.tops === 1, String(st3.tops));
     check('Stats (360 px): in playlist and disliked, laid out alike: the %, the words under it on one line (not bold), the count below', st3.io.length === 2
       && /^\d+% of songs in playlist \d+ of 60 \d+% of songs disliked \d+ of 60$/.test(st3.io[0].text) && /^\d+% of plays in playlist \d+ of 700 \d+% of plays disliked \d+ of 700$/.test(st3.io[1].text) && st3.io.every(x => x.below && x.oneLine && x.dis && x.weight === '400'), JSON.stringify(st3.io));
@@ -312,6 +316,7 @@ const overflow = page => page.evaluate(() => {
     await tabTo(s.page, 'Stats');
     const sb = await s.page.evaluate(() => ({ rows: [...document.querySelectorAll('.kv.stat')].map(x => x.textContent).join('|') || 0, cards: document.querySelectorAll('.box.io').length }));
     check('Stats: no Songs by status box when nothing is an other version or not in the playlist (the cards stay)', sb.rows === 0 && sb.cards === 2, JSON.stringify(sb));
+    check('Stats: no "Most played that you don\'t have" when there are none', await s.page.evaluate(() => ![...document.querySelectorAll('h3')].some(h => /that you don't have/.test(h.textContent)) && !/Nothing to find/.test(document.body.textContent)));
     await s.ctx.close();
     api.doc = saved;
   }

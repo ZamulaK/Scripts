@@ -32,6 +32,7 @@
   const short = at => new Date(at * 1000).toLocaleDateString([], { month: 'numeric', day: 'numeric' });
   const when = at => History.formatDate(at) + ' ' + History.formatTime(at);
   const ago = ms => { const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
+  const numsBold = text => esc(text).replace(/\d[\d.,]*/g, '<b>$&</b>');   // "13 h 19 min": the figures bold, the words not (Dan, Nov 4)
   const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '0%';
   const plural = (n, one, many) => fmt(n) + ' ' + (n === 1 ? one : (many || one + 's'));
   const hmm = secs => { const m = Math.round(secs / 60); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };   // 34320 -> "9:32" (Dan's tweak 1)
@@ -647,12 +648,12 @@
     const firsts = t.recent ? Math.round(t.recentFirsts / t.recent * 100) : 0;
     const right = !t.plays ? '<h3>SomaFM rotation</h3><div class="box">No plays recorded yet.</div>' : `<h3>SomaFM rotation</h3><div class="g2"><div class="box"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.unique)}</b><span class="k">different songs played</span></div></div>
       <div class="box" style="margin-top:12px"><div class="kv"><span>Songs played more than once</span><b>${fmt(t.repeated)}</b></div><div class="kv"><span>Plays per song</span><b>${t.avgPlays.toFixed(1)}</b></div>
-        ${t.repeatIntervals ? `<div class="kv"><span>Between a song's replays</span><b class="lines"><span>${esc(Stats.formatSpan(t.avgRepeatSecs))} average</span><span>${esc(Stats.formatSpan(t.medianRepeatSecs))} median</span></b></div>` : ''}
-        <div class="kv"><span>Of the last ${fmt(t.recent)} plays, heard for the first time</span><b>${fmt(t.recentFirsts)} · ${firsts}%</b></div>
+        ${t.repeatIntervals ? `<div class="kv"><span><span class="lw">Between a song's replays</span><span class="ln">Between replays</span></span><span class="r lines"><span>${numsBold(Stats.formatSpan(t.avgRepeatSecs))} average</span><span>${numsBold(Stats.formatSpan(t.medianRepeatSecs))} median</span></span></div>` : ''}
+        ${t.recentFirsts ? `<div class="kv"><span><span class="nw">Of the last ${fmt(t.recent)} plays,</span> <span class="nw">heard for the first time</span></span><b class="nw">${fmt(t.recentFirsts)} · ${firsts}%</b></div>` : ''}
         <div class="snote">${t.rateRepeatSecs ? `Comes back worked out from ${esc(Stats.formatSpan(t.coveredSecs))} of recorded time and ${fmt(t.plays)} plays of ${fmt(t.unique)} songs. ` : ''}As the first-time share drops toward zero, you've seen nearly all of the rotation.</div></div>
       <h3>${S.topSort === 'recent' ? 'Most recently replayed' : 'Most played'} <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
-      <div class="plays">${top.length ? top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty">No songs have repeated yet.</div>'}</div>
-      ${ok ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${missing.length ? missing.map(p => playRow(p, 'miss:', false)).join('') : '<div class="empty">Nothing to find. Every song recorded is in your playlist, another version is, or you disliked it.</div>'}</div>` : ''}
+      <div class="plays">${top.length ? top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty left">No songs have repeated yet.</div>'}</div>
+      ${ok && missing.length ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${missing.map(p => playRow(p, 'miss:', false)).join('')}</div>` : ''}
       <h3>Recording</h3><div class="box"><div class="kv"><span>Since</span><b>${esc(day(since))} ${esc(time(since))}</b></div><div class="kv"><span>Plays saved</span><b>${fmt(t.plays)}</b></div>
         <div class="kv"><span>Time recorded</span><b>${esc(Stats.formatSpan(t.coveredSecs))}${t.perHour ? ` · ${t.perHour.toFixed(1)} songs an hour` : ''}</b></div><div class="kv"><span>Gaps (station or recorder down)</span><b>${fmt(t.gaps)}</b></div></div>`;
     return head(since ? 'Since ' + day(since) : 'Your playlist and SomaFM\'s rotation') + `<div class="split"><div>${left}</div><div>${right}</div></div>`;
