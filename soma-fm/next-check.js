@@ -287,6 +287,7 @@ const overflow = page => page.evaluate(() => {
     await s.page.click('[data-act="fdone"]');
     // More → Song lists: the whole note, none, and the album on a phone
     await tabTo(s.page, 'More');
+    check('More (360 px): the theme swatches line up though Xmas Green takes two lines', await s.page.evaluate(() => new Set([...document.querySelectorAll('.theme i')].map(i => Math.round(i.getBoundingClientRect().top))).size === 1 && new Set([...document.querySelectorAll('.theme')].map(b => Math.round(b.getBoundingClientRect().height))).size === 1));
     await s.page.click('[data-act="listNotes"][data-v="all"]');
     await s.page.click('[data-act="listAlbum"][data-v="1"]');
     await tabTo(s.page, 'History');
@@ -420,6 +421,7 @@ const overflow = page => page.evaluate(() => {
   check('More: Plays as CSV', /^﻿?Date,Time,Artist,Title,Album,Playlist status,After gap/.test(text) && text.split('\n').length > 700, text.slice(0, 80));
   const themes = await s.page.evaluate(() => [...document.querySelectorAll('.theme')].map(b => b.textContent.trim()).join());
   await s.page.click('[data-act="theme"][data-v="candy"]');
+  check('More: the theme swatches line up, whatever the names take', await s.page.evaluate(() => new Set([...document.querySelectorAll('.theme i')].map(i => Math.round(i.getBoundingClientRect().top))).size === 1));
   check('More: three dark themes, Midnight, Xmas Red and Xmas Green; choosing one keeps it on this device', themes === 'Midnight,Xmas Red,Xmas Green' && await s.page.evaluate(() => document.documentElement.dataset.theme === 'candy' && localStorage.getItem('xl:theme') === '"candy"'), themes);
   check('No script errors (More)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();

@@ -299,7 +299,7 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 .shlist li{overflow-wrap:anywhere}
 .shlist .k{color:var(--muted)}
 .themes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.theme{border-radius:16px;padding:12px;border:2px solid var(--line);cursor:pointer;background:var(--card);text-align:left;font-weight:600}
+.theme{border-radius:16px;padding:12px;border:2px solid var(--line);cursor:pointer;background:var(--card);text-align:left;font-weight:600;display:flex;flex-direction:column;justify-content:flex-start}   /* swatches level at the top, whether the name takes one line or two (Dan, Nov 4) */
 .theme.on{border-color:var(--accent)}
 .theme i{display:block;height:34px;border-radius:10px;margin-bottom:8px}
 .seg{display:inline-flex;background:var(--chip);border-radius:999px;padding:3px}
