@@ -107,7 +107,7 @@ const overflow = page => page.evaluate(() => {
 (async () => {
   const browser = await chromium.launch();
   let s = await open(browser);
-  const now = await s.page.evaluate(() => ({ hero: (document.querySelector('.hero h2') || {}).textContent, tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr').length,
+  const now = await s.page.evaluate(() => ({ hero: (document.querySelector('.hero h2 span') || {}).textContent, tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr').length,
     tiles: [...document.querySelectorAll('.g2 .box b.big')].map(b => b.textContent), tabs: [...document.querySelectorAll('.tabs a')].map(a => a.textContent.trim()).join() }));
   check('Now: what\'s playing (from the feed), its status, two tiles and the plays just before', now.hero === hist[0][2] && now.tag === 'Now playing' && /^st (have|other|none|gone|disliked)$/.test(now.st) && now.stText.length > 3 && now.just === 7
     && now.tiles.length === 2 && /h$/.test(now.tiles[0]) && now.tiles[1] === '700' && now.tabs === 'Now,History,Stats,Shuffle,More', JSON.stringify(now));
@@ -115,18 +115,18 @@ const overflow = page => page.evaluate(() => {
     && api.calls.some(c => /^GET \/api\/playlist\?list=.*&within=900$/.test(c)), api.calls.join());
   check('Nothing of Dan\'s data is kept in the browser: only settings in localStorage, no IndexedDB', await s.page.evaluate(async () => {
     const keys = Object.keys(localStorage); const dbs = indexedDB.databases ? await indexedDB.databases() : [];
-    return keys.every(k => /^xl:(theme|live|per|histq|topSort|device|signin:|shuffle:job)/.test(k)) && dbs.length === 0;
+    return keys.every(k => /^xl:(theme|live|per|histq|topSort|listAlbum|listNotes|device|signin:|shuffle:job)/.test(k)) && dbs.length === 0;
   }));
 
   // History
   await tabTo(s.page, 'History');
   let h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.innerText.replace(/\s+\d[\d,]*$/, '').trim()), more: !!document.querySelector('.more-f'),
     rows: document.querySelectorAll('#plist .pr:not(.ph)').length, gaps: document.querySelectorAll('.gaprow').length, line: document.querySelector('.bar-line .grow').textContent, gone: (document.querySelector('#gonebox summary') || {}).textContent }));
-  check('History: five chips to start (All, In playlist, Not in playlist, Favorites, Latest; short names at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,In list,Not in list,★,Latest' && h.more, JSON.stringify(h));
+  check('History: five chips to start (All, Latest, In playlist, Not in playlist, Favorites; short names at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,Latest,In list,Not in list,★' && h.more, JSON.stringify(h));
   check('History: 50 plays a page, gap rows between plays, the playlist line and the gone-from-playlist notice', h.rows === 50 && h.gaps === 0 && /Xmas Mixed playlist · 61 songs \(1 unavailable left out\) · checked 2 min ago/.test(h.line) && /1 song is gone/.test(h.gone), JSON.stringify(h));
   await s.page.click('.more-f');
-  const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length, latest: !!document.querySelector('.fpanel .grp:first-of-type [data-act="flatest"]') }));
-  check('History: All filters opens Status (with Latest play only) / Favorites and categories, with Clear all and Done', panel.heads === 'Status|Favorites and categories' && panel.latest && panel.chips >= 12, JSON.stringify(panel));
+  const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length, latest: (document.querySelectorAll('.fpanel .grp')[0].children[1] || {}).dataset.act === 'flatest' }));
+  check('History: All filters opens Status (Latest play only second) / Favorites and categories, with Clear all and Done', panel.heads === 'Status|Favorites and categories' && panel.latest && panel.chips >= 12, JSON.stringify(panel));
   await s.page.click('.fpanel .chip:has-text("Other version")');
   await s.page.click('.fpanel .chip:has-text("Jazz/Piano")');
   await s.page.click('.fpanel [data-act="fdone"]');
@@ -221,6 +221,66 @@ const overflow = page => page.evaluate(() => {
   check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most recently replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most recently replayed") + .plays .pr').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
   check('No script errors (Stats)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
+
+  // Dan's tweaks of Nov 4, on a phone (360 px)
+  {
+    const nowKey = X.markKey(hist[0][1], hist[0][2]);
+    api.doc.notes[nowKey] = { t: 'First line of the note\nSecond line', at: Date.now() };
+    s = await open(browser, { width: 360 });
+    const root = await s.page.evaluate(() => { const c = getComputedStyle(document.documentElement); return [c.getPropertyValue('--muted').trim(), c.getPropertyValue('--faint').trim()]; });
+    check('Text in three levels: secondary text brighter, the old color kept for the third level', root[0] === '#bcc6db' && root[1] === '#97a3bd', root.join());
+    const hero = await s.page.evaluate(() => { const acts = [...document.querySelectorAll('.hero .acts > *')];
+      return { note: (document.querySelector('.hero .hnote') || {}).textContent, lines: new Set(acts.map(a => Math.round(a.getBoundingClientRect().top))).size, right: Math.max(...acts.map(a => a.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right,
+        have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]') }; });
+    check('Now card: the whole note at the bottom', hero.note === 'First line of the note\nSecond line', JSON.stringify(hero));
+    check('Now card (360 px): its buttons on one line, inside the card; Favorite is a star beside the name', hero.lines === 1 && hero.right <= hero.edge && !hero.favPill && hero.star === hero.have, JSON.stringify(hero));
+    await tabTo(s.page, 'History');
+    const first = s.page.locator('#plist .pr:not(.ph)').first();
+    const ln = await first.evaluate(r => { const n = r.querySelector('.lnote'); return n && { t: n.textContent, cls: n.className, color: getComputedStyle(n).color, icon: !!r.querySelector('.c-song .ic') }; });
+    check('Lists: a song\'s note shows its first line under the song, in the third text level', ln && ln.t === 'First line of the note' && /\bone\b/.test(ln.cls) && ln.color === 'rgb(151, 163, 189)' && !ln.icon, JSON.stringify(ln));
+    const turn = el => el.evaluate(r => getComputedStyle(r.querySelector('.m-side .chev svg')).transform);
+    const closedT = await turn(first);
+    await first.locator('.c-time').click();
+    const opened = s.page.locator('#plist .pr.open').first();
+    const openT = await turn(opened);
+    check('Rows: a round chevron shows open or closed, turned over while open (and the note preview gives way to the note)', closedT === 'none' && openT !== 'none' && await opened.locator('.lnote').isHidden(), closedT + ' / ' + openT);
+    await opened.locator('.c-time').click();
+    await s.page.click('.more-f');
+    const grp = await s.page.evaluate(() => [...document.querySelectorAll('.fpanel .grp')].map(g => [...g.querySelectorAll('.chip')].map(c => c.classList.contains('zero') ? 0 : 1).join('')));
+    check('All filters: Latest second, and filters with nothing in them dim at the end of their group', grp.length === 2 && grp.join('').indexOf('0') >= 0 && grp.every(g => /^1*0*$/.test(g)), JSON.stringify(grp));
+    await s.page.click('[data-act="fdone"]');
+    // More → Song lists: the whole note, none, and the album on a phone
+    await tabTo(s.page, 'More');
+    await s.page.click('[data-act="listNotes"][data-v="all"]');
+    await s.page.click('[data-act="listAlbum"][data-v="1"]');
+    await tabTo(s.page, 'History');
+    const all = await s.page.locator('#plist .pr:not(.ph)').first().evaluate(r => ({ t: (r.querySelector('.lnote.all') || {}).textContent, alb: getComputedStyle(r.querySelector('.alb')).display }));
+    check('Song lists: the whole note, and the album on a phone, when chosen in More', all.t === 'First line of the note\nSecond line' && all.alb === 'block', JSON.stringify(all));
+    await tabTo(s.page, 'More');
+    await s.page.click('[data-act="listNotes"][data-v="off"]');
+    await tabTo(s.page, 'History');
+    const off = await s.page.locator('#plist .pr:not(.ph)').first().evaluate(r => ({ n: r.querySelectorAll('.lnote').length, icon: !!r.querySelector('.c-song .ic') }));
+    check('Song lists: notes off leaves the ✎ beside the name', off.n === 0 && off.icon, JSON.stringify(off));
+    await tabTo(s.page, 'Stats');
+    const st3 = await s.page.evaluate(() => ({ tops: new Set([...document.querySelectorAll('.g3 .box')].map(b => Math.round(b.getBoundingClientRect().top))).size,
+      io: [...document.querySelectorAll('.box b.big.good')].map(b => b.parentElement.textContent.replace(/\s+/g, ' ').trim()) }));
+    const sums = st3.io.map(x => { const m = x.match(/^(\d+)%.*?(\d+)% not/); return m ? +m[1] + +m[2] : 0; });
+    check('Stats (360 px): the three playlist cards on one row', st3.tops === 1, String(st3.tops));
+    check('Stats: in your playlist vs. not, as cards for songs and for plays', st3.io.length === 2 && /of songs played in your playlist/.test(st3.io[0]) && /of plays in your playlist/.test(st3.io[1]) && sums.every(n => n === 100), JSON.stringify(st3.io));
+    check('No script errors (Nov 4 tweaks)', s.errors.length === 0, s.errors.join(' | '));
+    await s.ctx.close();
+    // Not in playlist is left off the first row while there are none: every such song disliked
+    const saved = JSON.parse(JSON.stringify(api.doc));
+    for (const p of hist) { const k = X.markKey(p[1], p[2]); if (X.check(p[1], p[2], items).status !== 'have') api.doc.dislikes[k] = Date.now(); }
+    delete api.doc.archive.goneVideo1;   // a song gone from the playlist counts as not in it too
+    s = await open(browser, { path: '/history' });
+    const nz = await s.page.evaluate(() => ({ quick: [...document.querySelectorAll('.quick .chip')].map(c => c.dataset.v || c.dataset.act).join(), none: (document.querySelector('.quick [data-v="none"]') || {}).outerHTML }));
+    await s.page.click('.more-f');
+    const nzPanel = await s.page.evaluate(() => { const c = document.querySelector('.fpanel [data-v="none"]'); return c && { zero: c.classList.contains('zero'), last: c === [...c.parentElement.children].pop() || c.nextElementSibling.classList.contains('zero') }; });
+    check('Filters: Not in playlist left off the first row with none in it, dim at the end in All filters', !nz.none && nzPanel && nzPanel.zero && nzPanel.last, JSON.stringify({ nz, nzPanel }));
+    await s.ctx.close();
+    api.doc = saved;
+  }
 
   // Every page at three widths, in each theme and in dark mode: nothing wider than the window
   for (const [width, scheme, theme] of [[1024, 'light', undefined], [600, 'light', undefined], [600, 'dark', undefined], [360, 'light', undefined], [360, 'dark', 'candy'], [600, 'light', 'candy'], [600, 'dark', 'evergreen']]) {

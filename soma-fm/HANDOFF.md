@@ -272,7 +272,7 @@ from complete reads only. Per device (localStorage `xl:*`): theme, Live, per pag
 sign-in key, unfinished job and device id. Addresses: `/`, `/history?status=&cat=&fav=1&latest=1&q=&page=`, `/stats`,
 `/shuffle`, `/more` (Pages serves index.html for every path, as there's no 404.html). Plays tables switch to columns by a
 container query (list ≥ 860 px), so the half-width lists on Now and Stats stay as rows. Restore offers Merge only (one copy:
-Replace/Undo would need to remove from D1; Dan agreed Nov 2). Live updates also refresh Now (Dan's choice, Nov 2). Tests: `npm run test:next` (`next-check.js`, 73 checks against a stand-in /api; `SHOTS=<dir>`
+Replace/Undo would need to remove from D1; Dan agreed Nov 2). Live updates also refresh Now (Dan's choice, Nov 2). Tests: `npm run test:next` (`next-check.js`, 85 checks against a stand-in /api; `SHOTS=<dir>`
 saves screenshots), worker tests cover `/change` and the playlist cache. Deploy: `node site/deploy-next.js` (branch `next`).
 Set up (done Nov 2): the preview environment's four secrets (Dan set them with `node site/copy-secrets.js <file>`: one file of
 NAME=value lines; it checks all four look right before setting any, and never prints them; Cloudflare can't give secrets back, so
@@ -296,6 +296,23 @@ there because his session covers `*.xmaslounge.pages.dev` (checked: a request wi
 - Stats: Songs by status right under the three playlist cards; the heard bar etc. under "Heard so far".
 - Now card: the status as the lists' colored dot and name, on a dark badge.
 - Now shows 7 plays under "Just played" (fixed, from the mockup; Dan asked what decides it, may want it changed).
+
+**Dan's tweaks of Nov 4 (after two days' use), live on next:**
+- Text in three levels: `--muted` (secondary) made brighter in each theme; the old color is now `--faint` (third level:
+  notes in the lists, the date under a time, footnotes such as `.snote`, `.legend`, `.foot`).
+- More → Song lists (per device, `xl:listAlbum`, `xl:listNotes`): Album Always / Wide screens (default), Notes First line
+  (default) / All / Off. The note shows under the song in `--faint`; with notes Off the ✎ beside the name stays. Dan asked
+  to "always show the artist"; the artist already always shows, so this was taken to mean the album (hidden under 860 px).
+  Confirm with him.
+- Now card: Favorite is a ☆/★ beside the song's name (no Favorite pill); on phones the buttons stay on one line
+  (Open/Search, Note, N plays); the whole note shows at the bottom of the card.
+- Rows: a round chevron at the end (in `.m-side` on narrow, `.c-act` in the table) that fills and turns over while open; the
+  open row also gets an accent bar on its left. The whole row is the tap target, as before.
+- Filters: Latest is always the second chip (first row and All filters). The first row leaves out Not in playlist while
+  it counts 0 (unless on). In All filters, chips counting 0 go to the end of their group, dashed and dim with the 0 in red
+  (this also brings back "No category" at the end when every song has one).
+- Stats: the three playlist cards stay on one row on phones; two new cards above Songs by status: % of songs played and
+  % of plays that are in your playlist, with the "not" share (other version, not in playlist, gone, disliked).
 
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
