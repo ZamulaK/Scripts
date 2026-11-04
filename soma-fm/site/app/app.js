@@ -691,7 +691,7 @@
 
   R.more = () => {
     const th = THEMES.indexOf(document.documentElement.dataset.theme) >= 0 ? document.documentElement.dataset.theme : '';
-    const T = [['', 'Midnight', 'linear-gradient(135deg,#283a8f,#6a3fb5)'], ['candy', 'Xmas Red', 'linear-gradient(135deg,#b3192f 0 46%,#16764a 54% 100%)'], ['evergreen', 'Xmas Green', 'linear-gradient(135deg,#16764a 0 46%,#b3192f 54% 100%)']];
+    const T = [['', 'Midnight', 'linear-gradient(135deg,#283a8f,#6a3fb5)'], ['candy', 'Xmas Red', 'linear-gradient(135deg,#b3192f 0 44%,#16764a 56% 100%)'], ['evergreen', 'Xmas Green', 'linear-gradient(135deg,#16764a 0 44%,#b3192f 56% 100%)']];
     const r = D.lastRun;
     const rec = r ? (r.ok ? `The recorder last read SomaFM's song list at ${esc(when(r.at))}.` : `The recorder couldn't read SomaFM's song list at ${esc(when(r.at))} (${esc(r.note)})${r.lastOk ? '; last good read ' + esc(when(r.lastOk)) : ''}.`) : '';
     const w = warning();
