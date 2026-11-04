@@ -350,7 +350,7 @@ const overflow = page => page.evaluate(() => {
       check('History from 900 px: a table, Time | Song | Status | Category | Plays | Actions', cols === 'Time,Song,Status,Category,Plays,Actions', String(cols));
     }
     if (!theme) check(`Midnight, dark, whatever the device is set to (${scheme})`, look.bg === 'rgb(11, 16, 32)', look.bg);
-    if (theme === 'candy') check('Candy cane, a dark theme, remembered', look.bg === 'rgb(25, 17, 19)', look.bg);
+    if (theme === 'candy') check('Xmas Red (saved as candy), a dark theme, remembered', look.bg === 'rgb(25, 17, 19)', look.bg);
     if (width === 360) {
       await tabTo(s.page, 'History');
       const dots = await s.page.evaluate(() => [...document.querySelectorAll('#plist .m-side .st')].slice(0, 5).map(x => ({ w: Math.round(x.querySelector('.stl').getBoundingClientRect().width), name: x.textContent })));
@@ -366,7 +366,7 @@ const overflow = page => page.evaluate(() => {
       check('Tablet (600 px): the time stays 12-hour', /^\d{1,2}:\d\d [AP]M$/.test(t12), t12);
       check('History: the line under the title is "SomaFM station play history"', await s.page.locator('header.top .sub').textContent() === 'SomaFM station play history');
     }
-    if (theme === 'evergreen') check('Evergreen, the green one, remembered', look.bg === 'rgb(16, 21, 17)', look.bg);
+    if (theme === 'evergreen') check('Xmas Green (saved as evergreen), remembered', look.bg === 'rgb(16, 21, 17)', look.bg);
     if (width === 600 && !theme && scheme === 'light') {
       await tabTo(s.page, 'History');
       const top = await s.page.evaluate(() => { const q = document.querySelector('.quick'), kids = [...q.children]; return { lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, last: kids[kids.length - 1].innerText.trim(), w: q.clientWidth, ws: kids.map(k => Math.round(k.getBoundingClientRect().width)).join('+') }; });
@@ -420,7 +420,7 @@ const overflow = page => page.evaluate(() => {
   check('More: Plays as CSV', /^﻿?Date,Time,Artist,Title,Album,Playlist status,After gap/.test(text) && text.split('\n').length > 700, text.slice(0, 80));
   const themes = await s.page.evaluate(() => [...document.querySelectorAll('.theme')].map(b => b.textContent.trim()).join());
   await s.page.click('[data-act="theme"][data-v="candy"]');
-  check('More: three dark themes, Midnight, Candy cane and Evergreen; choosing one keeps it on this device', themes === 'Midnight,Candy cane,Evergreen' && await s.page.evaluate(() => document.documentElement.dataset.theme === 'candy' && localStorage.getItem('xl:theme') === '"candy"'), themes);
+  check('More: three dark themes, Midnight, Xmas Red and Xmas Green; choosing one keeps it on this device', themes === 'Midnight,Xmas Red,Xmas Green' && await s.page.evaluate(() => document.documentElement.dataset.theme === 'candy' && localStorage.getItem('xl:theme') === '"candy"'), themes);
   check('No script errors (More)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
 
