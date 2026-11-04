@@ -522,7 +522,7 @@
     const open = S.open === id, plays = counts.get(n.key) || 0;
     const t = stats();
     // Dan, Nov 4: each count with its words beside it (under it when there's no room); shorter words on a phone
-    const tiles = `<div class="g2" style="margin-top:12px"><div class="box"><div class="tl"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song repeats</span></div></div>` +
+    const tiles = `<div class="g2" style="margin-top:12px"><div class="box mid"><div class="tl"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song repeats</span></div></div>` +
       `<div class="box"><div class="tl"><b class="big">${fmt(D.plays.length)}</b><span class="k"><span class="lw">plays recorded</span><span class="ln">plays</span></span></div><div class="tl tl2"><b>${fmt(t.unique)}</b><span class="k"><span class="lw">distinct songs</span><span class="ln">songs</span></span></div></div></div>`;
     // Favorite: a star beside the song's name (Dan, Nov 4), so the buttons fit on one line on a phone
     const f = inList(r) && isFav(r.item.id);
@@ -662,8 +662,9 @@
   function inOut(t) {
     if (!t.labeledSongs) return '';
     const h = t.breakdown.have || { songs: 0, plays: 0 }, d = t.breakdown.disliked || { songs: 0, plays: 0 };
-    const card = (n, dn, of, what) => `<div class="box io"><div class="io-in"><b class="big good">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">of ${what} in your playlist</span><span class="ln">of ${what} in playlist</span></span><span class="io-n"><b>${fmt(n)}</b> of <b>${fmt(of)}</b></span></span></div>` +
-      `<div class="io-dis"><b>${pct(dn, of)}</b> disliked <span class="io-n">· <b>${fmt(dn)}</b></span></div></div>`;
+    // Each share as a %, its words beside it (under it on a phone) and the count below them; disliked laid out the same
+    const share = (cls, n, of, wide, narrow) => `<div class="io-in ${cls}"><b class="big">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">${wide}</span><span class="ln">${narrow}</span></span><span class="io-n"><b>${fmt(n)}</b> of <b>${fmt(of)}</b></span></span></div>`;
+    const card = (n, dn, of, what) => `<div class="box io">${share('good', n, of, `of ${what} in your playlist`, `of ${what} in playlist`)}${share('dis', dn, of, `of ${what} disliked`, `of ${what} disliked`)}</div>`;
     return `<div class="g2" style="margin-bottom:12px">${card(h.songs, d.songs, t.labeledSongs, 'songs')}${card(h.plays, d.plays, t.labeledPlays, 'plays')}</div>`;
   }
   // The other statuses, each as a share of the different songs and of all plays (Dan's tweak 2). In playlist and Disliked

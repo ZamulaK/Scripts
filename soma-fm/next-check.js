@@ -234,7 +234,10 @@ const overflow = page => page.evaluate(() => {
     const tl360 = await tileText(s.page);
     const w600 = await open(browser, { width: 600 }), tl600 = await tileText(w600.page);
     const beside = await w600.page.evaluate(() => [...document.querySelectorAll('.g2 .tl')].every(r => { const b = r.querySelector('b').getBoundingClientRect(), k = r.querySelector('.k').getBoundingClientRect(); return k.left > b.right - 1 && Math.abs(k.bottom - b.bottom) < 8; }));
+    // "until a song repeats" is one line beside a card of two: centered top to bottom (Dan, Nov 4)
+    const mid = await w600.page.evaluate(() => { const box = document.querySelector('.g2 .box').getBoundingClientRect(), tl = document.querySelector('.g2 .box .tl').getBoundingClientRect(); return Math.abs((tl.top - box.top) - (box.bottom - tl.bottom)); });
     await w600.ctx.close();
+    check('Now (600 px): the repeat card\'s line centered top to bottom', mid < 2, String(mid));
     check('Now cards: "until a song repeats"; plays and distinct songs, short words on a phone', /^[\d.]+ h until a song repeats$/.test(tl360[0]) && /^700 plays \d+ songs$/.test(tl360[1]) && /^700 plays recorded \d+ distinct songs$/.test(tl600[1]), JSON.stringify({ tl360, tl600 }));
     check('Now cards (600 px): the words beside each count', beside);
     const feeds = () => api.calls.filter(c => /^GET \/api\/feed/.test(c)).length;
@@ -287,10 +290,10 @@ const overflow = page => page.evaluate(() => {
     await tabTo(s.page, 'Stats');
     const st3 = await s.page.evaluate(() => ({ tops: new Set([...document.querySelectorAll('.g3 .box')].map(b => Math.round(b.getBoundingClientRect().top))).size,
       io: [...document.querySelectorAll('.box.io')].map(b => { const pc = b.querySelector('b.big').getBoundingClientRect(), l = b.querySelector('.io-l'), lr = l.getBoundingClientRect();
-        return { text: b.innerText.replace(/\s+/g, ' ').trim(), below: lr.top >= pc.bottom - 1, oneLine: l.getClientRects().length === 1 && lr.height < 24, dis: !!b.querySelector('.io-dis b') }; }) }));
+        return { text: b.innerText.replace(/\s+/g, ' ').trim(), below: lr.top >= pc.bottom - 1, oneLine: l.getClientRects().length === 1 && lr.height < 24, dis: !!b.querySelector('.io-in.dis b.big'), weight: getComputedStyle(l).fontWeight }; }) }));
     check('Stats (360 px): the three playlist cards on one row', st3.tops === 1, String(st3.tops));
-    check('Stats (360 px): in playlist and disliked cards for songs and plays, the words under the % on one line, the count in the card', st3.io.length === 2
-      && /^\d+% of songs in playlist \d+ of 60 \d+% disliked · \d+$/.test(st3.io[0].text) && /^\d+% of plays in playlist \d+ of 700 \d+% disliked · \d+$/.test(st3.io[1].text) && st3.io.every(x => x.below && x.oneLine && x.dis), JSON.stringify(st3.io));
+    check('Stats (360 px): in playlist and disliked, laid out alike: the %, the words under it on one line (not bold), the count below', st3.io.length === 2
+      && /^\d+% of songs in playlist \d+ of 60 \d+% of songs disliked \d+ of 60$/.test(st3.io[0].text) && /^\d+% of plays in playlist \d+ of 700 \d+% of plays disliked \d+ of 700$/.test(st3.io[1].text) && st3.io.every(x => x.below && x.oneLine && x.dis && x.weight === '400'), JSON.stringify(st3.io));
     const io600 = await (async () => { const w = await open(browser, { width: 600, path: '/stats' }); const r = await w.page.evaluate(() => [...document.querySelectorAll('.box.io')].map(b => ({ text: b.innerText.replace(/\s+/g, ' ').trim(), beside: b.querySelector('.io-l').getBoundingClientRect().left > b.querySelector('b.big').getBoundingClientRect().right }))); await w.ctx.close(); return r; })();
     check('Stats (600 px): the words beside the %', io600.length === 2 && io600.every(x => x.beside) && /of songs in your playlist/.test(io600[0].text), JSON.stringify(io600));
     check('No script errors (Nov 4 tweaks)', s.errors.length === 0, s.errors.join(' | '));

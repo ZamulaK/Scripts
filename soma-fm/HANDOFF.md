@@ -317,7 +317,7 @@ there because his session covers `*.xmaslounge.pages.dev` (checked: a request wi
 - Later the same day: the Now card opens and closes like a row (tap anywhere on it; "N plays" + the chevron at the end of
   its buttons; Open/Search keep data-stop), and the date under a row's time went back to the secondary (--muted) color.
 
-**Switched (Nov 4, late):** `node site/deploy-next.js main`; checked in Chrome: the new site at xmaslounge.pages.dev, the old at /old/ (its own IndexedDB copy, the same document and /api; its Shuffle sign-in returns to / and so won't complete there). Stats cards' counts in --ink.
+**Switched (Nov 4, late):** `node site/deploy-next.js main`; checked in Chrome: the new site at xmaslounge.pages.dev, the old at /old/ (its own IndexedDB copy, the same document and /api; its Shuffle sign-in returns to / and so won't complete there). Stats cards' counts in --ink. Then: Now's repeat card centered top to bottom (.box.mid); the Stats cards lay out disliked like in playlist (%, "of songs disliked" / "of plays disliked" not bold, "N of M" below).
 
 **Third round (Nov 4, evening), live on next:** Dan confirmed "artist" meant album. Songs by status lists only Other version,
 Not in playlist and Gone (In playlist and Disliked are in the cards) and is left out when none of those has a song. Now: the
