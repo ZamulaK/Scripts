@@ -12,3 +12,5 @@ site/design/state.json
 site/design/plays.json
 # the new site gets the same copy when it is deployed (site/deploy-next.js)
 site/app/lib/
+# and the old site, kept at /old, built when it is deployed (site/deploy-next.js)
+site/app/old/

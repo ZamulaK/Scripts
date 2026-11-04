@@ -662,8 +662,8 @@
   function inOut(t) {
     if (!t.labeledSongs) return '';
     const h = t.breakdown.have || { songs: 0, plays: 0 }, d = t.breakdown.disliked || { songs: 0, plays: 0 };
-    const card = (n, dn, of, what) => `<div class="box io"><div class="io-in"><b class="big good">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">of ${what} in your playlist</span><span class="ln">of ${what} in playlist</span></span><span class="io-n">${fmt(n)} of ${fmt(of)}</span></span></div>` +
-      `<div class="io-dis"><b>${pct(dn, of)}</b> disliked <span class="io-n">· ${fmt(dn)}</span></div></div>`;
+    const card = (n, dn, of, what) => `<div class="box io"><div class="io-in"><b class="big good">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">of ${what} in your playlist</span><span class="ln">of ${what} in playlist</span></span><span class="io-n"><b>${fmt(n)}</b> of <b>${fmt(of)}</b></span></span></div>` +
+      `<div class="io-dis"><b>${pct(dn, of)}</b> disliked <span class="io-n">· <b>${fmt(dn)}</b></span></div></div>`;
     return `<div class="g2" style="margin-bottom:12px">${card(h.songs, d.songs, t.labeledSongs, 'songs')}${card(h.plays, d.plays, t.labeledPlays, 'plays')}</div>`;
   }
   // The other statuses, each as a share of the different songs and of all plays (Dan's tweak 2). In playlist and Disliked

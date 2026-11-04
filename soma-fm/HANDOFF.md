@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**. **Next session: start with §8d. The new site is built and live at next.xmaslounge.pages.dev; Dan is testing it and sending tweaks. Switch production when he says so.**
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**. **Next session: start with §8d. The new site is the live site at xmaslounge.pages.dev since Nov 4, 2026 (Dan's go-ahead); the old one is kept at xmaslounge.pages.dev/old/ for reference.**
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -317,6 +317,8 @@ there because his session covers `*.xmaslounge.pages.dev` (checked: a request wi
 - Later the same day: the Now card opens and closes like a row (tap anywhere on it; "N plays" + the chevron at the end of
   its buttons; Open/Search keep data-stop), and the date under a row's time went back to the secondary (--muted) color.
 
+**Switched (Nov 4, late):** `node site/deploy-next.js main`; checked in Chrome: the new site at xmaslounge.pages.dev, the old at /old/ (its own IndexedDB copy, the same document and /api; its Shuffle sign-in returns to / and so won't complete there). Stats cards' counts in --ink.
+
 **Third round (Nov 4, evening), live on next:** Dan confirmed "artist" meant album. Songs by status lists only Other version,
 Not in playlist and Gone (In playlist and Disliked are in the cards) and is left out when none of those has a song. Now: the
 subtitle is just "SomaFM Christmas Lounge"; the cards read "3.6 h until a song repeats" and "700 plays recorded / 60 distinct
@@ -395,7 +397,7 @@ HISTORY_MAX stays only in the frozen userscript and today's site); restore is Me
 
 ## 10. Open items / next steps
 
-0. **New site (Pocket v2): built and live on next.xmaslounge.pages.dev (§8d).** Dan is testing on the tablet and sending tweaks. Gates for each change: `npm run test:next` (add a check per tweak) and the worker's `npm test`; then `node site/deploy-next.js`. Switch production (`node site/deploy-next.js main`) only when Dan says so; afterwards the old `site/public` + `site/deploy.js` can be retired with him.
+0. **New site (Pocket v2): live at xmaslounge.pages.dev since Nov 4 (§8d).** Gates for each change: `npm run test:next` (add a check per tweak) and the worker's `npm test`; then `node site/deploy-next.js` (next, to try) and `node site/deploy-next.js main` (live). Both build the old site into /old (from `site/public`, paths moved under /old/); `node site/deploy.js` would put the old site back as the live one. Retire `site/public` + `site/deploy.js` only with Dan (they are what /old is built from).
 1. ~~Shuffle: first real run~~ done (Dan shuffles from the site; quota and last shuffle are synced since 3.26.0).
 2. ~~Laptop setup~~ no longer needed: the site records and syncs on every device.
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.
