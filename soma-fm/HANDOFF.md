@@ -311,8 +311,11 @@ there because his session covers `*.xmaslounge.pages.dev` (checked: a request wi
 - Filters: Latest is always the second chip (first row and All filters). The first row leaves out Not in playlist while
   it counts 0 (unless on). In All filters, chips counting 0 go to the end of their group, dashed and dim with the 0 in red
   (this also brings back "No category" at the end when every song has one).
-- Stats: the three playlist cards stay on one row on phones; two new cards above Songs by status: % of songs played and
-  % of plays that are in your playlist, with the "not" share (other version, not in playlist, gone, disliked).
+- Stats: the three playlist cards stay on one row on phones; two new cards above Songs by status, for songs played and
+  for plays: % in your playlist with the words beside it (under it on phones, one line, "in playlist") and the count
+  ("36 of 60"), then the % disliked, large, right below. Other versions and plain not-in-playlist are left to Songs by status.
+- Later the same day: the Now card opens and closes like a row (tap anywhere on it; "N plays" + the chevron at the end of
+  its buttons; Open/Search keep data-stop), and the date under a row's time went back to the secondary (--muted) color.
 
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.

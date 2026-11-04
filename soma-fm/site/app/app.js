@@ -511,8 +511,8 @@
     const note = noteOf(n.key);
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge · recorded around the clock') + `<div class="split"><div>
-      <div class="hero"><div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2><span>${esc(n.title)}</span>${fav}</h2><p>${esc(n.artist)}${n.album ? ' · ' + esc(n.album) : ''}</p>
-      <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener">▶ Open</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><button class="pill" data-act="row" data-i="${i}" aria-expanded="${open}">${plural(plays, 'play')} ${chev(open)}</button></div>
+      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}"><div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2><span>${esc(n.title)}</span>${fav}</h2><p>${esc(n.artist)}${n.album ? ' · ' + esc(n.album) : ''}</p>
+      <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop>▶ Open</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount">${plural(plays, 'play')} ${chev()}</span></div>
       ${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>
@@ -640,14 +640,14 @@
         <div class="kv"><span>Time recorded</span><b>${esc(Stats.formatSpan(t.coveredSecs))}${t.perHour ? ` · ${t.perHour.toFixed(1)} songs an hour` : ''}</b></div><div class="kv"><span>Gaps (station or recorder down)</span><b>${fmt(t.gaps)}</b></div></div>`;
     return head(since ? 'Since ' + day(since) : 'Your playlist and SomaFM\'s rotation') + `<div class="split"><div>${left}</div><div>${right}</div></div>`;
   };
-  // In your playlist vs. not, as two cards: of the different songs played, and of all plays (Dan, Nov 4).
-  // "Not" is every other status: other version, not in playlist, gone and disliked.
+  // In your playlist and disliked, as two cards: of the different songs played, and of all plays (Dan, Nov 4).
+  // Other versions and songs simply not in the playlist aren't shown here (Songs by status has them).
   function inOut(t) {
     if (!t.labeledSongs) return '';
-    const h = t.breakdown.have || { songs: 0, plays: 0 };
-    const card = (n, of, what) => { const a = of ? Math.round(n / of * 100) : 0;   // the two shares add up to 100
-      return `<div class="box"><b class="big good">${a}%</b><span class="k">of ${what} in your playlist</span><span class="k2"><b>${100 - a}%</b> not · ${fmt(n)} of ${fmt(of)}</span></div>`; };
-    return `<div class="g2" style="margin-bottom:12px">${card(h.songs, t.labeledSongs, 'songs played')}${card(h.plays, t.labeledPlays, 'plays')}</div>`;
+    const h = t.breakdown.have || { songs: 0, plays: 0 }, d = t.breakdown.disliked || { songs: 0, plays: 0 };
+    const card = (n, dn, of, what) => `<div class="box io"><div class="io-in"><b class="big good">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">of ${what} in your playlist</span><span class="ln">of ${what} in playlist</span></span><span class="io-n">${fmt(n)} of ${fmt(of)}</span></span></div>` +
+      `<div class="io-dis"><b>${pct(dn, of)}</b> disliked <span class="io-n">· ${fmt(dn)}</span></div></div>`;
+    return `<div class="g2" style="margin-bottom:12px">${card(h.songs, d.songs, t.labeledSongs, 'songs')}${card(h.plays, d.plays, t.labeledPlays, 'plays')}</div>`;
   }
   const starBtn = (id, title) => `<button class="star" data-act="star" data-v="${esc(id)}" aria-pressed="${isFav(id)}" aria-label="${isFav(id) ? 'Remove from favorites' : 'Add to favorites'}: ${esc(title)}">${isFav(id) ? '★' : '☆'}</button>`;
 
@@ -868,7 +868,7 @@
     }
   });
   document.addEventListener('keydown', e => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.pr[data-act="row"]')) { e.preventDefault(); ACT.row(e.target); }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.pr[data-act="row"], .hero[data-act="row"]')) { e.preventDefault(); ACT.row(e.target); }
     if (e.key === 'Escape' && (S.pick || S.noteFor)) { closePanels(); render(); }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.id === 'note-text') { const b = $('[data-act="noteSave"]'); if (b) ACT.noteSave(b); }
   });

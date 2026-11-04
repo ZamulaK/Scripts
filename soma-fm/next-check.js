@@ -234,8 +234,14 @@ const overflow = page => page.evaluate(() => {
         have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]') }; });
     check('Now card: the whole note at the bottom', hero.note === 'First line of the note\nSecond line', JSON.stringify(hero));
     check('Now card (360 px): its buttons on one line, inside the card; Favorite is a star beside the name', hero.lines === 1 && hero.right <= hero.edge && !hero.favPill && hero.star === hero.have, JSON.stringify(hero));
+    await s.page.click('.hero h2 span');
+    const heroOpen = await s.page.evaluate(() => ({ open: document.querySelector('.hero').classList.contains('open'), exp: document.querySelector('.hero').getAttribute('aria-expanded'), detail: !!document.querySelector('.hero-detail .detail'), turned: getComputedStyle(document.querySelector('.hero .chev svg')).transform !== 'none', stop: !!document.querySelector('.hero .acts a[data-stop]') }));
+    await s.page.click('.hero .hcount');
+    const heroShut = await s.page.evaluate(() => !document.querySelector('.hero.open') && !document.querySelector('.hero-detail'));
+    check('Now card opens and closes like a row: tap anywhere on it, its chevron turned over while open', heroOpen.open && heroOpen.exp === 'true' && heroOpen.detail && heroOpen.turned && heroOpen.stop && heroShut, JSON.stringify({ heroOpen, heroShut }));
     await tabTo(s.page, 'History');
     const first = s.page.locator('#plist .pr:not(.ph)').first();
+    check('Lists: the date under a time in the brighter secondary text', await first.evaluate(r => getComputedStyle(r.querySelector('.c-time small')).color) === 'rgb(188, 198, 219)');
     const ln = await first.evaluate(r => { const n = r.querySelector('.lnote'); return n && { t: n.textContent, cls: n.className, color: getComputedStyle(n).color, icon: !!r.querySelector('.c-song .ic') }; });
     check('Lists: a song\'s note shows its first line under the song, in the third text level', ln && ln.t === 'First line of the note' && /\bone\b/.test(ln.cls) && ln.color === 'rgb(151, 163, 189)' && !ln.icon, JSON.stringify(ln));
     const turn = el => el.evaluate(r => getComputedStyle(r.querySelector('.m-side .chev svg')).transform);
@@ -263,10 +269,13 @@ const overflow = page => page.evaluate(() => {
     check('Song lists: notes off leaves the ✎ beside the name', off.n === 0 && off.icon, JSON.stringify(off));
     await tabTo(s.page, 'Stats');
     const st3 = await s.page.evaluate(() => ({ tops: new Set([...document.querySelectorAll('.g3 .box')].map(b => Math.round(b.getBoundingClientRect().top))).size,
-      io: [...document.querySelectorAll('.box b.big.good')].map(b => b.parentElement.textContent.replace(/\s+/g, ' ').trim()) }));
-    const sums = st3.io.map(x => { const m = x.match(/^(\d+)%.*?(\d+)% not/); return m ? +m[1] + +m[2] : 0; });
+      io: [...document.querySelectorAll('.box.io')].map(b => { const pc = b.querySelector('b.big').getBoundingClientRect(), l = b.querySelector('.io-l'), lr = l.getBoundingClientRect();
+        return { text: b.innerText.replace(/\s+/g, ' ').trim(), below: lr.top >= pc.bottom - 1, oneLine: l.getClientRects().length === 1 && lr.height < 24, dis: !!b.querySelector('.io-dis b') }; }) }));
     check('Stats (360 px): the three playlist cards on one row', st3.tops === 1, String(st3.tops));
-    check('Stats: in your playlist vs. not, as cards for songs and for plays', st3.io.length === 2 && /of songs played in your playlist/.test(st3.io[0]) && /of plays in your playlist/.test(st3.io[1]) && sums.every(n => n === 100), JSON.stringify(st3.io));
+    check('Stats (360 px): in playlist and disliked cards for songs and plays, the words under the % on one line, the count in the card', st3.io.length === 2
+      && /^\d+% of songs in playlist \d+ of 60 \d+% disliked · \d+$/.test(st3.io[0].text) && /^\d+% of plays in playlist \d+ of 700 \d+% disliked · \d+$/.test(st3.io[1].text) && st3.io.every(x => x.below && x.oneLine && x.dis), JSON.stringify(st3.io));
+    const io600 = await (async () => { const w = await open(browser, { width: 600, path: '/stats' }); const r = await w.page.evaluate(() => [...document.querySelectorAll('.box.io')].map(b => ({ text: b.innerText.replace(/\s+/g, ' ').trim(), beside: b.querySelector('.io-l').getBoundingClientRect().left > b.querySelector('b.big').getBoundingClientRect().right }))); await w.ctx.close(); return r; })();
+    check('Stats (600 px): the words beside the %', io600.length === 2 && io600.every(x => x.beside) && /of songs in your playlist/.test(io600[0].text), JSON.stringify(io600));
     check('No script errors (Nov 4 tweaks)', s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
     // Not in playlist is left off the first row while there are none: every such song disliked
