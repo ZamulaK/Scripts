@@ -324,7 +324,7 @@ songs" (words beside each count; "plays" / "songs" under 600 px). A ↻ beside t
 Read again now). Coming back to a tab (hidden 15 s or more, a back/forward-cache restore, or back online) now reads with force,
 and once more 4 s later if that failed; a read stuck over 20 s (frozen in a sleeping tab) no longer holds the next one back,
 and /api reads give up after 30 s (changes and playlist reads 2 min). Dan saw a returning tab a few minutes behind until he
-reloaded; the likely cause was a request frozen mid-flight keeping  set. Check with him that it's gone.
+reloaded; the likely cause was a request frozen mid-flight keeping `ticking` set. Check with him that it's gone.
 
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
