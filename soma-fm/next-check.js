@@ -384,7 +384,7 @@ const overflow = page => page.evaluate(() => {
       window.__plays = [];
       HTMLMediaElement.prototype.play = function () {
         const src = this.getAttribute('src') || ''; window.__plays.push(src);
-        setTimeout(() => this.dispatchEvent(new Event(/ice6\./.test(src) ? 'error' : 'playing')), 50);
+        setTimeout(() => this.dispatchEvent(new Event(window.__failAll || /ice6\./.test(src) ? 'error' : 'playing')), 50);
         return Promise.resolve();
       };
     } });
@@ -405,6 +405,17 @@ const overflow = page => page.evaluate(() => {
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(200);
     const l3 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), state: navigator.mediaSession.playbackState }));
     check('Listen: Stop lets the stream go', l3.text === 'Listen' && l3.state === 'none', JSON.stringify(l3));
+    // A device where none of the servers plays (Dan's TV): it stops, and the Now page says what each try came to
+    await tabTo(s.page, 'Now');
+    await s.page.evaluate(() => { window.__failAll = true; });
+    await s.page.click('.tabs .listen'); await s.page.waitForTimeout(800);
+    const l4 = await s.page.evaluate(() => { const w = document.querySelector('.listen-fail'); return { text: document.querySelector('.tabs .listen').textContent.trim(), box: !!w, lines: w ? w.querySelector('pre').textContent.split('\n') : [] }; });
+    check('Listen: when no server plays, it stops and the Now page shows each try', l4.text === 'Listen' && l4.box && l4.lines.filter(l => /^ice\d \d+-\w+ — error/.test(l)).length >= 3 && /audio\/mpeg: /.test(l4.lines.join(' ')), JSON.stringify(l4));
+    await s.page.evaluate(() => { window.__failAll = false; });
+    await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
+    const l5 = await s.page.evaluate(() => ({ box: !!document.querySelector('.listen-fail'), text: document.querySelector('.tabs .listen').textContent.trim() }));
+    check('Listen: trying again clears the details', !l5.box && l5.text === 'Stop', JSON.stringify(l5));
+    await s.page.click('.tabs .listen');
     const man = await s.page.evaluate(async () => { const l = document.querySelector('link[rel="manifest"]'); const m = await (await fetch(l.href, { credentials: 'include' })).json();
       const ok = await Promise.all(m.icons.map(async i => { const r = await fetch(i.src); const b = await createImageBitmap(await r.blob()); return b.width + 'x' + b.height === i.sizes; }));
       return { cred: l.crossOrigin, name: m.name, display: m.display, start: m.start_url, icons: ok, maskable: m.icons.some(i => i.purpose === 'maskable') }; });

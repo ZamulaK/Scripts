@@ -104,7 +104,7 @@
   if (catchSignIn()) return;
 
   // Listening to the station here (Dan, Nov 5): off, loading (connecting or buffering) or on
-  const player = { audio: null, state: 'off', at: 0, tries: 0, key: '' };
+  const player = { audio: null, state: 'off', at: 0, tries: 0, key: '', log: [], fail: null };
 
   /* ---------- What's kept on the server, as last read ---------- */
   const D = {
@@ -571,7 +571,7 @@
     // right corner, or on a phone beside the artist, above the play count. Both are written; the CSS shows one.
     const thumb = w => inList(r) ? `<a class="hthumb ${w}" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop tabindex="-1" aria-hidden="true"><img src="https://i.ytimg.com/vi/${encodeURIComponent(r.item.id)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.parentNode.remove()"></a>` : '';
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
-    return head('SomaFM Christmas Lounge') + `<div class="split"><div>
+    return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
       <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>
       <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop>▶ Open</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount">${plural(plays, 'play')} ${chev()}</span></div>
       ${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
@@ -797,18 +797,40 @@
       // A server that won't answer: the next one; when none will, stop and say so
       a.addEventListener('error', () => {
         if (player.state === 'off' || !a.getAttribute('src')) return;
-        if (++player.tries < STREAMS.length) { player.at = (player.at + 1) % STREAMS.length; a.src = STREAMS[player.at]; a.play().catch(() => {}); return; }
-        listenStop(); toast("Couldn't reach SomaFM's stream. Try again in a moment.");
+        const e = a.error;
+        listenLog(e ? `error ${e.code}${e.message ? ': ' + e.message : ''}` : 'error (no details)');
+        if (++player.tries < STREAMS.length) { player.at = (player.at + 1) % STREAMS.length; a.src = STREAMS[player.at]; a.play().catch(x => listenLog(x)); return; }
+        listenFailed();
       });
       // The stream ended (a server restart): start it again, so it keeps playing
       a.addEventListener('ended', () => { if (player.state !== 'off') { a.src = STREAMS[player.at]; a.play().catch(() => {}); } });
       if (MS) { MS.setActionHandler('play', listenStart); MS.setActionHandler('pause', listenStop); MS.setActionHandler('stop', listenStop); }
     }
-    player.state = 'loading'; player.tries = 0;
+    player.state = 'loading'; player.tries = 0; player.log = [];
+    if (player.fail) { player.fail = null; if (view === 'now') render(); }
     paintListen();
     player.audio.src = STREAMS[player.at];
-    player.audio.play().catch(e => { if (e && e.name === 'NotAllowedError') { listenStop(); toast('The browser held the sound back. Tap Listen again.'); } });
+    player.audio.play().catch(e => { listenLog(e); if (e && e.name === 'NotAllowedError') { listenStop(); toast('The browser held the sound back. Tap Listen again.'); } });
     mediaMeta(true); mediaState();
+  }
+  // What each try came to, kept for the details shown when none plays (Dan's TV, Nov 5)
+  function listenLog(what) {
+    const src = (player.audio && player.audio.getAttribute('src')) || '';
+    const m = /\/\/([^.]+)\.somafm\.com\/[^-]+-(\d+-\w+)/.exec(src);
+    player.log.push((m ? m[1] + ' ' + m[2] : src || 'no address') + ' — ' + (what && what.name ? what.name + (what.message ? ': ' + what.message : '') : what));
+  }
+  function listenFailed() {
+    const a = player.audio || document.createElement('audio');
+    player.fail = { at: Date.now(), log: player.log.slice(), can: ['audio/aac', 'audio/mpeg'].map(t => `${t}: ${a.canPlayType(t) || 'no'}`).join(', '), ua: navigator.userAgent };
+    listenStop();
+    toast("Couldn't play SomaFM's stream here. The details are on the Now page.");
+    if (view === 'now') render();
+  }
+  function listenFailBox() {
+    const f = player.fail;
+    if (!f) return '';
+    return `<div class="warn listen-fail" role="status">⚠ Listen couldn't play SomaFM's stream on this device (${esc(time(Math.floor(f.at / 1000)))}).
+      <details><summary>Details</summary><pre>${esc(f.log.concat(f.can, f.ua).join('\n'))}</pre></details></div>`;
   }
   // A live stream isn't paused but let go, so starting again plays what's on now
   function listenStop() {

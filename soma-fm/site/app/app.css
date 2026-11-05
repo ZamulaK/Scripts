@@ -355,3 +355,4 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 @media (prefers-reduced-motion:no-preference){.listen .eq i{animation:eq .9s ease-in-out infinite alternate}.listen .eq i:nth-child(2){animation-delay:-.3s}.listen .eq i:nth-child(3){animation-delay:-.6s}
   @keyframes eq{from{height:25%}to{height:100%}}}
 @media (max-width:399px){.tabs a,.tabs .listen{padding:4px 6px}}
+.listen-fail pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted);margin:8px 0 0}
