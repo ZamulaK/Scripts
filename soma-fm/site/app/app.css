@@ -36,10 +36,10 @@ header.top .sub{font-size:12.5px;color:var(--muted)}
 /* The status on the Now card: the lists' colored dot and name, on a dark badge so the colors read on any theme's gradient */
 .hero-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
 .hero .st{background:rgba(0,0,0,.42);padding:4px 10px;border-radius:999px;font-size:12.5px}
-.hero h2{margin:8px 0 2px;font-size:24px;line-height:1.2;overflow-wrap:anywhere;display:flex;align-items:flex-start;gap:6px;position:relative;z-index:1}
-.hero h2 span{min-width:0}
-/* Favorite as a star beside the song's name (Dan, Nov 4) */
-.hero .star{font-size:24px;color:rgba(255,255,255,.75);padding:0 2px;margin-top:-1px}
+.hero h2{margin:8px 0 2px;font-size:24px;line-height:1.2;overflow-wrap:anywhere;position:relative;z-index:1}
+/* Favorite as a star beside the song's name (Dan, Nov 4), kept on the line with its last word (Nov 5) */
+.hero h2 .nw{white-space:nowrap}
+.hero .star{font-size:24px;line-height:1;color:rgba(255,255,255,.75);padding:0 2px;margin-left:4px;vertical-align:baseline}
 .hero .star[aria-pressed="true"]{color:var(--star)}
 /* The whole note at the bottom of the card */
 .hero .hnote{margin:14px 0 0;padding:9px 12px;border-radius:12px;background:rgba(0,0,0,.28);font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere;position:relative;z-index:1}
@@ -52,7 +52,6 @@ header.top .sub{font-size:12.5px;color:var(--muted)}
 .hero .hthumb.ta{float:right;margin:0 0 6px 14px;position:relative;z-index:1}
 .hero .hthumb.tb{display:none}
 .hero .acts{clear:both}
-@media (min-width:600px){.hero h2{display:block}.hero h2 .star{display:inline;vertical-align:top;margin-left:4px}}
 @media (max-width:599px){.hero .hthumb.ta{display:none}.hero .hthumb.tb{display:block;width:88px;border-radius:8px;margin:6px 0 -6px}}
 .hero .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;position:relative;z-index:1}
 .hero .acts svg{width:15px;height:15px}

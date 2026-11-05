@@ -556,6 +556,8 @@
     // Favorite: a star beside the song's name (Dan, Nov 4), so the buttons fit on one line on a phone
     const f = inList(r) && isFav(r.item.id);
     const fav = inList(r) ? `<button class="star" data-act="fav" data-i="${i}" aria-pressed="${f}" aria-label="${f ? 'Remove from favorites' : 'Add to favorites'}: ${esc(n.title)}" title="${f ? 'Favorite. Tap to remove.' : 'Add to favorites'}">${f ? '★' : '☆'}</button>` : '';
+    // The star stays on the line with the name's last word (Dan, Nov 5)
+    const starred = (name, star) => { if (!star) return `<span>${esc(name)}</span>`; const m = /^([\s\S]*\s)?(\S+)\s*$/.exec(name) || [, '', name]; return `<span>${esc(m[1] || '')}<span class="nw">${esc(m[2])}${star}</span></span>`; };
     const label = r.status === 'unknown' ? '' : st(r);   // the same colored status as the lists
     const note = noteOf(n.key);
     // Dan, Nov 5: a small picture from the song's video when it's in the playlist (taps through to YouTube): in the top
@@ -563,7 +565,7 @@
     const thumb = w => inList(r) ? `<a class="hthumb ${w}" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop tabindex="-1" aria-hidden="true"><img src="https://i.ytimg.com/vi/${encodeURIComponent(r.item.id)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.parentNode.remove()"></a>` : '';
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + `<div class="split"><div>
-      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2><span>${esc(n.title)}</span>${fav}</h2><div class="hmain"><p>${esc(n.artist)}${n.album ? ' · ' + esc(n.album) : ''}</p>${thumb('tb')}</div>
+      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2>${starred(n.title, fav)}</h2><div class="hmain"><p>${esc(n.artist)}${n.album ? ' · ' + esc(n.album) : ''}</p>${thumb('tb')}</div>
       <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop>▶ Open</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount">${plural(plays, 'play')} ${chev()}</span></div>
       ${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
