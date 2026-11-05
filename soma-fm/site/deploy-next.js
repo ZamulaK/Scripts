@@ -1,5 +1,7 @@
 // Deploys the new site (site/app, Pocket v2). `node site/deploy-next.js` sends it to the test address
 // next.xmaslounge.pages.dev; `node site/deploy-next.js main` to the live site, xmaslounge.pages.dev (switched Nov 4, 2026).
+// Since Nov 5 both are also on Dan's own domain: xmaslounge.zamulagh.fyi (Pages custom domain) and
+// next.xmaslounge.zamulagh.fyi (a custom domain whose DNS record points at next.xmaslounge.pages.dev).
 // Copies the checker's modules (the userscript file) next to the page, builds the old site into /old (below), then
 // `wrangler pages deploy app --branch <branch>`, with the same /api (site/functions) as before.
 //
@@ -33,4 +35,6 @@ fs.copyFileSync(script, path.join(old, 'soma-xmas-checker.user.js'));
 
 const wrangler = path.join(here, '..', 'worker', 'node_modules', 'wrangler', 'bin', 'wrangler.js');
 const r = spawnSync(process.execPath, [wrangler, 'pages', 'deploy', 'app', '--project-name', 'xmaslounge', '--branch', branch, '--commit-dirty=true'], { cwd: here, stdio: 'inherit' });
+if (r.status === 0) console.log(`
+On your own domain: https://${branch === 'main' ? '' : branch + '.'}xmaslounge.zamulagh.fyi`);
 process.exit(r.status === null ? 1 : r.status);

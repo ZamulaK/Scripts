@@ -50,7 +50,7 @@ function freshApi() {
 }
 let api = freshApi();
 
-async function open(browser, { width = 600, height = 1000, scheme = 'light', path: p = '/', theme, init, noPlayer } = {}) {
+async function open(browser, { width = 600, height = 1000, scheme = 'light', path: p = '/', theme, init, noPlayer, site: SITE = 'https://lounge.test/' } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, timezoneId: 'America/New_York', acceptDownloads: true });
   if (init) await ctx.addInitScript(init);
   if (theme !== undefined) await ctx.addInitScript(t => localStorage.setItem('xl:theme', JSON.stringify(t)), theme);
@@ -447,6 +447,15 @@ const overflow = page => page.evaluate(() => {
     } });
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
     const l7 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), plays: window.__plays.slice() }));
+    await s.ctx.close();
+    // On Dan's own domain SomaFM plays to the site itself: no player frame there
+    s = await open(browser, { width: 360, site: 'https://xmaslounge.zamulagh.fyi/', init: () => {
+      window.__plays = [];
+      HTMLMediaElement.prototype.play = function () { window.__plays.push(this.getAttribute('src') || ''); setTimeout(() => this.dispatchEvent(new Event('playing')), 50); return Promise.resolve(); };
+    } });
+    await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
+    const l8 = await s.page.evaluate(() => ({ frame: !!document.querySelector('iframe[src^="https://lounge-player."]'), text: document.querySelector('.tabs .listen').textContent.trim(), plays: window.__plays.slice() }));
+    check('Listen on xmaslounge.zamulagh.fyi: no player frame, the site plays the stream itself', !l8.frame && l8.text === 'Stop' && l8.plays.length === 1 && /^https:\/\/ice6\.somafm\.com\//.test(l8.plays[0]), JSON.stringify(l8));
     check('Listen: without the player page, the site plays the stream itself', l7.text === 'Stop' && l7.plays.length === 1 && /^https:\/\/ice6\.somafm\.com\//.test(l7.plays[0]), JSON.stringify(l7));
     await s.ctx.close();
     // Shuffle on a phone, with the original order saved: nothing wider than the window, the reset time wraps before its "(…)"

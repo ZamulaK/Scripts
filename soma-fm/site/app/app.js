@@ -790,6 +790,8 @@
   const viaSoma = () => LS.get('listenVia2', '') === 'somafm';
   // The player page on workers.dev, in an invisible frame (player/ in the repo): SomaFM plays its stream to it, where it
   // turns this pages.dev site away (Dan, Nov 5). Until it says it's there, or where it can't load, the site plays itself.
+  // On Dan's own domain (xmaslounge.zamulagh.fyi and next., Nov 5) SomaFM plays to the site, so there's no frame there.
+  const OWN_DOMAIN = /(^|\.)zamulagh\.fyi$/.test(location.hostname);
   const PLAYER_PAGE = 'https://lounge-player.soma-recorder.workers.dev/';
   const PLAYER_ORIGIN = new URL(PLAYER_PAGE).origin;
   const frame = { el: null, ready: false, used: false };
@@ -1485,7 +1487,7 @@
   /* ---------- Start ---------- */
   readAddress();
   render();
-  frameSetup();
+  if (!OWN_DOMAIN) frameSetup();
   loadConfig();
   (async () => {
     // The plays and the document first (so the page can show something), then the playlist and what's playing
