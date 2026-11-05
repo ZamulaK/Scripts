@@ -119,7 +119,9 @@ const heroThumb = page => page.evaluate(() => {
   // The album on a line of its own under the artist (Dan, Nov 5); on a phone the picture starts at the album's line
   const art = document.querySelector('.hero .hmain p.hartist'), alb = document.querySelector('.hero .hmain p.halbum'), ar = art.getBoundingClientRect();
   const albumLine = !alb || (alb.getBoundingClientRect().top >= ar.bottom - 1 && !/ · /.test(art.textContent));
-  const atAlbum = b.top >= ar.top - 8 && b.top < ar.bottom && b.left >= ar.right && (!alb || b.left >= alb.getBoundingClientRect().right);   // beside the artist (Dan kept this on phones)
+  const lr2 = alb ? alb.getBoundingClientRect() : ar, mid = (ar.top + lr2.bottom) / 2;
+  // beside the artist and album; with an album, centered on the two lines (Dan, Nov 5)
+  const atAlbum = b.left >= ar.right && (!alb || b.left >= lr2.right) && (alb ? Math.abs((b.top + b.bottom) / 2 - mid) <= 2 : b.top >= ar.top - 8 && b.top < ar.bottom);
   return { shown: vis.length, w: Math.round(b.width), h: Math.round(b.height), src: /^https:\/\/i\.ytimg\.com\/vi\/[^/]+\/mqdefault\.jpg$/.test(img.src), href: /youtube\.com\/watch\?v=/.test(a.href),
     inside: b.right <= h.right - 8 && b.top >= h.top + 8, besideArtist: b.left >= p.right && b.top >= p.top - 8, abovePlays: b.bottom <= acts.top + 2, corner: b.top <= top.top + 4 && b.right >= h.right - 30, clear, starWithLast, albumLine, atAlbum, album: !!alb };
 });
@@ -284,7 +286,7 @@ const overflow = page => page.evaluate(() => {
       return { note: (document.querySelector('.hero .hnote') || {}).textContent, lines: new Set(acts.map(a => Math.round(a.getBoundingClientRect().top))).size, right: Math.max(...acts.map(a => a.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right,
         have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]') }; });
     const th = await heroThumb(s.page);
-    check('Now card (360 px): a small picture from the video when the song is in the playlist, beside the artist and album (each on its own line), above the play count', hero.have ? !!th && th.shown === 1 && th.src && th.href && th.w === 88 && th.h >= 49 && th.h <= 50 && th.besideArtist && th.abovePlays && th.inside && th.starWithLast && th.albumLine && th.album && th.atAlbum : !th, JSON.stringify(th));
+    check('Now card (360 px): a small picture from the video when the song is in the playlist, beside the artist and album (each on its own line, the picture centered on them), above the play count', hero.have ? !!th && th.shown === 1 && th.src && th.href && th.w === 88 && th.h >= 49 && th.h <= 50 && th.besideArtist && th.abovePlays && th.inside && th.starWithLast && th.albumLine && th.album && th.atAlbum : !th, JSON.stringify(th));
     for (const width of [600, 1024]) {
       const w = await open(browser, { width });
       const tw = await heroThumb(w.page);

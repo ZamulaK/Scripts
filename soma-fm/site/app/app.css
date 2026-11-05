@@ -52,7 +52,9 @@ header.top .sub{font-size:12.5px;color:var(--muted)}
 .hero .hthumb.ta{float:right;margin:0 0 6px 14px;position:relative;z-index:1}
 .hero .hthumb.tb{display:none}
 .hero .acts{clear:both}
-@media (max-width:599px){.hero .hthumb.ta{display:none}.hero .hthumb.tb{display:block;width:88px;border-radius:8px;margin:6px 0 -6px}}
+@media (max-width:599px){.hero .hthumb.ta{display:none}.hero .hthumb.tb{display:block;width:88px;border-radius:8px;margin:6px 0 -6px}
+  /* With an album, the picture centered on the artist and album lines (Dan, Nov 5), overhanging them a little rather than moving them */
+  .hero .hmain.two{align-items:center}.hero .hmain.two .hthumb.tb{margin:-6px 0}}
 .hero .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;position:relative;z-index:1}
 .hero .acts svg{width:15px;height:15px}
 /* Phones: the card's buttons on one line (Dan, Nov 4) */
