@@ -355,6 +355,21 @@ const overflow = page => page.evaluate(() => {
     check('Stats (600 px): the words beside the %', io600.length === 2 && io600.every(x => x.beside) && /of songs in your playlist/.test(io600[0].text), JSON.stringify(io600));
     check('No script errors (Nov 4 tweaks)', s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
+    // History on a phone (Dan, Nov 5): the search box on the line with All ▾ while the filters are folded, its own line when open
+    s = await open(browser, { width: 360, path: '/history' });
+    const fl = () => s.page.evaluate(() => { const f = document.querySelector('#find'), m = document.querySelector('.more-f'), r = f.getBoundingClientRect();
+      return { ph: f.placeholder, inRow: !!f.closest('.quick'), sameLine: !!m && Math.abs((r.top + r.bottom) / 2 - (m.getBoundingClientRect().top + m.getBoundingClientRect().bottom) / 2) <= 3, w: Math.round(r.width), right: Math.round(r.right), page: document.documentElement.scrollWidth }; });
+    const f1 = await fl();
+    check('History (360 px): the search box beside All ▾ when its hint fits there (else its own line), "Search: song, artist, or album"', f1.ph === 'Search: song, artist, or album' && f1.inRow && (f1.sameLine ? f1.w >= 200 : f1.w >= 320) && f1.right <= 360 && f1.page <= 360, JSON.stringify(f1));
+    await s.page.fill('#find', 'rotation song 1');
+    await s.page.waitForTimeout(300);
+    const typed = await s.page.evaluate(() => ({ focus: document.activeElement && document.activeElement.id, rows: document.querySelectorAll('#plist .pr').length, first: (document.querySelector('#plist .pr[data-act]') || {}).textContent || '' }));
+    check('History (360 px): searching there keeps the box focused and filters the list', typed.focus === 'find' && typed.rows > 0 && /Rotation Song 1/.test(typed.first), JSON.stringify(typed).slice(0, 200));
+    await s.page.fill('#find', '');
+    await s.page.click('.more-f'); await s.page.waitForTimeout(300);
+    const f2 = await s.page.evaluate(() => { const f = document.querySelector('#find'); return { inRow: !!f.closest('.quick'), below: f.getBoundingClientRect().top >= document.querySelector('.fpanel').getBoundingClientRect().bottom - 1 }; });
+    check('History (360 px): with all the filters open, the search box below them', !f2.inRow && f2.below, JSON.stringify(f2));
+    await s.ctx.close();
     // Shuffle on a phone, with the original order saved: nothing wider than the window, the reset time wraps before its "(…)"
     api.doc.original = { at: Date.now() - 864e5 * 9, playlistId: 'PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt', songs: items.slice(0, 40).map((it, k) => ({ id: 'pi' + k, videoId: it.id, title: it.title })) };
     s = await open(browser, { width: 360, path: '/shuffle' });
@@ -421,7 +436,7 @@ const overflow = page => page.evaluate(() => {
     if (theme === 'evergreen') check('Xmas Green (saved as evergreen), remembered', look.bg === 'rgb(16, 21, 17)', look.bg);
     if (width === 600 && !theme && scheme === 'light') {
       await tabTo(s.page, 'History');
-      const top = await s.page.evaluate(() => { const q = document.querySelector('.quick'), kids = [...q.children]; return { lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, last: kids[kids.length - 1].innerText.trim(), w: q.clientWidth, ws: kids.map(k => Math.round(k.getBoundingClientRect().width)).join('+') }; });
+      const top = await s.page.evaluate(() => { const q = document.querySelector('.quick'), kids = [...q.children].filter(k => !k.classList.contains('find')); return { lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, last: kids[kids.length - 1].innerText.trim(), w: q.clientWidth, ws: kids.map(k => Math.round(k.getBoundingClientRect().width)).join('+') }; });
       const line = await s.page.evaluate(() => { const g = document.querySelector('.bar-line .grow'), c = [...g.querySelectorAll('.nw')].pop(); return c.getClientRects().length; });
       check('600 px: "checked … ago" moves to the next line whole, never split', line === 1, String(line));
       check('600 px: the first row of filters fits on one line, ending in "All ▾"', top.lines === 1 && top.last.replace(/\s+/g, ' ') === 'All ▾', JSON.stringify(top));

@@ -608,7 +608,9 @@
     // In All filters, the ones with nothing in them go to the end of their group (the order is kept otherwise)
     const zeroLast = list => list.filter(x => x.n || x.on).concat(list.filter(x => !x.n && !x.on)).map(x => x.html).join('');
     const active = S.status.size + S.cats.size + (S.favOnly ? 1 : 0) + (S.latest ? 1 : 0);
-    let filters = '';
+    // The search box; with the few filters showing, it goes in their row, so on a phone it shares the line with All ▾ (Dan, Nov 5)
+    const find = `<div class="find"><input type="search" id="find" placeholder="Search: song, artist, or album" value="${esc(S.q)}" aria-label="Search plays"></div>`;
+    let filters = '', findIn = false;
     if (D.items.length && !D.playlistError) {
       if (S.allFilters) {
         // Latest is always the second chip (Dan, Nov 4)
@@ -625,7 +627,8 @@
         q.push(C.fav(true));
         for (const [k, l] of STATUS) if (k !== 'have' && k !== 'none' && S.status.has(k)) q.push(C.st(k, l));
         for (const [k, , sh] of CATS2) if (S.cats.has(k)) q.push(C.cat(k, sh));
-        filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false" aria-label="All filters"><span class="wide">All filters</span><span class="narrow">All</span>${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button></div>`;
+        filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false" aria-label="All filters"><span class="wide">All filters</span><span class="narrow">All</span>${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button>${find}</div>`;
+        findIn = true;
       }
     }
     const gone = goneItems();
@@ -641,7 +644,7 @@
     return head('SomaFM station play history') + `
       <div class="bar-line">${pl}<button class="pill" data-act="refresh">↻ Refresh playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live updates</button></div>
       ${D.archiveNote ? `<div class="warn">⚠ ${esc(D.archiveNote)}</div>` : ''}${goneBox}${filters}
-      <div class="find"><input type="search" id="find" placeholder="Search plays: song, artist or album" value="${esc(S.q)}" aria-label="Search plays"></div>
+      ${findIn ? '' : find}
       <div id="plist">${playsList(page, list)}</div>
       <div class="pager"><button class="pill" ${S.page ? '' : 'disabled'} data-act="newer">‹ Newer</button>
         <span id="ppos">${list.length ? `${fmt(S.page * S.per + 1)}–${fmt(S.page * S.per + page.length)} of ${fmt(list.length)}` : ''}</span>
