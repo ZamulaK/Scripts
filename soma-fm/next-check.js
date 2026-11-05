@@ -116,8 +116,12 @@ const heroThumb = page => page.evaluate(() => {
   const lines = [...lr.getClientRects()].filter(l => l.width > 0), last = lines[lines.length - 1], st = document.querySelector('.hero h2 .star');
   const sr = st && st.getBoundingClientRect(), starWithLast = !st || (sr.top + sr.height / 2 > last.top && sr.top + sr.height / 2 < last.bottom && sr.left >= last.left);
   const clear = [...r.getClientRects()].every(l => l.bottom <= b.top || l.top >= b.bottom || l.right <= b.left);   // the name never runs under it
+  // The album on a line of its own under the artist (Dan, Nov 5); on a phone the picture starts at the album's line
+  const art = document.querySelector('.hero > p.hartist'), alb = document.querySelector('.hero .hmain p.halbum'), ar = art && art.getBoundingClientRect();
+  const albumLine = !!art === !!alb && (!art || (alb.getBoundingClientRect().top >= ar.bottom - 1 && !/ · /.test(art.textContent)));
+  const atAlbum = !art || b.top >= ar.bottom - 2;
   return { shown: vis.length, w: Math.round(b.width), h: Math.round(b.height), src: /^https:\/\/i\.ytimg\.com\/vi\/[^/]+\/mqdefault\.jpg$/.test(img.src), href: /youtube\.com\/watch\?v=/.test(a.href),
-    inside: b.right <= h.right - 8 && b.top >= h.top + 8, besideArtist: b.left >= p.right && b.top >= p.top - 8, abovePlays: b.bottom <= acts.top + 2, corner: b.top <= top.top + 4 && b.right >= h.right - 30, clear, starWithLast };
+    inside: b.right <= h.right - 8 && b.top >= h.top + 8, besideArtist: b.left >= p.right && b.top >= p.top - 8, abovePlays: b.bottom <= acts.top + 2, corner: b.top <= top.top + 4 && b.right >= h.right - 30, clear, starWithLast, albumLine, atAlbum, album: !!alb };
 });
 const tabTo = async (page, name) => { await page.click(`.tabs a:has-text("${name}")`); await page.waitForTimeout(300); };
 // Anything wider than the window, or a row of buttons spilling out of its box
@@ -280,11 +284,11 @@ const overflow = page => page.evaluate(() => {
       return { note: (document.querySelector('.hero .hnote') || {}).textContent, lines: new Set(acts.map(a => Math.round(a.getBoundingClientRect().top))).size, right: Math.max(...acts.map(a => a.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right,
         have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]') }; });
     const th = await heroThumb(s.page);
-    check('Now card (360 px): a small picture from the video when the song is in the playlist, beside the artist, above the play count', hero.have ? !!th && th.shown === 1 && th.src && th.href && th.w === 88 && th.h >= 49 && th.h <= 50 && th.besideArtist && th.abovePlays && th.inside && th.starWithLast : !th, JSON.stringify(th));
+    check('Now card (360 px): a small picture from the video when the song is in the playlist, beside the album (on its own line), above the play count', hero.have ? !!th && th.shown === 1 && th.src && th.href && th.w === 88 && th.h >= 49 && th.h <= 50 && th.besideArtist && th.abovePlays && th.inside && th.starWithLast && th.albumLine && th.album && th.atAlbum : !th, JSON.stringify(th));
     for (const width of [600, 1024]) {
       const w = await open(browser, { width });
       const tw = await heroThumb(w.page);
-      check(`Now card (${width} px): the picture in the top right corner, the name wrapping around it, the star on the line with its last word`, hero.have ? !!tw && tw.shown === 1 && tw.w === 128 && tw.corner && tw.clear && tw.abovePlays && tw.inside && tw.starWithLast : !tw, JSON.stringify(tw));
+      check(`Now card (${width} px): the picture in the top right corner, the name wrapping around it, the star on the line with its last word`, hero.have ? !!tw && tw.shown === 1 && tw.w === 128 && tw.corner && tw.clear && tw.abovePlays && tw.inside && tw.starWithLast && tw.albumLine && tw.album : !tw, JSON.stringify(tw));
       await w.ctx.close();
     }
     check('Now card: the whole note at the bottom', hero.note === 'First line of the note\nSecond line', JSON.stringify(hero));
