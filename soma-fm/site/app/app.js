@@ -724,7 +724,8 @@
       <input type="file" id="restore-file" accept=".json,application/json,text/plain" hidden>
       ${S.restorePaste ? `<div class="restore"><textarea id="restore-text" spellcheck="false" placeholder="Paste the copied backup here" aria-label="Copied backup"></textarea><div><button class="pill" data-act="restoreRead">Read pasted backup</button></div></div>` : ''}
       ${restore}${msg(S.restoreMsg)}</div>
-      <h3>Export</h3><div class="list"><div class="item"><div class="tx"><b>Plays as CSV</b><small>For a spreadsheet: date, time, artist, title, album, status</small></div><div class="acts"><button class="pill" data-act="csvDown">Download</button><button class="pill" data-act="csvCopy">Copy</button></div></div></div></div></div>`;
+      <h3>Export</h3><div class="list"><div class="item"><div class="tx"><b>Plays as CSV</b><small>For a spreadsheet: date, time, artist, title, album, status</small></div><div class="acts"><button class="pill" data-act="csvDown">Download</button><button class="pill" data-act="csvCopy">Copy</button></div></div></div>
+      <p class="hint" style="margin-top:16px"><a href="/privacy/">Privacy policy</a></p></div></div>`;
   };
 
   // Redraws wait while you're choosing a song, writing a note, or a menu is open
