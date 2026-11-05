@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Christmas Lounge player</title>
+</head>
+<body>
+<!-- The Christmas Lounge site's audio, played from this small page inside it (an invisible frame). SomaFM turns its stream
+     away when the page asking is on pages.dev (Nov 5), so the site hands playing to this page on workers.dev. It only takes
+     orders from the site (play, stop, what's playing) and tells it how playing goes. Nothing is kept or read here. -->
+<script>
+(() => {
+  // The site's addresses (live, next and each deployment's own), and the page checks' stand-in
+  const SITE = /^https:\/\/([a-z0-9-]+\.)?xmaslounge\.pages\.dev$|^https:\/\/lounge\.test$/;
+  const CHANNEL = 'christmas';
+  // SomaFM's own servers for the station (from its .pls lists): the 128k AAC first, then the 256k MP3
+  const hosts = ['ice6', 'ice2', 'ice5'], aac = !!document.createElement('audio').canPlayType('audio/aac');
+  const STREAMS = (aac ? hosts.map(h => `https://${h}.somafm.com/${CHANNEL}-128-aac`) : []).concat(hosts.map(h => `https://${h}.somafm.com/${CHANNEL}-256-mp3`));
+  const MS = 'mediaSession' in navigator ? navigator.mediaSession : null;
+  let site = '', state = 'off', at = 0, tries = 0, log = [];
+  const a = new Audio();
+  a.preload = 'none';
+  const tell = m => { if (site) parent.postMessage(m, site); };
+  const set = s => { state = s; tell({ ev: 'state', state: s }); if (MS) MS.playbackState = s === 'off' ? 'none' : 'playing'; };
+  const note = what => {
+    const m = /\/\/([^.]+)\.somafm\.com\/[^-]+-(\d+-\w+)/.exec(a.getAttribute('src') || '');
+    log.push((m ? m[1] + ' ' + m[2] : 'no address') + ' — ' + (what && what.name ? what.name + (what.message ? ': ' + what.message : '') : what));
+  };
+  function play() {
+    set('loading'); tries = 0; log = [];
+    a.src = STREAMS[at];
+    a.play().catch(e => { note(e); if (e && e.name === 'NotAllowedError') { stop(); tell({ ev: 'blocked' }); } });
+  }
+  // A live stream isn't paused but let go, so playing again plays what's on now
+  function stop() { a.pause(); a.removeAttribute('src'); a.load(); set('off'); }
+  a.addEventListener('playing', () => { if (state !== 'off') { tries = 0; set('on'); } });
+  a.addEventListener('waiting', () => { if (state === 'on') set('loading'); });
+  // A server that won't answer: the next one; when none will, stop and tell the site what each try came to
+  a.addEventListener('error', () => {
+    if (state === 'off' || !a.getAttribute('src')) return;
+    const e = a.error;
+    note(e ? `error ${e.code}${e.message ? ': ' + e.message : ''}` : 'error (no details)');
+    if (++tries < STREAMS.length) { at = (at + 1) % STREAMS.length; a.src = STREAMS[at]; a.play().catch(x => note(x)); return; }
+    const can = ['audio/aac', 'audio/mpeg'].map(t => `${t}: ${a.canPlayType(t) || 'no'}`).join(', ');
+    const failed = log.slice();
+    stop();
+    tell({ ev: 'failed', log: failed, can, ua: navigator.userAgent });
+  });
+  // The stream ended (a server restart): start it again
+  a.addEventListener('ended', () => { if (state !== 'off') { a.src = STREAMS[at]; a.play().catch(() => {}); } });
+  if (MS) { MS.setActionHandler('play', play); MS.setActionHandler('pause', stop); MS.setActionHandler('stop', stop); }
+  addEventListener('message', e => {
+    if (e.source !== parent || !SITE.test(e.origin)) return;
+    site = e.origin;
+    const m = e.data || {};
+    if (m.cmd === 'hello') tell({ ev: 'state', state });
+    else if (m.cmd === 'play') play();
+    else if (m.cmd === 'stop') stop();
+    else if (m.cmd === 'meta' && MS && typeof MediaMetadata !== 'undefined' && m.meta) {
+      try { MS.metadata = new MediaMetadata(m.meta); } catch (x) { /* a picture it won't take */ }
+    }
+  });
+  // Ready: says nothing but that it's here
+  if (parent !== window) parent.postMessage({ ev: 'ready' }, '*');
+})();
+</script>
+</body>
+</html>

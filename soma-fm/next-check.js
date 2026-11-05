@@ -50,7 +50,7 @@ function freshApi() {
 }
 let api = freshApi();
 
-async function open(browser, { width = 600, height = 1000, scheme = 'light', path: p = '/', theme, init } = {}) {
+async function open(browser, { width = 600, height = 1000, scheme = 'light', path: p = '/', theme, init, noPlayer } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, timezoneId: 'America/New_York', acceptDownloads: true });
   if (init) await ctx.addInitScript(init);
   if (theme !== undefined) await ctx.addInitScript(t => localStorage.setItem('xl:theme', JSON.stringify(t)), theme);
@@ -60,6 +60,8 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await ctx.route('https://fonts.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
+  // Listen's player page on workers.dev (player/src/player.html), or none (as where it can't load)
+  await ctx.route('https://lounge-player.soma-recorder.workers.dev/**', r => noPlayer ? r.abort() : r.fulfill({ status: 200, contentType: 'text/html', body: fs.readFileSync(path.join(__dirname, 'player', 'src', 'player.html'), 'utf8') }));
   // Video pictures: a 1-pixel stand-in, and none for a video id containing "gone" (as for a deleted video)
   await ctx.route('https://i.ytimg.com/**', r => /gone/.test(r.request().url()) ? r.fulfill({ status: 404, body: '' })
     : r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') }));
@@ -148,7 +150,7 @@ const overflow = page => page.evaluate(() => {
     && api.calls.some(c => /^GET \/api\/playlist\?list=.*&within=900$/.test(c)), api.calls.join());
   check('Nothing of Dan\'s data is kept in the browser: only settings in localStorage, no IndexedDB', await s.page.evaluate(async () => {
     const keys = Object.keys(localStorage); const dbs = indexedDB.databases ? await indexedDB.databases() : [];
-    return keys.every(k => /^xl:(theme|live|per|histq|topSort|listAlbum|listNotes|listenVia|device|signin:|shuffle:job)/.test(k)) && dbs.length === 0;
+    return keys.every(k => /^xl:(theme|live|per|histq|topSort|listAlbum|listNotes|listenVia2|device|signin:|shuffle:job)/.test(k)) && dbs.length === 0;
   }));
 
   // History
@@ -389,39 +391,47 @@ const overflow = page => page.evaluate(() => {
         return Promise.resolve();
       };
     } });
-    const bar = () => s.page.evaluate(() => { const b = document.querySelector('.tabs .listen'), items = [...document.querySelectorAll('.tabs a, .tabs .listen')];
+    const pframe = () => s.page.frames().find(f => f.url().startsWith('https://lounge-player.'));
+    const fplays = async () => { const f = pframe(); return f ? f.evaluate(() => window.__plays.slice()) : []; };
+    const fmeta = async () => { const f = pframe(); return f ? f.evaluate(() => { const m = navigator.mediaSession.metadata; return m ? { title: m.title, art: (m.artwork[0] || {}).src, state: navigator.mediaSession.playbackState } : { state: navigator.mediaSession.playbackState }; }) : null; };
+    const bar = async () => Object.assign(await s.page.evaluate(() => { const b = document.querySelector('.tabs .listen'), items = [...document.querySelectorAll('.tabs a, .tabs .listen')];
       const md = navigator.mediaSession && navigator.mediaSession.metadata;
       return { text: b && b.textContent.trim(), cls: b && b.className, pressed: b && b.getAttribute('aria-pressed'), plays: window.__plays.slice(), right: Math.max(...items.map(i => i.getBoundingClientRect().right)), top: new Set(items.map(i => Math.round(i.getBoundingClientRect().top))).size,
         meta: md ? { title: md.title, artist: md.artist, art: (md.artwork[0] || {}).src } : null, state: navigator.mediaSession && navigator.mediaSession.playbackState, hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, ''),
-        heroVid: ((document.querySelector('.hero .hthumb img') || {}).src || '') }; });
+        heroVid: ((document.querySelector('.hero .hthumb img') || {}).src || '') }; }), { plays: await fplays(), direct: await s.page.evaluate(() => window.__plays.length) });
     const l0 = await bar();
+    const fr = await s.page.evaluate(() => { const f = document.querySelector('iframe[src^="https://lounge-player."]'); const r = f && f.getBoundingClientRect(); return f && { allow: f.allow, w: r.width, op: getComputedStyle(f).opacity, hidden: f.getAttribute('aria-hidden') }; });
+    check('Listen: the player page on workers.dev sits in an invisible frame, allowed to play sound', !!fr && fr.allow === 'autoplay' && fr.w <= 1 && fr.op === '0' && fr.hidden === 'true', JSON.stringify(fr));
     check('Listen (360 px): in the bar of pages beside the five pages, all on one line inside the window', l0.text === 'Listen' && l0.pressed === 'false' && l0.top === 1 && l0.right <= 360, JSON.stringify(l0));
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
     const l1 = await bar();
-    check('Listen: plays SomaFM\'s stream, on to the next server when one refuses; the button turns to Stop', l1.text === 'Stop' && /\bon\b/.test(l1.cls) && l1.plays.length === 2 && /^https:\/\/ice6\.somafm\.com\/christmas-/.test(l1.plays[0]) && /^https:\/\/ice2\.somafm\.com\/christmas-/.test(l1.plays[1]), JSON.stringify(l1));
+    check('Listen: plays SomaFM\'s stream from the player page (not the site), on to the next server when one refuses; the button turns to Stop', l1.direct === 0 && l1.text === 'Stop' && /\bon\b/.test(l1.cls) && l1.plays.length === 2 && /^https:\/\/ice6\.somafm\.com\/christmas-/.test(l1.plays[0]) && /^https:\/\/ice2\.somafm\.com\/christmas-/.test(l1.plays[1]), JSON.stringify(l1));
     check('Listen: the phone\'s media controls show the song playing, with its video\'s picture when it\'s in the playlist', !!l1.meta && l1.meta.title === l1.hero && l1.state === 'playing' && (l1.heroVid ? l1.meta.art === l1.heroVid : /somafm\.com\/logos/.test(l1.meta.art)), JSON.stringify(l1.meta) + ' ' + l1.heroVid);
+    const fm = await fmeta();
+    check('Listen: the player page gets the song too (the controls of a phone read it from where the sound plays)', !!fm && fm.title === l1.hero && fm.state === 'playing', JSON.stringify(fm));
     await tabTo(s.page, 'History');
     const l2 = await bar();
     check('Listen: keeps playing on another page', l2.text === 'Stop' && l2.plays.length === 2, JSON.stringify(l2));
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(200);
     const l3 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), state: navigator.mediaSession.playbackState }));
-    check('Listen: Stop lets the stream go', l3.text === 'Listen' && l3.state === 'none', JSON.stringify(l3));
+    const fm3 = await fmeta();
+    check('Listen: Stop lets the stream go', l3.text === 'Listen' && l3.state === 'none' && fm3.state === 'none', JSON.stringify(l3) + JSON.stringify(fm3));
     // A device where none of the servers plays (Dan's TV): it stops, and the Now page says what each try came to
     await tabTo(s.page, 'Now');
-    await s.page.evaluate(() => { window.__failAll = true; });
+    await pframe().evaluate(() => { window.__failAll = true; });
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(800);
     const l4 = await s.page.evaluate(() => { const w = document.querySelector('.listen-fail'); return { text: document.querySelector('.tabs .listen').textContent.trim(), box: !!w, open: !!(w && w.querySelector('[data-act="listenSoma"]')), lines: w ? w.querySelector('pre').textContent.split('\n') : [] }; });
     check('Listen: when no server plays, it stops, the Now page shows each try and offers SomaFM\'s player; the button becomes Listen ↗', l4.text === 'Listen ↗' && l4.box && l4.open && l4.lines.filter(l => /^ice\d \d+-\w+ — error/.test(l)).length >= 3 && /audio\/mpeg: /.test(l4.lines.join(' ')), JSON.stringify(l4));
     await s.page.click('.listen-fail [data-act="listenSoma"]'); await s.page.waitForTimeout(200);
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(200);
-    const l5 = await s.page.evaluate(() => ({ box: !!document.querySelector('.listen-fail'), opened: window.__opened, plays: window.__plays.length, kept: localStorage.getItem('xl:listenVia') }));
+    const l5 = await s.page.evaluate(() => ({ box: !!document.querySelector('.listen-fail'), opened: window.__opened, plays: window.__plays.length, kept: localStorage.getItem('xl:listenVia2') }));
     check('Listen ↗: opens SomaFM\'s player in a tab (the same one each time), not the stream; remembered on the device', !l5.box && l5.opened.length === 2 && l5.opened.every(o => o[0] === 'https://somafm.com/player24/station/christmas' && o[1] === 'somafm-player' && !o[2]) && l5.kept === '"somafm"', JSON.stringify(l5));
     // More → Listen → Here: back to playing inside the site
-    await s.page.evaluate(() => { window.__failAll = false; });
+    await pframe().evaluate(() => { window.__failAll = false; });
     await tabTo(s.page, 'More');
     await s.page.click('[data-act="listenVia"][data-v=""]'); await s.page.waitForTimeout(200);
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
-    const l6 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), kept: localStorage.getItem('xl:listenVia'), here: (document.querySelector('[data-act="listenVia"][data-v=""]') || {}).className }));
+    const l6 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), kept: localStorage.getItem('xl:listenVia2'), here: (document.querySelector('[data-act="listenVia"][data-v=""]') || {}).className }));
     check('More → Listen → Here plays inside the site again', l6.text === 'Stop' && l6.kept === null && /\bon\b/.test(l6.here), JSON.stringify(l6));
     await s.page.click('.tabs .listen');
     const man = await s.page.evaluate(async () => { const l = document.querySelector('link[rel="manifest"]'); const m = await (await fetch(l.href, { credentials: 'include' })).json();
@@ -429,6 +439,15 @@ const overflow = page => page.evaluate(() => {
       return { cred: l.crossOrigin, name: m.name, display: m.display, start: m.start_url, icons: ok, maskable: m.icons.some(i => i.purpose === 'maskable') }; });
     check('Installable: a manifest (read with the sign-in cookie), standalone, its icons the sizes it says', man.cred === 'use-credentials' && man.name === 'Christmas Lounge' && man.display === 'standalone' && man.start === '/' && man.icons.length >= 3 && man.icons.every(Boolean) && man.maskable, JSON.stringify(man));
     check('No script errors (Listen)', s.errors.length === 0, s.errors.join(' | '));
+    await s.ctx.close();
+    // Where the player page can't load, the site plays the stream itself
+    s = await open(browser, { width: 360, noPlayer: true, init: () => {
+      window.__plays = [];
+      HTMLMediaElement.prototype.play = function () { const src = this.getAttribute('src') || ''; window.__plays.push(src); setTimeout(() => this.dispatchEvent(new Event('playing')), 50); return Promise.resolve(); };
+    } });
+    await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
+    const l7 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), plays: window.__plays.slice() }));
+    check('Listen: without the player page, the site plays the stream itself', l7.text === 'Stop' && l7.plays.length === 1 && /^https:\/\/ice6\.somafm\.com\//.test(l7.plays[0]), JSON.stringify(l7));
     await s.ctx.close();
     // Shuffle on a phone, with the original order saved: nothing wider than the window, the reset time wraps before its "(…)"
     api.doc.original = { at: Date.now() - 864e5 * 9, playlistId: 'PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt', songs: items.slice(0, 40).map((it, k) => ({ id: 'pi' + k, videoId: it.id, title: it.title })) };

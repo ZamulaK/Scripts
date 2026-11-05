@@ -1,0 +1,11 @@
+# The Christmas Lounge site's audio player page (see src/index.js). Deploy from this folder:
+#   node ../worker/node_modules/wrangler/bin/wrangler.js deploy
+name = "lounge-player"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true

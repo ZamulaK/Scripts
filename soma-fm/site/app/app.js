@@ -757,7 +757,7 @@
         <div class="kv"><span>Notes</span><span class="seg" role="group" aria-label="Notes">${[['one', 'First line'], ['all', 'All'], ['off', 'Off']].map(([k, l]) => `<button class="${S.listNotes === k ? 'on' : ''}" data-act="listNotes" data-v="${k}" aria-pressed="${S.listNotes === k}">${l}</button>`).join('')}</span></div>
         <div class="snote">Remembered on this device. Open a song for everything about it.</div></div>
       <h3>Listen</h3><div class="box"><div class="kv"><span>Plays</span><span class="seg" role="group" aria-label="Listen plays">${[['', 'Here'], ['somafm', "In SomaFM's player"]].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
-        <div class="snote">SomaFM turns its stream away when it's played inside this site, unless the browser keeps quiet about which site asked (privacy tools such as AdGuard do that). Where it's turned away, Listen opens SomaFM's own player instead. Remembered on this device.</div></div>
+        <div class="snote">Here plays the stream inside the site. If a browser can't, Listen opens SomaFM's own player instead. Remembered on this device.</div></div>
       <h3>Your data</h3><div class="box"><div class="snote" style="margin-top:0">Kept in one place on your Cloudflare account: every device shows the same, and each change is saved as you make it.</div>
         <div class="kv"><span>Read ${D.stateAt ? ago(D.stateAt) : '—'}${D.err.save ? '' : queued || inflight ? ' · saving…' : ''}</span><button class="pill" data-act="reload">Read again now</button></div>
         ${w ? `<div class="msg err">⚠ ${esc(w)}</div>` : ''}${rec ? `<div class="snote">${rec}</div>` : ''}
@@ -787,7 +787,32 @@
   // play because AdGuard's tracking protection hides that). Where it's refused, Listen opens SomaFM's own player instead, remembered per device.
   // SomaFM's pages can't be shown inside another site, so it's a window of its own (Dan, Nov 5).
   const SOMA_PLAYER = `https://somafm.com/player24/station/${CHANNEL}`;
-  const viaSoma = () => LS.get('listenVia', '') === 'somafm';
+  const viaSoma = () => LS.get('listenVia2', '') === 'somafm';
+  // The player page on workers.dev, in an invisible frame (player/ in the repo): SomaFM plays its stream to it, where it
+  // turns this pages.dev site away (Dan, Nov 5). Until it says it's there, or where it can't load, the site plays itself.
+  const PLAYER_PAGE = 'https://lounge-player.soma-recorder.workers.dev/';
+  const PLAYER_ORIGIN = new URL(PLAYER_PAGE).origin;
+  const frame = { el: null, ready: false, used: false };
+  function frameSetup() {
+    const f = frame.el = document.createElement('iframe');
+    f.src = PLAYER_PAGE; f.allow = 'autoplay'; f.title = 'Player'; f.tabIndex = -1;
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+    document.body.appendChild(f);
+  }
+  const frameSend = m => { if (frame.el && frame.el.contentWindow) frame.el.contentWindow.postMessage(m, PLAYER_ORIGIN); };
+  addEventListener('message', e => {
+    if (!frame.el || e.source !== frame.el.contentWindow || e.origin !== PLAYER_ORIGIN) return;
+    const m = e.data || {};
+    if (m.ev === 'ready') { frame.ready = true; frameSend({ cmd: 'hello' }); }
+    else if (m.ev === 'state' && frame.used) {
+      if (m.state === 'off' && player.state === 'off') return;
+      player.state = m.state; paintListen(); mediaState();
+      if (m.state === 'on') mediaMeta(true);
+    }
+    else if (m.ev === 'blocked') { player.state = 'off'; paintListen(); toast('The browser held the sound back. Tap Listen again.'); }
+    else if (m.ev === 'failed') { player.log = m.log || []; listenFailed({ can: m.can, ua: m.ua }); }
+  });
   function openSoma() {
     // A tab on every device (Dan, Nov 5), the same one each time it's still open
     const w = window.open(SOMA_PLAYER, 'somafm-player');
@@ -803,6 +828,16 @@
   }
   function paintListen() { const b = document.querySelector('.tabs .listen'); if (b) b.outerHTML = listenBtn(); }
   function listenStart() {
+    if (frame.ready) {
+      frame.used = true;
+      player.state = 'loading'; player.log = [];
+      if (player.fail) { player.fail = null; if (view === 'now') render(); }
+      paintListen();
+      frameSend({ cmd: 'play' });
+      mediaMeta(true); mediaState();
+      return;
+    }
+    frame.used = false;
     if (!player.audio) {
       const a = player.audio = new Audio();
       a.preload = 'none';
@@ -833,10 +868,10 @@
     const m = /\/\/([^.]+)\.somafm\.com\/[^-]+-(\d+-\w+)/.exec(src);
     player.log.push((m ? m[1] + ' ' + m[2] : src || 'no address') + ' — ' + (what && what.name ? what.name + (what.message ? ': ' + what.message : '') : what));
   }
-  function listenFailed() {
+  function listenFailed(from) {
     const a = player.audio || document.createElement('audio');
-    LS.set('listenVia', 'somafm');
-    player.fail = { at: Date.now(), log: player.log.slice(), can: ['audio/aac', 'audio/mpeg'].map(t => `${t}: ${a.canPlayType(t) || 'no'}`).join(', '), ua: navigator.userAgent };
+    LS.set('listenVia2', 'somafm');
+    player.fail = { at: Date.now(), log: player.log.slice(), can: from && from.can || ['audio/aac', 'audio/mpeg'].map(t => `${t}: ${a.canPlayType(t) || 'no'}`).join(', '), ua: from && from.ua || navigator.userAgent };
     listenStop();
     toast("This browser can't play SomaFM's stream here. Open SomaFM's player from the Now page.");
     if (view === 'now') render();
@@ -851,6 +886,7 @@
   // A live stream isn't paused but let go, so starting again plays what's on now
   function listenStop() {
     player.state = 'off';
+    if (frame.used) frameSend({ cmd: 'stop' });
     const a = player.audio;
     if (a) { a.pause(); a.removeAttribute('src'); a.load(); }
     paintListen(); mediaState();
@@ -864,7 +900,9 @@
     player.key = key;
     const r = n && statusOf(n.key, n.artist, n.title), vid = r && inList(r) ? r.item.id : '';
     const art = vid ? { src: `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/mqdefault.jpg`, sizes: '320x180', type: 'image/jpeg' } : { src: LOGO, sizes: '256x256', type: 'image/png' };
-    MS.metadata = new MediaMetadata({ title: n ? n.title : 'Christmas Lounge', artist: n ? n.artist : 'SomaFM', album: n && n.album ? n.album : 'SomaFM Christmas Lounge', artwork: [art] });
+    const meta = { title: n ? n.title : 'Christmas Lounge', artist: n ? n.artist : 'SomaFM', album: n && n.album ? n.album : 'SomaFM Christmas Lounge', artwork: [art] };
+    MS.metadata = new MediaMetadata(meta);
+    if (frame.used) frameSend({ cmd: 'meta', meta });
   }
   function mediaState() { if (MS) MS.playbackState = player.state === 'off' ? 'none' : 'playing'; }
 
@@ -962,7 +1000,7 @@
   const ACT = {
     listen() { if (viaSoma()) openSoma(); else if (player.state === 'off') listenStart(); else listenStop(); },
     listenSoma() { player.fail = null; openSoma(); render(); },
-    listenVia(b) { LS.set('listenVia', b.dataset.v === 'somafm' ? 'somafm' : null); player.fail = null; render(); },
+    listenVia(b) { LS.set('listenVia2', b.dataset.v === 'somafm' ? 'somafm' : null); player.fail = null; render(); },
     row(el) {
       const p = rowOf(el);
       S.open = S.open === p.id ? null : p.id; closePanels();
@@ -1447,6 +1485,7 @@
   /* ---------- Start ---------- */
   readAddress();
   render();
+  frameSetup();
   loadConfig();
   (async () => {
     // The plays and the document first (so the page can show something), then the playlist and what's playing
