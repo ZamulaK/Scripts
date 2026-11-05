@@ -7,7 +7,7 @@
 <body>
 <!-- The Christmas Lounge site's audio, played from this small page inside it (an invisible frame). SomaFM turns its stream
      away when the page asking is on pages.dev (Nov 5), so the site hands playing to this page on workers.dev. It only takes
-     orders from the site (play, stop, what's playing) and tells it how playing goes. Nothing is kept or read here. -->
+     orders from the site (play, stop, volume, what's playing) and tells it how playing goes. Nothing is kept or read here. -->
 <script>
 (() => {
   // The site's addresses (live, next and each deployment's own), and the page checks' stand-in
@@ -56,6 +56,7 @@
     if (m.cmd === 'hello') tell({ ev: 'state', state });
     else if (m.cmd === 'play') play();
     else if (m.cmd === 'stop') stop();
+    else if (m.cmd === 'volume' && typeof m.v === 'number') a.volume = Math.min(1, Math.max(0, m.v));
     else if (m.cmd === 'meta' && MS && typeof MediaMetadata !== 'undefined' && m.meta) {
       try { MS.metadata = new MediaMetadata(m.meta); } catch (x) { /* a picture it won't take */ }
     }

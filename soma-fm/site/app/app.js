@@ -463,13 +463,13 @@
   }
   // Open (the video you have) and Search YouTube as icons on the row itself, so the row needn't be opened for them.
   // An "other version" song has both: Open compares with the version you have; Search finds the one SomaFM played.
-  const SVG = { open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
+  const SVG = { yt: '<rect x="2.5" y="5" width="19" height="14" rx="4.5"/><path d="M10 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
   const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
   // Open or closed: the chevron turns over (and fills) while the row is open; the CSS does it from .open
   const chev = on => `<span class="chev ${on ? 'on' : ''}" aria-hidden="true">${ico('chev')}</span>`;
   function quickLinks(p, r) {
     const out = [];
-    if (canOpen(r)) out.push(`<a class="icon open" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop aria-label="Open on YouTube: ${esc(p.title)}" title="Open on YouTube">${ico('open')}</a>`);
+    if (canOpen(r)) out.push(`<a class="icon open" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop aria-label="Open on YouTube: ${esc(p.title)}" title="Open on YouTube">${ico('yt')}</a>`);
     if (!canOpen(r) || r.status === 'other') out.push(`<a class="icon" href="${ytSearch(M.searchQuery(p.artist, p.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube: ${esc(p.title)}" title="Search YouTube">${ico('search')}</a>`);
     return out.join('');
   }
@@ -573,8 +573,8 @@
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
       <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>
-      <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop>▶ Open</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount">${plural(plays, 'play')} ${chev()}</span></div>
-      ${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
+      <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube">${ico('yt')}YouTube</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount">${plural(plays, 'play')} ${chev()}</span></div>
+      ${note ? `<div class="hnote">${esc(note)}</div>` : ''}${heroListen()}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>
       <div><h3>Just played <a href="${esc(tabHref('history'))}" data-nav>See all</a></h3><div class="plays">${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
@@ -774,7 +774,7 @@
 
   // Redraws wait while you're choosing a song, writing a note, or a menu is open
   let renderHeld = false;
-  function quietRender() { if (S.pick || S.noteFor || menu) { renderHeld = true; return; } render(); }
+  function quietRender() { if (S.pick || S.noteFor || menu || volDrag) { renderHeld = true; return; } render(); }
   /* ---------- Listen: SomaFM's stream of the station, played here (Dan, Nov 5) ---------- */
   // SomaFM's own servers for it (from its .pls lists): the 128k AAC first (half the data of the 256k MP3), then the MP3
   const STREAMS = (() => {
@@ -828,14 +828,42 @@
     const icon = s === 'off' ? ico('open') : s === 'loading' ? '<span class="spin"></span>' : '<span class="eq"><i></i><i></i><i></i></span>';
     return `<button class="listen ${s}" data-act="listen" aria-pressed="${s !== 'off'}" title="${s === 'off' ? 'Listen to the station' : 'Stop listening'}"><span class="lic">${icon}</span>${s === 'off' ? 'Listen' : 'Stop'}</button>`;
   }
-  function paintListen() { const b = document.querySelector('.tabs .listen'); if (b) b.outerHTML = listenBtn(); }
+  function paintListen() {
+    const b = document.querySelector('.tabs .listen'); if (b) b.outerHTML = listenBtn();
+    const h = document.getElementById('hlisten'); if (h && !volDrag) h.outerHTML = heroListen();
+  }
+  // Listen on the Now Playing card too, and while it plays, the volume (Dan, Nov 5). The card grows a row for it; taps
+  // there don't open the card. The volume is the player's own (quieter than the device, never louder), kept per device.
+  let volDrag = false;
+  const volume = () => { const v = Number(LS.get('volume', 100)); return v >= 0 && v <= 100 ? Math.round(v) : 100; };
+  function applyVolume() {
+    const v = volume() / 100;
+    if (player.audio) player.audio.volume = v;
+    if (frame.used) frameSend({ cmd: 'volume', v });
+  }
+  function heroListen() {
+    if (viaSoma()) return `<div class="hlisten" id="hlisten" data-stop><button class="pill" data-act="listen">${ico('open')}Listen on SomaFM ↗</button></div>`;
+    const s = player.state, v = volume();
+    const btn = s === 'off' ? `<button class="pill solid" data-act="listen">${ico('open')}Listen live</button>`
+      : `<button class="pill" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span>Connecting' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`;
+    return `<div class="hlisten ${s}" id="hlisten" data-stop>${btn}${s === 'off' ? '' : `<label class="vol">${ico('vol')}<input type="range" id="vol" min="0" max="100" step="1" value="${v}" aria-label="Volume"><span id="volv">${v}%</span></label>`}</div>`;
+  }
+  addEventListener('input', e => {
+    if (e.target.id !== 'vol') return;
+    LS.set('volume', Number(e.target.value));
+    const l = document.getElementById('volv'); if (l) l.textContent = e.target.value + '%';
+    applyVolume();
+  });
+  addEventListener('pointerdown', e => { if (e.target.id === 'vol') volDrag = true; });
+  addEventListener('pointerup', () => { if (volDrag) { volDrag = false; if (renderHeld) quietRender(); } });
+  addEventListener('pointercancel', () => { volDrag = false; });
   function listenStart() {
     if (frame.ready) {
       frame.used = true;
       player.state = 'loading'; player.log = [];
       if (player.fail) { player.fail = null; if (view === 'now') render(); }
       paintListen();
-      frameSend({ cmd: 'play' });
+      frameSend({ cmd: 'volume', v: volume() / 100 }); frameSend({ cmd: 'play' });
       mediaMeta(true); mediaState();
       return;
     }
@@ -860,6 +888,7 @@
     player.state = 'loading'; player.tries = 0; player.log = [];
     if (player.fail) { player.fail = null; if (view === 'now') render(); }
     paintListen();
+    player.audio.volume = volume() / 100;
     player.audio.src = STREAMS[player.at];
     player.audio.play().catch(e => { listenLog(e); if (e && e.name === 'NotAllowedError') { listenStop(); toast('The browser held the sound back. Tap Listen again.'); } });
     mediaMeta(true); mediaState();

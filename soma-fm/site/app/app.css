@@ -166,7 +166,7 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 .icon{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:50%;border:0;background:var(--chip);color:var(--ink);cursor:pointer;flex:none;text-decoration:none;font-size:15px}
 .icon svg{width:17px;height:17px}
 .icon.open{background:var(--accent);color:var(--on)}
-.icon.open svg{margin-left:2px}
+.icon.open svg{width:20px;height:20px}
 .notewrap{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px}
 .notewrap .note{flex:1;margin:0}
 .notewrap .icon{width:32px;height:32px}
@@ -357,3 +357,16 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 @media (max-width:399px){.tabs a,.tabs .listen{padding:4px 6px}}
 .listen-fail pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted);margin:8px 0 0}
 .listen-fail .acts{display:flex;gap:8px;margin:10px 0 2px}
+/* Listen on the Now Playing card (Dan, Nov 5): a row at its foot, with the volume while it plays */
+.hero .hlisten{display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2);position:relative;z-index:1;cursor:default}
+.hero .hlisten .pill{display:inline-flex;align-items:center;gap:7px;flex:none}
+.hero .hlisten .pill svg{width:14px;height:14px}
+.hero .hlisten .eq{display:inline-flex;gap:2px;align-items:flex-end;height:11px}
+.hero .hlisten .eq i{width:2.5px;height:100%;background:currentColor;border-radius:1px}
+.hero .hlisten .eq i:nth-child(1){height:60%}.hero .hlisten .eq i:nth-child(3){height:80%}
+@media (prefers-reduced-motion:no-preference){.hero .hlisten .eq i{animation:eq .9s ease-in-out infinite alternate}.hero .hlisten .eq i:nth-child(2){animation-delay:-.3s}.hero .hlisten .eq i:nth-child(3){animation-delay:-.6s}}
+.hero .hlisten .spin{width:11px;height:11px}
+.hero .vol{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+.hero .vol svg{width:18px;height:18px;flex:none;opacity:.9}
+.hero .vol input{flex:1;min-width:0;accent-color:#fff;height:24px;cursor:pointer}
+.hero #volv{font-size:12.5px;font-weight:600;min-width:2.8em;text-align:right;font-variant-numeric:tabular-nums}
