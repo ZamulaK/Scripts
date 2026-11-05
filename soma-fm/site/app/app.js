@@ -757,7 +757,7 @@
         <div class="kv"><span>Notes</span><span class="seg" role="group" aria-label="Notes">${[['one', 'First line'], ['all', 'All'], ['off', 'Off']].map(([k, l]) => `<button class="${S.listNotes === k ? 'on' : ''}" data-act="listNotes" data-v="${k}" aria-pressed="${S.listNotes === k}">${l}</button>`).join('')}</span></div>
         <div class="snote">Remembered on this device. Open a song for everything about it.</div></div>
       <h3>Listen</h3><div class="box"><div class="kv"><span>Plays</span><span class="seg" role="group" aria-label="Listen plays">${[['', 'Here'], ['somafm', "In SomaFM's player"]].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
-        <div class="snote">SomaFM lets some browsers play its stream inside this site (Chrome on Android) and turns others away (Chrome on Windows, TV Bro). Where it's turned away, Listen opens SomaFM's own player instead. Remembered on this device.</div></div>
+        <div class="snote">SomaFM turns its stream away when it's played inside this site, unless the browser keeps quiet about which site asked (privacy tools such as AdGuard do that). Where it's turned away, Listen opens SomaFM's own player instead. Remembered on this device.</div></div>
       <h3>Your data</h3><div class="box"><div class="snote" style="margin-top:0">Kept in one place on your Cloudflare account: every device shows the same, and each change is saved as you make it.</div>
         <div class="kv"><span>Read ${D.stateAt ? ago(D.stateAt) : '—'}${D.err.save ? '' : queued || inflight ? ' · saving…' : ''}</span><button class="pill" data-act="reload">Read again now</button></div>
         ${w ? `<div class="msg err">⚠ ${esc(w)}</div>` : ''}${rec ? `<div class="snote">${rec}</div>` : ''}
@@ -783,8 +783,8 @@
   })();
   const LOGO = 'https://api.somafm.com/logos/256/christmas256.png';
   const MS = 'mediaSession' in navigator ? navigator.mediaSession : null;
-  // SomaFM turns away its stream when the page asking is on pages.dev, and some browsers say so (Windows Chrome, the TV's
-  // TV Bro; Android Chrome plays). Where it's refused, Listen opens SomaFM's own player instead, remembered per device.
+  // SomaFM turns away its stream when the page asking is on pages.dev (browsers say which page asked; Dan's devices only
+  // play because AdGuard's tracking protection hides that). Where it's refused, Listen opens SomaFM's own player instead, remembered per device.
   // SomaFM's pages can't be shown inside another site, so it's a window of its own (Dan, Nov 5).
   const SOMA_PLAYER = `https://somafm.com/player24/station/${CHANNEL}`;
   const viaSoma = () => LS.get('listenVia', '') === 'somafm';
