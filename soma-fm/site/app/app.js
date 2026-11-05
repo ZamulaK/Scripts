@@ -789,8 +789,8 @@
   const SOMA_PLAYER = `https://somafm.com/player/#/now-playing/${CHANNEL}`;
   const viaSoma = () => LS.get('listenVia', '') === 'somafm';
   function openSoma() {
-    // A small window beside the site where there's a mouse (the PC); a tab elsewhere (the TV)
-    const w = matchMedia('(pointer: fine)').matches ? window.open(SOMA_PLAYER, 'somafm-player', 'popup,width=440,height=780') : window.open(SOMA_PLAYER, '_blank');
+    // A tab on every device (Dan, Nov 5), the same one each time it's still open
+    const w = window.open(SOMA_PLAYER, 'somafm-player');
     if (!w) toast("The browser blocked SomaFM's player. Allow pop-ups for this site, or try again.");
     else toast("SomaFM's player is open. Press ▶ there to start.");
   }
