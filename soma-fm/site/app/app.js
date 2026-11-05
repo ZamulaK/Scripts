@@ -1190,7 +1190,7 @@
     const until = r >= 60 ? `${Math.floor(r / 60)} h ${r % 60} min` : `${r} min`;
     const what = run ? (run.kind === 'shuffle' ? 'Last shuffle' : KINDS[run.kind] ? KINDS[run.kind].name : 'Last run') : '';
     return `<div class="box"><h4>Quota today</h4><div class="meter" role="progressbar" aria-label="Quota used today" aria-valuemin="0" aria-valuemax="${Shuffle.DAILY_UNITS}" aria-valuenow="${Math.min(used, Shuffle.DAILY_UNITS)}"><i style="width:${Math.min(100, used / Shuffle.DAILY_UNITS * 100)}%"></i></div>
-      <div class="kv"><span>Left today (all your devices)</span><b>about ${fmt(left)} of ${fmt(Shuffle.DAILY_UNITS)}</b></div><div class="kv"><span>Resets</span><b>midnight Pacific · in ${until} (${esc(quotaReset())})</b></div>
+      <div class="kv"><span>Left today (all your devices)</span><b>about ${fmt(left)} of ${fmt(Shuffle.DAILY_UNITS)}</b></div><div class="kv"><span>Resets</span><b>midnight Pacific · in ${until} <span class="nw">(${esc(quotaReset())})</span></b></div>
       ${run ? `<div class="kv"><span>${esc(what)}</span><b>${esc(when(run.at / 1000))}</b></div><div class="kv"><span>It used</span><b>about ${fmt(run.units)} units · ${plural(run.moves, 'move')}${run.complete ? '' : ' · stopped partway'}</b></div>` : ''}
       ${last ? `<div class="kv"><span>Order last changed</span><b>${esc(when(last.at / 1000))}</b></div>` : ''}
       <div class="kv"><span>Google's own count</span><a class="pill" href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas" target="_blank" rel="noopener">Cloud Console</a></div>
@@ -1201,7 +1201,7 @@
     const say = (t, cls) => t ? `<div class="msg ${cls || ''}">${esc(t)}</div>` : '';
     let main = '';
     if (v === 'signin' || v === 'idle') {
-      main = `<div class="box"><h4>Shuffle ${PLAYLIST_NAME}${n ? ` (${fmt(n)} songs)` : ''}</h4>${say(m, 'err')}<span class="k">Sign in with the Google account that owns ${PLAYLIST_NAME}. If Google asks for a channel, choose the one that owns the playlist. Google will say the app hasn't been verified: it's your own app, so choose Continue. The sign-in lasts an hour.</span>
+      main = `<div class="box"><h4>Shuffle ${PLAYLIST_NAME}${n ? ` (${fmt(n)} songs)` : ''}</h4>${say(m, 'err')}<span class="k">Sign in with the Google account that owns ${PLAYLIST_NAME}.</span>
         <div class="btns"><button class="big-btn" data-act="shSignIn">Sign in with Google</button></div></div>`;
     } else if (v === 'waiting') {
       main = `<div class="box"><h4>Signing in</h4><div class="sline">Finish signing in in the Google window…</div><div class="btns"><button class="big-btn alt" data-act="shCancelWait">Cancel</button></div></div>`;
@@ -1247,7 +1247,7 @@
       main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() ? 'shStart' : 'shSignIn'}">${validToken() ? 'Try again' : 'Sign in again'}</button></div></div>`;
     }
     const o = D.doc.original;
-    const extra = `<div class="box" style="margin-top:12px">${o ? `<div class="kv"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv"><span>Original order</span><span class="r">not saved yet: it is kept when you first open a shuffle</span></div>'}
+    const extra = `<div class="box" style="margin-top:12px">${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv"><span>Original order</span><span class="r">not saved yet: it is kept when you first open a shuffle</span></div>'}
       ${sh.savedNow ? '<div class="snote">Saved just now from the playlist as it is.</div>' : ''}
       ${validToken() && v !== 'running' ? `<div class="kv"><span>Signed in with Google</span><span><button class="pill" data-act="shSignOut">Sign out</button></span></div>` : ''}</div>`;
     return head('Reorder your YouTube playlist') + `<div class="split"><div>${main}${extra}</div><div>${quotaBox()}<p class="foot" style="text-align:left">Play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order.</p></div></div>`;

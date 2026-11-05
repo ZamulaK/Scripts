@@ -267,6 +267,9 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 .kv:first-child{border-top:0}
 .kv b{text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .kv > *{min-width:0}
+/* A row with a button: the words wrap and the button keeps its size, centered beside them (Shuffle's Download; Dan, Nov 4) */
+.kv.btnrow{align-items:center}
+.kv.btnrow > :last-child{flex:none}
 .kv .lines > span{display:block;white-space:nowrap}   /* one figure a line: average, then median (Dan, Nov 4) */
 .kv .r{text-align:right;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 .kv .r b{color:var(--ink)}

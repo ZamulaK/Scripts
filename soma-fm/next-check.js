@@ -314,6 +314,16 @@ const overflow = page => page.evaluate(() => {
     check('Stats (600 px): the words beside the %', io600.length === 2 && io600.every(x => x.beside) && /of songs in your playlist/.test(io600[0].text), JSON.stringify(io600));
     check('No script errors (Nov 4 tweaks)', s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
+    // Shuffle on a phone, with the original order saved: nothing wider than the window, the reset time wraps before its "(…)"
+    api.doc.original = { at: Date.now() - 864e5 * 9, playlistId: 'PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt', songs: items.slice(0, 40).map((it, k) => ({ id: 'pi' + k, videoId: it.id, title: it.title })) };
+    s = await open(browser, { width: 360, path: '/shuffle' });
+    await s.page.waitForTimeout(400);
+    const shOver = await overflow(s.page);
+    const sh360 = await s.page.evaluate(() => { const dl = document.querySelector('[data-act="shDownload"]'), kv = [...document.querySelectorAll('.kv')].find(x => /^Resets/.test(x.textContent)), par = kv && kv.querySelector('.nw');
+      return { dl: dl && dl.getBoundingClientRect().right <= document.documentElement.clientWidth, par: par && par.getClientRects().length === 1 && /^\(.*\)$/.test(par.textContent), text: (document.querySelector('.box .k') || {}).textContent }; });
+    check('Shuffle (360 px): fits the window, Download in sight, the reset time\'s "(…)" kept whole, the short sign-in line', !shOver.length && sh360.dl && sh360.par && sh360.text === 'Sign in with the Google account that owns Xmas Mixed.', JSON.stringify({ shOver, sh360 }));
+    await s.ctx.close();
+    delete api.doc.original;
     // Not in playlist is left off the first row while there are none: every such song disliked
     const saved = JSON.parse(JSON.stringify(api.doc));
     for (const p of hist) { const k = X.markKey(p[1], p[2]); const st = X.check(p[1], p[2], items).status; if (st === 'other') api.doc.marks[k] = { v: 'have', at: Date.now() }; else if (st !== 'have') api.doc.dislikes[k] = Date.now(); }
