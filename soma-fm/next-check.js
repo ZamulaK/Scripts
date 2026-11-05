@@ -59,6 +59,9 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await ctx.route('https://fonts.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
+  // Video pictures: a 1-pixel stand-in, and none for a video id containing "gone" (as for a deleted video)
+  await ctx.route('https://i.ytimg.com/**', r => /gone/.test(r.request().url()) ? r.fulfill({ status: 404, body: '' })
+    : r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') }));
   // Google's sign-in, standing in: straight back to the site with an access key, as the real one does after you choose an account
   await ctx.route('https://accounts.google.com/**', route => {
     const q = new globalThis.URL(route.request().url()).searchParams;
@@ -261,7 +264,11 @@ const overflow = page => page.evaluate(() => {
     check('A tab brought back (from the back/forward cache here) reads the latest at once', feeds() > f0, String(feeds() - f0));
     const hero = await s.page.evaluate(() => { const acts = [...document.querySelectorAll('.hero .acts > *')];
       return { note: (document.querySelector('.hero .hnote') || {}).textContent, lines: new Set(acts.map(a => Math.round(a.getBoundingClientRect().top))).size, right: Math.max(...acts.map(a => a.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right,
-        have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]') }; });
+        have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]'),
+        thumb: (() => { const a = document.querySelector('.hero .hthumb'), h = document.querySelector('.hero').getBoundingClientRect(), t = document.querySelector('.hero .htext').getBoundingClientRect();
+          if (!a) return null; const b = a.getBoundingClientRect(), img = a.querySelector('img');
+          return { w: Math.round(b.width), h: Math.round(b.height), inside: b.right <= h.right - 8 && b.left >= t.right, src: /^https:\/\/i\.ytimg\.com\/vi\/[^/]+\/mqdefault\.jpg$/.test(img.src), href: /youtube\.com\/watch\?v=/.test(a.href) }; })() }; });
+    check('Now card: a small picture from the video when the song is in the playlist, beside the name, inside the card', hero.have ? !!hero.thumb && hero.thumb.inside && hero.thumb.src && hero.thumb.href && hero.thumb.w === 88 && hero.thumb.h >= 49 && hero.thumb.h <= 50 : !hero.thumb, JSON.stringify(hero.thumb));
     check('Now card: the whole note at the bottom', hero.note === 'First line of the note\nSecond line', JSON.stringify(hero));
     check('Now card (360 px): its buttons on one line, inside the card; Favorite is a star beside the name', hero.lines === 1 && hero.right <= hero.edge && !hero.favPill && hero.star === hero.have, JSON.stringify(hero));
     await s.page.click('.hero h2 span');
