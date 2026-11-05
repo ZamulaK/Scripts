@@ -105,6 +105,17 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
   await page.waitForTimeout(800);
   return { ctx, page, errors };
 }
+// The Now card's video picture that shows (one is written for phones, one for wider screens), and where it sits
+const heroThumb = page => page.evaluate(() => {
+  const all = [...document.querySelectorAll('.hero .hthumb')], vis = all.filter(a => a.getBoundingClientRect().width > 0);
+  if (!all.length) return null;
+  const a = vis[0] || all[0], b = a.getBoundingClientRect(), h = document.querySelector('.hero').getBoundingClientRect(), img = a.querySelector('img');
+  const p = document.querySelector('.hero .hmain p').getBoundingClientRect(), top = document.querySelector('.hero .hero-top').getBoundingClientRect(), acts = document.querySelector('.hero .acts').getBoundingClientRect();
+  const r = document.createRange(); r.selectNodeContents(document.querySelector('.hero h2 span'));
+  const clear = [...r.getClientRects()].every(l => l.bottom <= b.top || l.top >= b.bottom || l.right <= b.left);   // the name never runs under it
+  return { shown: vis.length, w: Math.round(b.width), h: Math.round(b.height), src: /^https:\/\/i\.ytimg\.com\/vi\/[^/]+\/mqdefault\.jpg$/.test(img.src), href: /youtube\.com\/watch\?v=/.test(a.href),
+    inside: b.right <= h.right - 8 && b.top >= h.top + 8, besideArtist: b.left >= p.right && b.top >= p.top - 8, abovePlays: b.bottom <= acts.top + 2, corner: b.top <= top.top + 4 && b.right >= h.right - 30, clear };
+});
 const tabTo = async (page, name) => { await page.click(`.tabs a:has-text("${name}")`); await page.waitForTimeout(300); };
 // Anything wider than the window, or a row of buttons spilling out of its box
 const overflow = page => page.evaluate(() => {
@@ -264,11 +275,15 @@ const overflow = page => page.evaluate(() => {
     check('A tab brought back (from the back/forward cache here) reads the latest at once', feeds() > f0, String(feeds() - f0));
     const hero = await s.page.evaluate(() => { const acts = [...document.querySelectorAll('.hero .acts > *')];
       return { note: (document.querySelector('.hero .hnote') || {}).textContent, lines: new Set(acts.map(a => Math.round(a.getBoundingClientRect().top))).size, right: Math.max(...acts.map(a => a.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right,
-        have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]'),
-        thumb: (() => { const a = document.querySelector('.hero .hthumb'), h = document.querySelector('.hero').getBoundingClientRect(), t = document.querySelector('.hero .htext').getBoundingClientRect();
-          if (!a) return null; const b = a.getBoundingClientRect(), img = a.querySelector('img');
-          return { w: Math.round(b.width), h: Math.round(b.height), inside: b.right <= h.right - 8 && b.left >= t.right, src: /^https:\/\/i\.ytimg\.com\/vi\/[^/]+\/mqdefault\.jpg$/.test(img.src), href: /youtube\.com\/watch\?v=/.test(a.href) }; })() }; });
-    check('Now card: a small picture from the video when the song is in the playlist, beside the name, inside the card', hero.have ? !!hero.thumb && hero.thumb.inside && hero.thumb.src && hero.thumb.href && hero.thumb.w === 88 && hero.thumb.h >= 49 && hero.thumb.h <= 50 : !hero.thumb, JSON.stringify(hero.thumb));
+        have: /\bhave\b/.test((document.querySelector('.hero .st') || {}).className), star: !!document.querySelector('.hero h2 .star'), favPill: !!document.querySelector('.hero .acts [data-act="fav"]') }; });
+    const th = await heroThumb(s.page);
+    check('Now card (360 px): a small picture from the video when the song is in the playlist, beside the artist, above the play count', hero.have ? !!th && th.shown === 1 && th.src && th.href && th.w === 88 && th.h >= 49 && th.h <= 50 && th.besideArtist && th.abovePlays && th.inside : !th, JSON.stringify(th));
+    for (const width of [600, 1024]) {
+      const w = await open(browser, { width });
+      const tw = await heroThumb(w.page);
+      check(`Now card (${width} px): the picture in the top right corner, the name wrapping around it`, hero.have ? !!tw && tw.shown === 1 && tw.w === 128 && tw.corner && tw.clear && tw.abovePlays && tw.inside : !tw, JSON.stringify(tw));
+      await w.ctx.close();
+    }
     check('Now card: the whole note at the bottom', hero.note === 'First line of the note\nSecond line', JSON.stringify(hero));
     check('Now card (360 px): its buttons on one line, inside the card; Favorite is a star beside the name', hero.lines === 1 && hero.right <= hero.edge && !hero.favPill && hero.star === hero.have, JSON.stringify(hero));
     await s.page.click('.hero h2 span');
