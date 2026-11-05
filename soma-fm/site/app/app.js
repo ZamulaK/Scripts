@@ -573,8 +573,8 @@
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
       <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>
-      <div class="acts">${canOpen(r) ? `<a class="pill solid" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube">${ico('yt')}YouTube</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount">${plural(plays, 'play')} ${chev()}</span></div>
-      ${note ? `<div class="hnote">${esc(note)}</div>` : ''}${heroListen()}</div>
+      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill solid yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}<span class="lw">YouTube</span><span class="ln">YT</span></a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount"><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span> ${chev()}</span></div>
+      ${heroListen()}${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>
       <div><h3>Just played <a href="${esc(tabHref('history'))}" data-nav>See all</a></h3><div class="plays">${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
@@ -830,6 +830,7 @@
   }
   function paintListen() {
     const b = document.querySelector('.tabs .listen'); if (b) b.outerHTML = listenBtn();
+    const hb = document.getElementById('hlbtn'); if (hb) hb.outerHTML = heroListenBtn();
     const h = document.getElementById('hlisten'); if (h && !volDrag) h.outerHTML = heroListen();
   }
   // Listen on the Now Playing card too, and while it plays, the volume (Dan, Nov 5). The card grows a row for it; taps
@@ -841,12 +842,18 @@
     if (player.audio) player.audio.volume = v;
     if (frame.used) frameSend({ cmd: 'volume', v });
   }
+  // Listen first in the card's row of buttons (Dan, Nov 5); shorter words on a phone
+  function heroListenBtn() {
+    if (viaSoma()) return `<button class="pill" id="hlbtn" data-act="listen" title="Opens SomaFM's player">${ico('open')}<span class="lw">Listen on SomaFM ↗</span><span class="ln">Listen ↗</span></button>`;
+    const s = player.state;
+    if (s === 'off') return `<button class="pill" id="hlbtn" data-act="listen" aria-pressed="false">${ico('open')}<span class="lw">Listen live</span><span class="ln">Listen</span></button>`;
+    return `<button class="pill on" id="hlbtn" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span><span class="lw">Connecting</span><span class="ln">Stop</span>' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`;
+  }
+  // While it plays, a row under the buttons with the volume
   function heroListen() {
-    if (viaSoma()) return `<div class="hlisten" id="hlisten" data-stop><button class="pill" data-act="listen">${ico('open')}Listen on SomaFM ↗</button></div>`;
     const s = player.state, v = volume();
-    const btn = s === 'off' ? `<button class="pill solid" data-act="listen">${ico('open')}Listen live</button>`
-      : `<button class="pill" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span>Connecting' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`;
-    return `<div class="hlisten ${s}" id="hlisten" data-stop>${btn}${s === 'off' ? '' : `<label class="vol">${ico('vol')}<input type="range" id="vol" min="0" max="100" step="1" value="${v}" aria-label="Volume"><span id="volv">${v}%</span></label>`}</div>`;
+    if (viaSoma() || s === 'off') return '<div id="hlisten" hidden></div>';
+    return `<div class="hlisten" id="hlisten" data-stop><label class="vol">${ico('vol')}<input type="range" id="vol" min="0" max="100" step="1" value="${v}" aria-label="Volume"><span id="volv">${v}%</span></label></div>`;
   }
   addEventListener('input', e => {
     if (e.target.id !== 'vol') return;

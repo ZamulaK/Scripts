@@ -458,22 +458,28 @@ const overflow = page => page.evaluate(() => {
       const ok = await Promise.all(m.icons.map(async i => { const r = await fetch(i.src); const b = await createImageBitmap(await r.blob()); return b.width + 'x' + b.height === i.sizes; }));
       return { cred: l.crossOrigin, name: m.name, display: m.display, start: m.start_url, icons: ok, maskable: m.icons.some(i => i.purpose === 'maskable') }; });
     check('Installable: a manifest (read with the sign-in cookie), standalone, its icons the sizes it says', man.cred === 'use-credentials' && man.name === 'Christmas Lounge' && man.display === 'standalone' && man.start === '/' && man.icons.length >= 3 && man.icons.every(Boolean) && man.maskable, JSON.stringify(man));
-    // Listen on the Now Playing card, with the volume while it plays (Dan, Nov 5)
+    // Listen on the Now Playing card: first in its row of buttons, short words on a phone; the volume under them while it
+    // plays; YouTube shortened to YT on a phone (Dan, Nov 5)
     await tabTo(s.page, 'Now');
-    const h0 = await s.page.evaluate(() => { const r = document.querySelector('.hero #hlisten'); return r && { text: r.textContent.trim(), vol: !!r.querySelector('#vol') }; });
-    check('Now card: a Listen row at its foot, no volume while it isn\'t playing', !!h0 && /Listen live/.test(h0.text) && !h0.vol, JSON.stringify(h0));
-    await s.page.click('#hlisten [data-act="listen"]'); await s.page.waitForTimeout(400);
-    const h1 = await s.page.evaluate(() => { const r = document.querySelector('#hlisten'), v = r && r.querySelector('#vol'), hero = document.querySelector('.hero').getBoundingClientRect();
-      return { text: r.textContent.trim(), bar: document.querySelector('.tabs .listen').textContent.trim(), vol: v && Number(v.value), right: Math.max(...[...r.children].map(c => c.getBoundingClientRect().right)), edge: hero.right, lines: new Set([...r.children].map(c => Math.round(c.getBoundingClientRect().top))).size }; });
-    check('Now card (360 px): Listen there plays (the bar agrees), and the row grows a volume slider on the same line', /Stop/.test(h1.text) && h1.bar === 'Stop' && h1.vol === 100 && h1.lines === 1 && h1.right <= h1.edge, JSON.stringify(h1));
+    const acts = () => s.page.evaluate(() => { const kids = [...document.querySelectorAll('.hero .acts > *')], hero = document.querySelector('.hero').getBoundingClientRect(), r = document.getElementById('hlisten');
+      const shown = el => [...el.querySelectorAll('.lw, .ln')].filter(x => x.offsetWidth).map(x => x.textContent).join('') || el.textContent.trim();
+      return { first: kids[0] && kids[0].id, labels: kids.map(shown), lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, right: Math.max(...kids.map(k => k.getBoundingClientRect().right)), edge: hero.right,
+        vol: !!(r && r.querySelector('#vol')), volRight: r && r.querySelector('#vol') ? r.getBoundingClientRect().right : 0, bar: document.querySelector('.tabs .listen').textContent.trim(),
+        ytColor: (() => { const y = document.querySelector('.hero .acts .yt svg'); return y ? getComputedStyle(y).color : ''; })() }; });
+    const h0 = await acts();
+    check('Now card (360 px): Listen first in the row of buttons, "Listen", "YT" and the plays as "14×" on a phone, all on one line; no volume while it isn\'t playing', h0.first === 'hlbtn' && h0.labels[0] === 'Listen' && h0.labels.includes('YT') && /^[0-9]+×$/.test(h0.labels[h0.labels.length - 1]) && h0.lines === 1 && h0.right <= h0.edge && !h0.vol, JSON.stringify(h0));
+    check('The YouTube mark is YouTube\'s red', h0.ytColor === 'rgb(255, 0, 0)', h0.ytColor);
+    await s.page.click('#hlbtn'); await s.page.waitForTimeout(400);
+    const h1 = await acts();
+    check('Now card (360 px): Listen there plays (the bar agrees), its button turns to Stop, and a volume slider shows under the buttons', h1.labels[0] === 'Stop' && h1.bar === 'Stop' && h1.lines === 1 && h1.vol && h1.volRight <= h1.edge, JSON.stringify(h1));
     await s.page.evaluate(() => { const v = document.getElementById('vol'); v.value = '40'; v.dispatchEvent(new Event('input', { bubbles: true })); });
     await s.page.click('#vol'); await s.page.waitForTimeout(300);
     const h2 = await s.page.evaluate(() => ({ label: document.getElementById('volv').textContent, kept: localStorage.getItem('xl:volume'), open: document.querySelector('.hero').classList.contains('open') }));
     const fv = await pframe().evaluate(() => window.__vol);
     check('Volume: sets the player\'s volume (in the player page), kept on the device; tapping the slider doesn\'t open the card', /%$/.test(h2.label) && Number(h2.kept) >= 0 && Math.abs(fv - Number(h2.kept) / 100) < 0.011 && !h2.open, JSON.stringify(h2) + ' frame ' + fv);
-    await s.page.click('#hlisten [data-act="listen"]'); await s.page.waitForTimeout(300);
-    const h3 = await s.page.evaluate(() => ({ text: document.querySelector('#hlisten').textContent.trim(), bar: document.querySelector('.tabs .listen').textContent.trim() }));
-    check('Now card: Stop there stops it (the bar agrees) and the slider goes', /Listen live/.test(h3.text) && h3.bar === 'Listen', JSON.stringify(h3));
+    await s.page.click('#hlbtn'); await s.page.waitForTimeout(300);
+    const h3 = await acts();
+    check('Now card: Stop there stops it (the bar agrees) and the volume goes', h3.labels[0] === 'Listen' && h3.bar === 'Listen' && !h3.vol, JSON.stringify(h3));
     check('No script errors (Listen)', s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
     // Where the player page can't load, the site plays the stream itself
