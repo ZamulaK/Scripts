@@ -609,7 +609,8 @@
     const zeroLast = list => list.filter(x => x.n || x.on).concat(list.filter(x => !x.n && !x.on)).map(x => x.html).join('');
     const active = S.status.size + S.cats.size + (S.favOnly ? 1 : 0) + (S.latest ? 1 : 0);
     // The search box; with the few filters showing, it goes in their row, so on a phone it shares the line with All ▾ (Dan, Nov 5)
-    const find = `<div class="find"><input type="search" id="find" placeholder="Search: song, artist, or album" value="${esc(S.q)}" aria-label="Search plays"></div>`;
+    // The hint becomes "Search…" when the box is too narrow for it (fitHint)
+    const find = `<div class="find"><input type="search" id="find" placeholder="${HINT}" value="${esc(S.q)}" aria-label="Search plays: song, artist, or album"></div>`;
     let filters = '', findIn = false;
     if (D.items.length && !D.playlistError) {
       if (S.allFilters) {
@@ -767,6 +768,19 @@
   // Redraws wait while you're choosing a song, writing a note, or a menu is open
   let renderHeld = false;
   function quietRender() { if (S.pick || S.noteFor || menu) { renderHeld = true; return; } render(); }
+  // History's search box: on a phone it shares the line with All ▾ (Dan, Nov 5), so where that leaves it too narrow
+  // for the whole hint, the hint is just "Search…"
+  const HINT = 'Search: song, artist, or album';
+  let hintCanvas = null;
+  function fitHint() {
+    const e = document.getElementById('find');
+    if (!e) return;
+    const cs = getComputedStyle(e), c = (hintCanvas = hintCanvas || document.createElement('canvas')).getContext('2d');
+    c.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const room = e.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    e.placeholder = c.measureText(HINT).width <= room ? HINT : 'Search…';
+  }
+  addEventListener('resize', fitHint);
   function render() {
     renderHeld = false;
     if (menu) closeMenu();
@@ -775,6 +789,7 @@
     document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => `<a class="${view === k ? 'on' : ''}" href="${esc(tabHref(k))}" data-nav ${view === k ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>${l}</a>`).join('');
     document.getElementById('app').innerHTML = (view === 'shuffle' ? shufView : R[view])();
     document.title = 'Christmas Lounge · ' + TABS.find(t => t[0] === view)[1];
+    fitHint();
     if (fid) { const e = document.getElementById(fid); if (e) { e.focus({ preventScroll: true }); if (sel && e.setSelectionRange) try { e.setSelectionRange(sel[0], sel[1]); } catch (x) { /* not a text field */ } } }
   }
   // Only the plays and the paging, for typing in the search box
