@@ -148,7 +148,7 @@ const overflow = page => page.evaluate(() => {
     && api.calls.some(c => /^GET \/api\/playlist\?list=.*&within=900$/.test(c)), api.calls.join());
   check('Nothing of Dan\'s data is kept in the browser: only settings in localStorage, no IndexedDB', await s.page.evaluate(async () => {
     const keys = Object.keys(localStorage); const dbs = indexedDB.databases ? await indexedDB.databases() : [];
-    return keys.every(k => /^xl:(theme|live|per|histq|topSort|listAlbum|listNotes|device|signin:|shuffle:job)/.test(k)) && dbs.length === 0;
+    return keys.every(k => /^xl:(theme|live|per|histq|topSort|listAlbum|listNotes|listenVia|device|signin:|shuffle:job)/.test(k)) && dbs.length === 0;
   }));
 
   // History
@@ -381,7 +381,8 @@ const overflow = page => page.evaluate(() => {
     // Listen (Dan, Nov 5): the station's stream from the bar of pages. Playing is stood in for (no sound here): the first
     // server refuses, so the next one is tried; the phone's media controls get the song and its picture.
     s = await open(browser, { width: 360, init: () => {
-      window.__plays = [];
+      window.__plays = []; window.__opened = [];
+      window.open = (u, n, f) => { window.__opened.push([u, n, f || '']); return {}; };
       HTMLMediaElement.prototype.play = function () {
         const src = this.getAttribute('src') || ''; window.__plays.push(src);
         setTimeout(() => this.dispatchEvent(new Event(window.__failAll || /ice6\./.test(src) ? 'error' : 'playing')), 50);
@@ -409,12 +410,19 @@ const overflow = page => page.evaluate(() => {
     await tabTo(s.page, 'Now');
     await s.page.evaluate(() => { window.__failAll = true; });
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(800);
-    const l4 = await s.page.evaluate(() => { const w = document.querySelector('.listen-fail'); return { text: document.querySelector('.tabs .listen').textContent.trim(), box: !!w, lines: w ? w.querySelector('pre').textContent.split('\n') : [] }; });
-    check('Listen: when no server plays, it stops and the Now page shows each try', l4.text === 'Listen' && l4.box && l4.lines.filter(l => /^ice\d \d+-\w+ — error/.test(l)).length >= 3 && /audio\/mpeg: /.test(l4.lines.join(' ')), JSON.stringify(l4));
+    const l4 = await s.page.evaluate(() => { const w = document.querySelector('.listen-fail'); return { text: document.querySelector('.tabs .listen').textContent.trim(), box: !!w, open: !!(w && w.querySelector('[data-act="listenSoma"]')), lines: w ? w.querySelector('pre').textContent.split('\n') : [] }; });
+    check('Listen: when no server plays, it stops, the Now page shows each try and offers SomaFM\'s player; the button becomes Listen ↗', l4.text === 'Listen ↗' && l4.box && l4.open && l4.lines.filter(l => /^ice\d \d+-\w+ — error/.test(l)).length >= 3 && /audio\/mpeg: /.test(l4.lines.join(' ')), JSON.stringify(l4));
+    await s.page.click('.listen-fail [data-act="listenSoma"]'); await s.page.waitForTimeout(200);
+    await s.page.click('.tabs .listen'); await s.page.waitForTimeout(200);
+    const l5 = await s.page.evaluate(() => ({ box: !!document.querySelector('.listen-fail'), opened: window.__opened, plays: window.__plays.length, kept: localStorage.getItem('xl:listenVia') }));
+    check('Listen ↗: opens SomaFM\'s player (a small window where there\'s a mouse), not the stream; remembered on the device', !l5.box && l5.opened.length === 2 && l5.opened.every(o => o[0] === 'https://somafm.com/player/#/now-playing/christmas' && /popup/.test(o[2])) && l5.kept === '"somafm"', JSON.stringify(l5));
+    // More → Listen → Here: back to playing inside the site
     await s.page.evaluate(() => { window.__failAll = false; });
+    await tabTo(s.page, 'More');
+    await s.page.click('[data-act="listenVia"][data-v=""]'); await s.page.waitForTimeout(200);
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
-    const l5 = await s.page.evaluate(() => ({ box: !!document.querySelector('.listen-fail'), text: document.querySelector('.tabs .listen').textContent.trim() }));
-    check('Listen: trying again clears the details', !l5.box && l5.text === 'Stop', JSON.stringify(l5));
+    const l6 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), kept: localStorage.getItem('xl:listenVia'), here: (document.querySelector('[data-act="listenVia"][data-v=""]') || {}).className }));
+    check('More → Listen → Here plays inside the site again', l6.text === 'Stop' && l6.kept === null && /\bon\b/.test(l6.here), JSON.stringify(l6));
     await s.page.click('.tabs .listen');
     const man = await s.page.evaluate(async () => { const l = document.querySelector('link[rel="manifest"]'); const m = await (await fetch(l.href, { credentials: 'include' })).json();
       const ok = await Promise.all(m.icons.map(async i => { const r = await fetch(i.src); const b = await createImageBitmap(await r.blob()); return b.width + 'x' + b.height === i.sizes; }));

@@ -756,6 +756,8 @@
         <div class="kv"><span>Album</span><span class="seg" role="group" aria-label="Album"><button class="${S.listAlbum ? 'on' : ''}" data-act="listAlbum" data-v="1" aria-pressed="${S.listAlbum}">Always</button><button class="${S.listAlbum ? '' : 'on'}" data-act="listAlbum" data-v="" aria-pressed="${!S.listAlbum}">Wide screens</button></span></div>
         <div class="kv"><span>Notes</span><span class="seg" role="group" aria-label="Notes">${[['one', 'First line'], ['all', 'All'], ['off', 'Off']].map(([k, l]) => `<button class="${S.listNotes === k ? 'on' : ''}" data-act="listNotes" data-v="${k}" aria-pressed="${S.listNotes === k}">${l}</button>`).join('')}</span></div>
         <div class="snote">Remembered on this device. Open a song for everything about it.</div></div>
+      <h3>Listen</h3><div class="box"><div class="kv"><span>Plays</span><span class="seg" role="group" aria-label="Listen plays">${[['', 'Here'], ['somafm', "In SomaFM's player"]].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
+        <div class="snote">SomaFM lets some browsers play its stream inside this site (Chrome on Android) and turns others away (Chrome on Windows, TV Bro). Where it's turned away, Listen opens SomaFM's own player instead. Remembered on this device.</div></div>
       <h3>Your data</h3><div class="box"><div class="snote" style="margin-top:0">Kept in one place on your Cloudflare account: every device shows the same, and each change is saved as you make it.</div>
         <div class="kv"><span>Read ${D.stateAt ? ago(D.stateAt) : '—'}${D.err.save ? '' : queued || inflight ? ' · saving…' : ''}</span><button class="pill" data-act="reload">Read again now</button></div>
         ${w ? `<div class="msg err">⚠ ${esc(w)}</div>` : ''}${rec ? `<div class="snote">${rec}</div>` : ''}
@@ -781,8 +783,20 @@
   })();
   const LOGO = 'https://api.somafm.com/logos/256/christmas256.png';
   const MS = 'mediaSession' in navigator ? navigator.mediaSession : null;
+  // SomaFM turns away its stream when the page asking is on pages.dev, and some browsers say so (Windows Chrome, the TV's
+  // TV Bro; Android Chrome plays). Where it's refused, Listen opens SomaFM's own player instead, remembered per device.
+  // SomaFM's pages can't be shown inside another site, so it's a window of its own (Dan, Nov 5).
+  const SOMA_PLAYER = `https://somafm.com/player/#/now-playing/${CHANNEL}`;
+  const viaSoma = () => LS.get('listenVia', '') === 'somafm';
+  function openSoma() {
+    // A small window beside the site where there's a mouse (the PC); a tab elsewhere (the TV)
+    const w = matchMedia('(pointer: fine)').matches ? window.open(SOMA_PLAYER, 'somafm-player', 'popup,width=440,height=780') : window.open(SOMA_PLAYER, '_blank');
+    if (!w) toast("The browser blocked SomaFM's player. Allow pop-ups for this site, or try again.");
+    else toast("SomaFM's player is open. Press ▶ there to start.");
+  }
   // In the bar of pages, so it's there on every page
   function listenBtn() {
+    if (viaSoma()) return `<button class="listen off" data-act="listen" title="Opens SomaFM's player (this browser can't play the stream inside the site)"><span class="lic">${ico('open')}</span>Listen ↗</button>`;
     const s = player.state;
     const icon = s === 'off' ? ico('open') : s === 'loading' ? '<span class="spin"></span>' : '<span class="eq"><i></i><i></i><i></i></span>';
     return `<button class="listen ${s}" data-act="listen" aria-pressed="${s !== 'off'}" title="${s === 'off' ? 'Listen to the station' : 'Stop listening'}"><span class="lic">${icon}</span>${s === 'off' ? 'Listen' : 'Stop'}</button>`;
@@ -821,15 +835,17 @@
   }
   function listenFailed() {
     const a = player.audio || document.createElement('audio');
+    LS.set('listenVia', 'somafm');
     player.fail = { at: Date.now(), log: player.log.slice(), can: ['audio/aac', 'audio/mpeg'].map(t => `${t}: ${a.canPlayType(t) || 'no'}`).join(', '), ua: navigator.userAgent };
     listenStop();
-    toast("Couldn't play SomaFM's stream here. The details are on the Now page.");
+    toast("This browser can't play SomaFM's stream here. Open SomaFM's player from the Now page.");
     if (view === 'now') render();
   }
   function listenFailBox() {
     const f = player.fail;
     if (!f) return '';
-    return `<div class="warn listen-fail" role="status">⚠ Listen couldn't play SomaFM's stream on this device (${esc(time(Math.floor(f.at / 1000)))}).
+    return `<div class="warn listen-fail" role="status">⚠ This browser can't play SomaFM's stream inside the site (${esc(time(Math.floor(f.at / 1000)))}). SomaFM turns it away here, so from now on Listen opens SomaFM's own player.
+      <div class="acts"><button class="pill primary" data-act="listenSoma">Open SomaFM's player</button></div>
       <details><summary>Details</summary><pre>${esc(f.log.concat(f.can, f.ua).join('\n'))}</pre></details></div>`;
   }
   // A live stream isn't paused but let go, so starting again plays what's on now
@@ -944,7 +960,9 @@
   const resultOf = p => statusOf(p.key, p.artist, p.title);
   function closePanels() { S.pick = null; S.noteFor = null; S.pickQ = ''; }
   const ACT = {
-    listen() { if (player.state === 'off') listenStart(); else listenStop(); },
+    listen() { if (viaSoma()) openSoma(); else if (player.state === 'off') listenStart(); else listenStop(); },
+    listenSoma() { player.fail = null; openSoma(); render(); },
+    listenVia(b) { LS.set('listenVia', b.dataset.v === 'somafm' ? 'somafm' : null); player.fail = null; render(); },
     row(el) {
       const p = rowOf(el);
       S.open = S.open === p.id ? null : p.id; closePanels();

@@ -356,3 +356,4 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
   @keyframes eq{from{height:25%}to{height:100%}}}
 @media (max-width:399px){.tabs a,.tabs .listen{padding:4px 6px}}
 .listen-fail pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--muted);margin:8px 0 0}
+.listen-fail .acts{display:flex;gap:8px;margin:10px 0 2px}
