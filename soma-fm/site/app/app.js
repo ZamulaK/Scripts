@@ -60,14 +60,40 @@
   }
 
   /* ---------- Google sign-in return (for Shuffle) ---------- */
-  // Google sends the sign-in back to this site's / with a one-hour key in the #fragment. If it's the sign-in this
-  // device started, the key is kept for the page that asked, and the sign-in window closes.
+  // Google sends the sign-in back to this site's /. With the sign-in kept on the server (keepsSignIn; Dan, Nov 4) it
+  // brings a one-time ?code=, which the server exchanges for a lasting permission and a one-hour key; otherwise a
+  // one-hour key in the #fragment. If it's the sign-in this device started, the key is kept for the page that asked,
+  // and the sign-in window closes.
+  let connecting = null;   // a code being exchanged, when the sign-in came back in this tab (popups blocked)
+  async function connectWith(code, error) {
+    let t;
+    if (!code) t = { error: error === 'access_denied' ? 'you chose not to allow it' : error || 'no code came back', at: Date.now() };
+    else {
+      try {
+        const d = (await api('/youtube/connect', { method: 'POST', body: { code } })).data;
+        t = { token: d.access_token, at: Date.now(), exp: Date.now() + ((Number(d.expires_in) || 3600) - 120) * 1000, kept: !!d.kept };
+      } catch (e) { t = { error: e.message, at: Date.now() }; }
+    }
+    LS.set('signin:token', t);
+    return t;
+  }
   function catchSignIn() {
-    if (!/[#&]state=/.test(location.hash)) return false;
-    const p = new URLSearchParams(location.hash.slice(1)), asked = LS.get('signin:pending', null);
+    const q = new URLSearchParams(location.search), viaCode = q.has('state') && (q.has('code') || q.has('error'));
+    if (!viaCode && !/[#&]state=/.test(location.hash)) return false;
+    const p = viaCode ? q : new URLSearchParams(location.hash.slice(1)), asked = LS.get('signin:pending', null);
     if (!asked || p.get('state') !== asked.state) return false;
     history.replaceState(null, '', asked.popup ? '/' : '/shuffle');
     LS.set('signin:pending', null);
+    if (viaCode) {
+      const done = connectWith(p.get('code'), p.get('error'));
+      if (!asked.popup) { connecting = done; return false; }   // signed in in this tab: Shuffle waits for it
+      document.getElementById('app').innerHTML = '<div class="boot">Signing in…</div>';
+      done.then(t => {
+        window.close();
+        document.getElementById('app').innerHTML = `<div class="boot">${t.token ? 'Signed in. You can close this window and go back to Shuffle.' : `Sign-in didn't complete (${esc(t.error)}). Close this window and try again.`}</div>`;
+      });
+      return true;
+    }
     const token = p.get('access_token');
     LS.set('signin:token', token ? { token, at: Date.now(), exp: Date.now() + ((Number(p.get('expires_in')) || 3600) - 120) * 1000 } : { error: p.get('error') || 'no access key came back', at: Date.now() });
     if (!asked.popup) return false;   // signed in in this tab: carry on, on the Shuffle page
@@ -82,7 +108,7 @@
     plays: [], breaks: [], through: 0, lastRun: null, recording: true, playsAt: 0,
     doc: Sync.clean(null), version: 0, stateAt: 0,
     items: [], hidden: 0, playlistAt: 0, playlistError: '', playlistLoading: true, archiveNote: '',
-    nowAt: null, clientId: '',
+    nowAt: null, clientId: '', keepsSignIn: false,
     err: { plays: '', state: '', feed: '', save: '' },
     loaded: { plays: false, state: false },
   };
@@ -256,7 +282,7 @@
       D.err.feed = '';
     } catch (e) { D.err.feed = e.message; }
   }
-  async function loadConfig() { try { D.clientId = (await api('/config')).data.clientId || ''; } catch (e) { /* asked again when Shuffle needs it */ } }
+  async function loadConfig() { try { const c = (await api('/config')).data; D.clientId = c.clientId || ''; D.keepsSignIn = !!c.keepsSignIn; } catch (e) { /* asked again when Shuffle needs it */ } }
 
   // The playlist: the server's last read when it's recent (each read costs quota units Shuffle shares), else read now.
   // Songs that left it are noticed only from a complete read, and never when too many vanish at once (Archive.update).
@@ -987,6 +1013,18 @@
   let sh = {}, shToken = null, shRunning = false, shStop = false, shWait = null, runUnits = 0, armed = null;
   const SH = { view: 'idle', msg: '' };
   const validToken = () => { const t = LS.get('signin:token', null); return t && t.token && t.exp > Date.now() ? t.token : null; };
+  // A key for YouTube: the one this device has, else (sign-in kept on the server) a fresh one from it; null = sign in
+  async function freshToken() {
+    const v = validToken();
+    if (v) return v;
+    if (!D.clientId) await loadConfig();
+    if (!D.keepsSignIn) return null;
+    try {
+      const d = (await api('/youtube/token', { method: 'POST', body: {} })).data;
+      LS.set('signin:token', { token: d.access_token, at: Date.now(), exp: Date.now() + ((Number(d.expires_in) || 3600) - 120) * 1000, kept: true });
+      return d.access_token;
+    } catch (e) { if (e.status === 409) { LS.set('signin:token', null); return null; } throw e; }
+  }
   function deviceId() {
     let d = LS.get('device', '');
     if (!d) { const b = new Uint8Array(8); crypto.getRandomValues(b); d = Array.prototype.map.call(b, x => x.toString(16).padStart(2, '0')).join(''); LS.set('device', d); }
@@ -1002,7 +1040,7 @@
   const ytTry = Shuffle.retrying((...a) => ytCall(...a), API_WAITS, ms => sleep(ms), (e, wait) => {
     const t = $('#shprog'); if (t) t.textContent = `YouTube didn't answer (${e.message}). Trying again in ${Math.round(wait / 1000)} s…`;
   });
-  async function ytCall(method, resource, params, body) {
+  async function ytCall(method, resource, params, body, again) {
     const q = new URLSearchParams();
     for (const k in params) if (params[k] !== '' && params[k] != null) q.set(k, String(params[k]));
     const headers = { Authorization: 'Bearer ' + shToken };
@@ -1013,6 +1051,12 @@
     catch (e) { throw Object.assign(new Error('network error'), { status: 0, reason: 'network' }); }
     addUsed(method === 'GET' ? 1 : Shuffle.UNITS_PER_MOVE);
     if (r.ok) return r.json();
+    // The hour ran out mid-run: with the sign-in kept, a fresh key, and the same request once more
+    if (r.status === 401 && !again && D.keepsSignIn) {
+      LS.set('signin:token', null);
+      const t = await freshToken().catch(() => null);
+      if (t) { shToken = t; return ytCall(method, resource, params, body, true); }
+    }
     let msg = '', reason = '';
     try { const j = await r.json(); msg = j.error.message || ''; reason = (j.error.errors && j.error.errors[0] && j.error.errors[0].reason) || ''; } catch (e) { /* no details */ }
     throw Object.assign(new Error(msg || 'YouTube returned ' + r.status), { status: r.status, reason });
@@ -1027,7 +1071,7 @@
   }
   const quotaReset = () => new Date(Date.now() + resetMins() * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   function trouble(e) {
-    if (e.status === 401) { LS.set('signin:token', null); return 'Your Google sign-in has run out (it lasts an hour).'; }
+    if (e.status === 401) { LS.set('signin:token', null); return D.keepsSignIn ? 'Google no longer accepts the sign-in. Sign in again.' : 'Your Google sign-in has run out (it lasts an hour).'; }
     if (/quota/i.test(e.reason || '')) return `Today's YouTube quota is used up. It resets at midnight Pacific time (${quotaReset()} your time).`;
     if (e.status === 403) return `YouTube refused: ${e.message}`;
     return `Couldn't talk to YouTube: ${e.message}`;
@@ -1038,7 +1082,9 @@
     if (!D.clientId) return shufSet('error', "The site has no Google Client ID set up (GOOGLE_CLIENT_ID), so it can't sign in.");
     const b = new Uint8Array(16); crypto.getRandomValues(b);
     const state = Array.prototype.map.call(b, x => x.toString(16).padStart(2, '0')).join('');
-    const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ client_id: D.clientId, redirect_uri: location.origin + '/', response_type: 'token', scope: YT_SCOPE, state });
+    // Kept on the server: a one-time code, and offline access with the consent screen so Google gives a lasting permission
+    const how = D.keepsSignIn ? { response_type: 'code', access_type: 'offline', prompt: 'consent' } : { response_type: 'token' };
+    const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams(Object.assign({ client_id: D.clientId, redirect_uri: location.origin + '/', scope: YT_SCOPE, state }, how));
     const startedAt = Date.now();
     LS.set('signin:pending', { state, popup: true, at: startedAt });
     const w = window.open(url, 'xlsignin', 'popup,width=520,height=700');
@@ -1064,13 +1110,21 @@
     o.songs.forEach((s, i) => { csv += `${i + 1},${q(s.title)},${s.videoId ? 'https://www.youtube.com/watch?v=' + s.videoId : ''}\r\n`; });
     download(`${PLAYLIST_NAME.replace(/\W+/g, '-').toLowerCase()}-original-order.csv`, '﻿' + csv, 'text/csv;charset=utf-8');
   }
-  function shufOpen() {
-    if (shRunning || shWait) return;
-    if (validToken()) { if (SH.view === 'idle' || SH.view === 'signin') shufStart(); }
-    else if (SH.view !== 'error') shufSet('signin');
+  let shOpening = false;
+  async function shufOpen() {
+    if (shRunning || shWait || shOpening) return;
+    shOpening = true;
+    try {
+      if (connecting) { shufSet('loading', 'Signing in…'); const t = await connecting; connecting = null; if (!t.token) return shufSet('signin', `Google sign-in didn't complete (${t.error}).`); }
+      const fresh = SH.view === 'idle' || SH.view === 'signin' || SH.view === 'loading';
+      if (fresh && !validToken()) shufSet('loading', 'Signing in…');
+      const t = fresh ? await freshToken().catch(() => null) : validToken();
+      if (t) { if (fresh) shufStart(); }
+      else if (SH.view !== 'error') shufSet('signin');
+    } finally { shOpening = false; }
   }
   async function shufStart() {
-    shToken = validToken();
+    try { shToken = await freshToken(); } catch (e) { return shufSet('error', `Couldn't get a Google key from the site (${e.message}).`); }
     if (!shToken) return shufSet('signin');
     shufSet('loading', 'Reading your playlist…');
     try {
@@ -1166,7 +1220,14 @@
   }
   const SHACT = {
     shSignIn() { signIn(); },
-    shSignOut() { LS.set('signin:token', null); shufSet('signin'); },
+    // Kept on the server: signing out asks Google to revoke the permission, for every device
+    shSignOut() {
+      if (!D.keepsSignIn) { LS.set('signin:token', null); return shufSet('signin'); }
+      return busy(async () => {
+        try { await api('/youtube/disconnect', { method: 'POST', body: {} }); LS.set('signin:token', null); sh.channel = ''; shufSet('signin'); toast('Signed out of Google on all your devices.'); }
+        catch (e) { toast(`Couldn't sign out (${e.message}).`); }
+      });
+    },
     shCancelWait() { clearInterval(shWait); shWait = null; shufSet('signin'); },
     shStart() { shufStart(); },
     shNew() { newShuffle(); },
@@ -1203,7 +1264,7 @@
     const say = (t, cls) => t ? `<div class="msg ${cls || ''}">${esc(t)}</div>` : '';
     let main = '';
     if (v === 'signin' || v === 'idle') {
-      main = `<div class="box"><h4>Shuffle ${PLAYLIST_NAME}${n ? ` (${fmt(n)} songs)` : ''}</h4>${say(m, 'err')}<span class="k">Sign in with the Google account that owns ${PLAYLIST_NAME}.</span>
+      main = `<div class="box"><h4>Shuffle ${PLAYLIST_NAME}${n ? ` (${fmt(n)} songs)` : ''}</h4>${say(m, 'err')}<span class="k">Sign in with the Google account that owns ${PLAYLIST_NAME}.${D.keepsSignIn ? ' It stays signed in on all your devices until you sign out.' : ''}</span>
         <div class="btns"><button class="big-btn" data-act="shSignIn">Sign in with Google</button></div></div>`;
     } else if (v === 'waiting') {
       main = `<div class="box"><h4>Signing in</h4><div class="sline">Finish signing in in the Google window…</div><div class="btns"><button class="big-btn alt" data-act="shCancelWait">Cancel</button></div></div>`;
@@ -1246,12 +1307,12 @@
     } else if (v === 'done') {
       main = `<div class="box">${say(KINDS[sh.kind].done, 'ok')}<div class="snote">The YouTube app may take a few minutes to show the new order.</div><div class="btns"><button class="big-btn alt" data-act="shStart">Shuffle again</button></div></div>`;
     } else {
-      main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() ? 'shStart' : 'shSignIn'}">${validToken() ? 'Try again' : 'Sign in again'}</button></div></div>`;
+      main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() || D.keepsSignIn ? 'shStart' : 'shSignIn'}">${validToken() || D.keepsSignIn ? 'Try again' : 'Sign in again'}</button></div></div>`;
     }
     const o = D.doc.original;
     const extra = `<div class="box" style="margin-top:12px">${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv"><span>Original order</span><span class="r">not saved yet: it is kept when you first open a shuffle</span></div>'}
       ${sh.savedNow ? '<div class="snote">Saved just now from the playlist as it is.</div>' : ''}
-      ${validToken() && v !== 'running' ? `<div class="kv"><span>Signed in with Google</span><span><button class="pill" data-act="shSignOut">Sign out</button></span></div>` : ''}</div>`;
+      ${(validToken() || (D.keepsSignIn && sh.channel)) && v !== 'running' && v !== 'signin' ? `<div class="kv btnrow"><span>Signed in with Google${D.keepsSignIn ? ' on all your devices' : ''}</span><span><button class="pill" data-act="shSignOut">Sign out</button></span></div>` : ''}</div>`;
     return head('Reorder your YouTube playlist') + `<div class="split"><div>${main}${extra}</div><div>${quotaBox()}<p class="foot" style="text-align:left">Play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order.</p></div></div>`;
   }
 

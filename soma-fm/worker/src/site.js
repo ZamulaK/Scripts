@@ -1,6 +1,8 @@
 // The Christmas Lounge site's /api (soma-fm/site, xmaslounge.pages.dev, a Cloudflare Pages Function). It answers
 // only requests Cloudflare Access let through (accessEmail), and serves the same data as the recorder:
-//   GET  /api/config               what the page needs built in (the Google Client ID for Shuffle)
+//   GET  /api/config               what the page needs built in (the Google Client ID for Shuffle, and whether the
+//                                  sign-in can be kept on the server: keepsSignIn)
+//   POST /api/youtube/connect|token|disconnect   Shuffle's lasting Google sign-in (ytauth.js)
 //   GET  /api/feed?channel=        SomaFM's song list, read now; the plays in it are recorded on the way through
 //   GET  /api/playlist?list=       the YouTube playlist, read with YouTube's API (youtube.js); with &within=secs, the
 //                                  last read when it's newer than that (each read costs quota units Shuffle shares)
@@ -13,6 +15,7 @@ import { plays, state, record, json, body, UA } from './index.js';
 import { validChannel, Sync } from './core.js';
 import { accessEmail } from './access.js';
 import { readPlaylist } from './youtube.js';
+import { ytAuth } from './ytauth.js';
 
 const channels = env => String(env.CHANNELS || 'christmas').split(',').map(s => s.trim()).filter(validChannel);
 const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -59,9 +62,11 @@ async function playlist(env, list, within, fetchFn) {
 export async function siteApi(req, env, fetchFn = fetch) {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/api/, '') || '/';
-  if (!await accessEmail(req, env, fetchFn)) return json(env, { error: 'sign in through Cloudflare Access (reload the page)' }, 401);
+  const who = await accessEmail(req, env, fetchFn);
+  if (!who) return json(env, { error: 'sign in through Cloudflare Access (reload the page)' }, 401);
   try {
-    if (path === '/config' && req.method === 'GET') return json(env, { clientId: String(env.GOOGLE_CLIENT_ID || '') });
+    if (path === '/config' && req.method === 'GET') return json(env, { clientId: String(env.GOOGLE_CLIENT_ID || ''), keepsSignIn: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) });
+    if (path.startsWith('/youtube/')) return await ytAuth(path, req, env, fetchFn, who);
     if (path === '/plays' && (req.method === 'GET' || req.method === 'POST')) return await plays(req, env, url);
     if (path === '/state' && (req.method === 'GET' || req.method === 'PUT')) return await state(req, env);
     if (path === '/change' && req.method === 'POST') return await change(req, env);

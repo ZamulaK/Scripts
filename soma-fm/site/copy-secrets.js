@@ -1,10 +1,11 @@
-// Sets the site's four secrets for the test address (Pages' preview environment, next.xmaslounge.pages.dev) from files
+// Sets the site's five secrets for the test address (Pages' preview environment, next.xmaslounge.pages.dev) from files
 // you already keep them in. Cloudflare never gives a secret back once it's set, so they can't be copied from the
 // running site; this reads them from your files instead and hands each one to wrangler without showing it.
 //
-//   node site/copy-secrets.js C:\path\secrets.txt      one file with all four, one per line:
+//   node site/copy-secrets.js C:\path\secrets.txt      one file with all five, one per line:
 //       YT_KEY=…
 //       GOOGLE_CLIENT_ID=…
+//       GOOGLE_CLIENT_SECRET=…   (Shuffle's lasting sign-in, Nov 4; used by the server only, never sent to the page)
 //       ACCESS_TEAM=…
 //       ACCESS_AUD=…
 //   node site/copy-secrets.js YT_KEY=C:\path\youtube.txt GOOGLE_CLIENT_ID=C:\path\google.txt ...   a file per secret
@@ -18,11 +19,12 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const NAMES = ['YT_KEY', 'GOOGLE_CLIENT_ID', 'ACCESS_TEAM', 'ACCESS_AUD'];
+const NAMES = ['YT_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ACCESS_TEAM', 'ACCESS_AUD'];
 // What each value looks like, so a wrong line or file is caught before it's set
 const LOOKS = {
   YT_KEY: v => /^AIza[\w-]{30,}$/.test(v),
   GOOGLE_CLIENT_ID: v => /^[\w.-]+\.apps\.googleusercontent\.com$/.test(v),
+  GOOGLE_CLIENT_SECRET: v => /^GOCSPX-[\w-]{20,}$/.test(v),
   ACCESS_TEAM: v => /^[a-z0-9][a-z0-9.-]*$/i.test(v),
   ACCESS_AUD: v => /^[0-9a-f]{32,128}$/i.test(v),
 };
@@ -41,7 +43,7 @@ for (let i = 0; i < args.length; i++) {
   if (m && NAMES.indexOf(m[1]) >= 0) files[m[1]] = m[2].replace(/^"|"$/g, '');
   else if (m) { console.error(`${m[1]} isn't one of the site's secrets (${NAMES.join(', ')})`); process.exit(1); }
   else if (/^--/.test(a)) { console.error(`${a}: not an option (see the top of this file)`); process.exit(1); }
-  else if (shared) { console.error('Give one file for all four, or NAME=file for each (see the top of this file).'); process.exit(1); }
+  else if (shared) { console.error('Give one file for all five, or NAME=file for each (see the top of this file).'); process.exit(1); }
   else shared = a.replace(/^"|"$/g, '');
 }
 // The one file is for every secret not given its own; there, each needs its NAME= line

@@ -223,6 +223,52 @@ const p3 = await (await site('/playlist?list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt'
 check('playlist: within gives the kept read while it\'s recent, without asking YouTube; without it, a fresh read',
   reads() - r0 === 4 && !p1.cached && p2.cached && p2.items.length === 2 && p2.at === p1.at - p1.at % 1000 && !p3.cached && p3.at > 0, JSON.stringify({ n: reads() - r0, p1: p1.at, p2: p2.at }));
 
+// Nov 4: Shuffle's Google sign-in kept on the server (ytauth.js), against a stand-in for Google's token endpoint
+{
+  const google = { calls: [], refresh: 'rt-1', revoked: [] };
+  const gFetch = async (u, opts) => {
+    u = String(u);
+    if (u === 'https://oauth2.googleapis.com/token') {
+      const p = new URLSearchParams(opts.body); google.calls.push(Object.fromEntries(p));
+      if (p.get('client_secret') !== 'GOCSPX-secret') return new Response(JSON.stringify({ error: 'invalid_client' }), { status: 401 });
+      if (p.get('grant_type') === 'authorization_code') return p.get('code') === 'good-code' && p.get('redirect_uri') === 'https://xmaslounge.pages.dev/'
+        ? new Response(JSON.stringify({ access_token: 'at-1', expires_in: 3599, refresh_token: google.refresh })) : new Response(JSON.stringify({ error: 'invalid_grant', error_description: 'Bad code' }), { status: 400 });
+      if (p.get('grant_type') === 'refresh_token') return p.get('refresh_token') === google.refresh && !google.revoked.includes(google.refresh)
+        ? new Response(JSON.stringify({ access_token: 'at-2', expires_in: 3599 })) : new Response(JSON.stringify({ error: 'invalid_grant', error_description: 'Token has been expired or revoked.' }), { status: 400 });
+    }
+    if (u === 'https://oauth2.googleapis.com/revoke') { google.revoked.push(new URLSearchParams(opts.body).get('token')); return new Response('{}'); }
+    return siteFetch(u, opts);
+  };
+  const yEnv = Object.assign({}, siteEnv, { DB: fakeD1(), GOOGLE_CLIENT_SECRET: 'GOCSPX-secret' });
+  const y = (path, opts = {}) => siteApi(new Request('https://xmaslounge.pages.dev/api' + path, { method: opts.method || 'POST',
+    headers: opts.token === null ? {} : { 'Cf-Access-Jwt-Assertion': good }, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) }), opts.env || yEnv, gFetch);
+  const cfg = await (await y('/config', { method: 'GET' })).json();
+  check('youtube: /config says the sign-in can be kept (secret set), and not without it', cfg.keepsSignIn === true && (await (await site('/config')).json()).keepsSignIn === false);
+  res = await y('/youtube/token');
+  check('youtube: no sign-in kept yet: 409, so the page asks you to sign in', res.status === 409 && (await res.json()).connected === false);
+  res = await y('/youtube/connect', { body: { code: 'good-code' } });
+  body = await res.json();
+  const stored = yEnv.DB.raw.prepare("SELECT body FROM docs WHERE name = 'youtube:auth'").get();
+  check('youtube: connect exchanges the code (to this site\'s own /) and keeps the permission, encrypted', res.status === 200 && body.access_token === 'at-1' && body.kept
+    && google.calls[0].redirect_uri === 'https://xmaslounge.pages.dev/' && stored && !stored.body.includes('rt-1') && JSON.parse(stored.body).by === 'dan@example.com', JSON.stringify({ body, stored }));
+  res = await y('/youtube/token');
+  body = await res.json();
+  check('youtube: a fresh key from the kept permission, without signing in', res.status === 200 && body.access_token === 'at-2' && body.expires_in === 3599 && google.calls.pop().refresh_token === 'rt-1');
+  check('youtube: needs the Access sign-in', (await y('/youtube/token', { token: null })).status === 401);
+  check('youtube: GET refused (POST only)', (await y('/youtube/token', { method: 'GET' })).status === 405);
+  check('youtube: a bad code is refused and nothing new kept', (await y('/youtube/connect', { body: { code: 'bad' } })).status === 502 && (await y('/youtube/token')).status === 200);
+  check('youtube: without the client secret set, says so', (await y('/youtube/token', { env: Object.assign({}, yEnv, { GOOGLE_CLIENT_SECRET: '' }) })).status === 503);
+  check('youtube: kept with another secret reads as not signed in (and Google is not asked)', (await y('/youtube/token', { env: Object.assign({}, yEnv, { GOOGLE_CLIENT_SECRET: 'GOCSPX-other' }) })).status === 409);
+  google.revoked.push('rt-1');   // revoked in the Google account
+  res = await y('/youtube/token');
+  check('youtube: revoked at Google: forgotten, 409, sign in again', res.status === 409 && !yEnv.DB.raw.prepare("SELECT 1 FROM docs WHERE name = 'youtube:auth'").get());
+  google.revoked = []; google.refresh = 'rt-2';
+  await y('/youtube/connect', { body: { code: 'good-code' } });
+  res = await y('/youtube/disconnect');
+  body = await res.json();
+  check('youtube: disconnect revokes it at Google and forgets it', res.status === 200 && body.revoked && google.revoked.includes('rt-2') && (await y('/youtube/token')).status === 409);
+}
+
 // Nov 1: the API's "Billy Paul - Topic" kept two Billy Paul Williams songs from matching on the site
 check('credited artists from an auto-generated video\'s description, else nothing', creditedArtists('Provided to YouTube by X\n\nChristmas Eve · Members Only\n\nAlbum') === 'Members Only'
   && creditedArtists('Provided to YouTube by X\n\nSong · A · B\n\nAlbum') === 'A, B' && creditedArtists('My own upload') === '' && creditedArtists('') === '');

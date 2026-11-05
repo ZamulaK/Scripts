@@ -62,7 +62,10 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
   // Google's sign-in, standing in: straight back to the site with an access key, as the real one does after you choose an account
   await ctx.route('https://accounts.google.com/**', route => {
     const q = new globalThis.URL(route.request().url()).searchParams;
-    const back = q.get('redirect_uri') + '#' + new URLSearchParams({ state: q.get('state'), access_token: 'site-token', expires_in: '3600', token_type: 'Bearer' });
+    api.authQuery = Object.fromEntries(q);
+    // The lasting sign-in (keepsSignIn) asks for a one-time code, which comes back in the address's ?query
+    const back = q.get('response_type') === 'code' ? q.get('redirect_uri') + '?' + new URLSearchParams({ state: q.get('state'), code: 'good-code', scope: q.get('scope') })
+      : q.get('redirect_uri') + '#' + new URLSearchParams({ state: q.get('state'), access_token: 'site-token', expires_in: '3600', token_type: 'Bearer' });
     route.fulfill({ status: 200, contentType: 'text/html', body: '<script>location.replace(' + JSON.stringify(back) + ')</script>' });
   });
   await ctx.route('https://www.googleapis.com/**', route => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: { message: 'stand-in refuses', errors: [{ reason: 'forbidden' }] } }) }));
@@ -76,7 +79,11 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
     api.calls.push(req.method() + ' ' + pth + u.search);
     if (!api.signedIn) return send({ error: 'sign in' }, 'application/json', 401);
     const now = Math.floor(Date.now() / 1000);
-    if (pth === '/api/config') return send({ clientId: 'built-in.apps.googleusercontent.com' });
+    if (pth === '/api/config') return send({ clientId: 'built-in.apps.googleusercontent.com', keepsSignIn: !!api.keeps });
+    // Shuffle's lasting sign-in, as worker/src/ytauth.js answers (its own tests are the worker's)
+    if (pth === '/api/youtube/connect') { if (JSON.parse(req.postData()).code !== 'good-code') return send({ error: 'Google refused the sign-in: bad code' }, 'application/json', 502); api.yt = 'kept'; return send({ access_token: 'kept-token', expires_in: 3599, kept: true }); }
+    if (pth === '/api/youtube/token') { api.ytTokens = (api.ytTokens || 0) + 1; return api.yt ? send({ access_token: 'fresh-token', expires_in: 3599 }) : send({ error: 'not signed in', connected: false }, 'application/json', 409); }
+    if (pth === '/api/youtube/disconnect') { api.yt = null; return send({ ok: true, revoked: true }); }
     if (pth === '/api/feed') return send({ songs: hist.slice(0, 15).map(x => ({ date: String(x[0]), artist: x[1], title: x[2], album: x[3] })) });
     if (pth === '/api/playlist') { api.playlistReads++; return send({ items, hidden: 1, complete: true, read: items.length + 1, expected: items.length, at: Date.now() - 120000 }); }
     if (pth === '/api/plays' && req.method() === 'POST') { api.posted += JSON.parse(req.postData()).plays.length; return send({ received: 1, changed: 0 }); }
@@ -406,6 +413,38 @@ const overflow = page => page.evaluate(() => {
   check('Shuffle: the YouTube requests it made are counted in the synced quota', Object.keys(api.doc.shuffle.units).length >= 0);
   check('No script errors (Shuffle)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
+
+  // Shuffle's lasting sign-in (Nov 4): once, kept on the server, so another device (or the next day) needn't sign in
+  api.keeps = true;
+  s = await open(browser, { path: '/shuffle' });
+  const kq = await s.page.evaluate(() => document.querySelector('#app').textContent);
+  const kpop = s.page.waitForEvent('popup', { timeout: 10000 }).catch(() => null);
+  await s.page.click('[data-act="shSignIn"]');
+  const kwin = await kpop;
+  if (kwin) await kwin.waitForEvent('close', { timeout: 10000 }).catch(() => {});
+  await s.page.waitForTimeout(1500);
+  const kafter = await s.page.evaluate(() => ({ token: (JSON.parse(localStorage.getItem('xl:signin:token') || 'null') || {}).token, text: document.querySelector('#app').textContent }));
+  const aq = api.authQuery || {};
+  check('Shuffle (kept sign-in): asks Google for a code with offline access; the server keeps it, and the key reaches this page', /stays signed in on all your devices/.test(kq) && aq.response_type === 'code' && aq.access_type === 'offline' && aq.prompt === 'consent'
+    && !!kwin && kwin.isClosed() && api.yt === 'kept' && kafter.token === 'kept-token' && /YouTube refused: stand-in refuses/.test(kafter.text), JSON.stringify({ aq, kafter: kafter.token, text: kafter.text.slice(0, 200) }));
+  check('No script errors (kept sign-in)', s.errors.length === 0, s.errors.join(' | '));
+  await s.ctx.close();
+  // Another device: nothing on it, yet no sign-in: a fresh key from the server
+  s = await open(browser, { path: '/shuffle' });
+  await s.page.waitForTimeout(800);
+  const other = await s.page.evaluate(() => ({ text: document.querySelector('#app').textContent, token: (JSON.parse(localStorage.getItem('xl:signin:token') || 'null') || {}).token, signIn: !!document.querySelector('[data-act="shSignIn"]') }));
+  check('Shuffle (kept sign-in): another device goes straight to YouTube with a fresh key, no sign-in', other.token === 'fresh-token' && !other.signIn && /YouTube refused/.test(other.text) && api.ytTokens >= 1, JSON.stringify(other).slice(0, 300));
+  await s.page.click('[data-act="shSignOut"]');
+  await s.page.waitForTimeout(500);
+  const out = await s.page.evaluate(() => ({ signIn: !!document.querySelector('[data-act="shSignIn"]'), token: localStorage.getItem('xl:signin:token') }));
+  check('Shuffle (kept sign-in): Sign out forgets it on the server, for every device', api.yt === null && out.signIn && (out.token === null || out.token === 'null'), JSON.stringify(out));
+  await s.ctx.close();
+  s = await open(browser, { path: '/shuffle' });
+  await s.page.waitForTimeout(800);
+  check('Shuffle (kept sign-in): after signing out, a new device asks to sign in', await s.page.evaluate(() => !!document.querySelector('[data-act="shSignIn"]')));
+  check('No script errors (kept sign-in, other device)', s.errors.length === 0, s.errors.join(' | '));
+  await s.ctx.close();
+  api.keeps = false;
 
   // More: backup and restore, CSV
   api = freshApi();
