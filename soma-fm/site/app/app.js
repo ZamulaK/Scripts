@@ -36,7 +36,8 @@
   const numsBold = text => esc(text).replace(/\d[\d.,]*/g, '<b>$&</b>');   // "13 h 19 min": the figures bold, the words not (Dan, Nov 4)
   const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '0%';
   const plural = (n, one, many) => fmt(n) + ' ' + (n === 1 ? one : (many || one + 's'));
-  const hmm = secs => { const m = Math.round(secs / 60); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };   // 34320 -> "9:32" (Dan's tweak 1)
+  // 34320 -> "9 h 32 min", the units smaller (Dan, Nov 4; was "9:32" with "(h:mm)" under it)
+  const hmin = secs => { const m = Math.round(secs / 60); return `${Math.floor(m / 60)}<small class="u"> h</small> ${m % 60}<small class="u"> min</small>`; };
   const backText = secs => secs < 3600 ? Stats.formatSpan(secs) : (secs / 3600).toFixed(1) + ' h';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const ytWatch = id => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}&list=${PLAYLIST_ID}`;
@@ -634,7 +635,7 @@
     if (!ok) left = `<h3>Your playlist</h3><div class="box">${D.playlistError ? `Couldn't read the playlist: ${esc(D.playlistError)}` : 'Reading the playlist…'}</div>`;
     else {
       const heard = P.heard, notHeard = P.notHeard;
-      left = `<h3>Your playlist</h3><div class="g3"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmm(P.total)}</b><span class="k">total length (h:mm)</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k">average song</span></div></div>
+      left = `<h3>Your playlist</h3><div class="g3 wide-mid"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmin(P.total)}</b><span class="k">total length</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k">average song</span></div></div>
       <h3>Songs by status</h3>${inOut(t)}${statusBox(t)}
       <h3>Heard so far</h3><div class="box"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
         ${notHeard.length ? `<details class="sub"><summary>Not heard yet: ${fmt(notHeard.length)}</summary><ul>${notHeard.map(it => `<li><span class="nh">${esc(it.title)}</span><span class="acts">${starBtn(it.id, it.title)}<a class="pill" href="${ytWatch(it.id)}" target="_blank" rel="noopener">Open</a></span></li>`).join('')}</ul></details>` : '<div class="kv"><span>Not heard yet</span><b>0</b></div>'}

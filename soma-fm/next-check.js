@@ -212,8 +212,8 @@ const overflow = page => page.evaluate(() => {
   s = await open(browser, { path: '/stats' });
   const t = await s.page.evaluate(() => ({ big: [...document.querySelectorAll('.g3 .box')].map(b => b.textContent.trim()), status: [...document.querySelectorAll('.kv.stat')].map(k => k.textContent.replace(/\s+/g, ' ').trim()),
     heads: [...document.querySelectorAll('h3')].map(x => x.firstChild.textContent.trim()) }));
-  const total = items.reduce((a, it) => a + it.secs, 0), mins = Math.round(total / 60), want = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
-  check('Stats: total playlist time as h:mm, from the real lengths (tweak 1)', t.big[1] === want + 'total length (h:mm)', JSON.stringify(t.big) + ' want ' + want);
+  const total = items.reduce((a, it) => a + it.secs, 0), mins = Math.round(total / 60), want = Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min';
+  check('Stats: total playlist time as "9 h 38 min", from the real lengths (tweak 1)', t.big[1] === want + 'total length', JSON.stringify(t.big) + ' want ' + want);
   check('Stats: songs by status, as a share of songs and of plays (tweak 2), leaving In playlist and Disliked to the cards', t.status.length >= 2 && t.status.every(x => !/^(In playlist|Disliked)/.test(x) && /\d+ songs? · \d+%\s*\d+ plays? · \d+%/.test(x)), JSON.stringify(t.status));
   check('Stats: Songs by status right under the playlist cards', t.heads[0] === 'Your playlist' && t.heads[1] === 'Songs by status' && t.heads[2] === 'Heard so far', t.heads.join('|'));
   // "Of the last 100 plays, heard for the first time": left out at 0; otherwise split only at its comma, the figures on one line
@@ -306,6 +306,9 @@ const overflow = page => page.evaluate(() => {
     check('Stats (360 px): "Between replays", the short name on a phone', await s.page.evaluate(() => [...document.querySelectorAll('.kv')].some(x => x.firstElementChild.innerText.trim() === 'Between replays')));
     check('Stats: the replay average and median each on a line of their own, only the figures bold', rep && rep.length === 2 && / average$/.test(rep[0].t) && / median$/.test(rep[1].t) && rep[1].top > rep[0].top && rep.every(x => /^[\d ]+$/.test(x.bold)), JSON.stringify(rep));
     check('Stats (360 px): the three playlist cards on one row', st3.tops === 1, String(st3.tops));
+    const tl = await s.page.evaluate(() => { const b = document.querySelectorAll('.g3 .box')[1].querySelector('b.big'), box = b.parentElement.getBoundingClientRect(), w = [...document.querySelectorAll('.g3 .box')].map(x => Math.round(x.getBoundingClientRect().width));
+      return { text: b.textContent, oneLine: b.getBoundingClientRect().height < parseFloat(getComputedStyle(b).fontSize) * 1.8, inside: b.scrollWidth <= b.clientWidth + 1 && b.getBoundingClientRect().right <= box.right, w }; });
+    check('Stats (360 px): "9 h 38 min" on one line in a wider middle card', /^\d+ h \d+ min$/.test(tl.text) && tl.oneLine && tl.inside && tl.w[1] > tl.w[0] && tl.w[0] === tl.w[2], JSON.stringify(tl));
     const sh = await s.page.evaluate(() => { const kv = [...document.querySelectorAll('.kv')].find(x => /^Shortest/.test(x.textContent)); return kv && [...kv.querySelectorAll('.chunk')].map(c => ({ t: c.textContent, lines: Math.round(c.getBoundingClientRect().height / parseFloat(getComputedStyle(c).lineHeight || 18)) })); });
     check('Stats: Longest and Shortest titles wrap at " - " and before "(", each piece whole', sh && sh.length >= 2 && sh.every((c, k) => k || /·/.test(c.t)) && sh.some(c => /^Winter Wonderland$|^\(/.test(c.t)), JSON.stringify(sh));
     check('Stats (360 px): in playlist and disliked, laid out alike: the %, the words under it on one line (not bold), the count below', st3.io.length === 2
