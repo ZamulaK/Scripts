@@ -344,3 +344,14 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 /* The time in the lists: 12-hour, or 24-hour hh:mm on phones to save room (Dan, Nov 4) */
 .t24{display:none}
 @media (max-width:599px){.c-time .t12{display:none}.c-time .t24{display:inline}}
+/* Listen: the station's stream, in the bar of pages (Dan, Nov 5) */
+.tabs .listen{display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit;font-size:11px;font-weight:600;color:var(--accent);background:none;border:0;padding:4px 10px;border-radius:12px;cursor:pointer}
+.listen .lic{width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on);display:grid;place-items:center}
+.listen .lic svg{width:12px;height:12px;margin-left:2px}
+.listen .spin{width:10px;height:10px}
+.listen .eq{display:flex;gap:2px;align-items:flex-end;height:10px}
+.listen .eq i{width:2.5px;height:100%;background:currentColor;border-radius:1px}
+.listen .eq i:nth-child(1){height:60%}.listen .eq i:nth-child(3){height:80%}
+@media (prefers-reduced-motion:no-preference){.listen .eq i{animation:eq .9s ease-in-out infinite alternate}.listen .eq i:nth-child(2){animation-delay:-.3s}.listen .eq i:nth-child(3){animation-delay:-.6s}
+  @keyframes eq{from{height:25%}to{height:100%}}}
+@media (max-width:399px){.tabs a,.tabs .listen{padding:4px 6px}}

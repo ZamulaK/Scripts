@@ -6,7 +6,11 @@
 <title>Christmas Lounge</title>
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b1020">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%84%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<!-- Installable as an app (Chrome: Install app / Add to Home screen). The manifest is read with the sign-in cookie, since
+     Cloudflare Access guards every address -->
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="/icons/apple-180.png">
 <script>try { var t = JSON.parse(localStorage.getItem('xl:theme') || '""'); if (t === 'candy' || t === 'evergreen') document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -50,8 +50,9 @@ function freshApi() {
 }
 let api = freshApi();
 
-async function open(browser, { width = 600, height = 1000, scheme = 'light', path: p = '/', theme } = {}) {
+async function open(browser, { width = 600, height = 1000, scheme = 'light', path: p = '/', theme, init } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, colorScheme: scheme, timezoneId: 'America/New_York', acceptDownloads: true });
+  if (init) await ctx.addInitScript(init);
   if (theme !== undefined) await ctx.addInitScript(t => localStorage.setItem('xl:theme', JSON.stringify(t)), theme);
   const page = await ctx.newPage();
   const errors = [];
@@ -78,6 +79,8 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
     if (pth === '/lib/soma-xmas-checker.user.js') return send(fs.readFileSync(path.join(__dirname, 'soma-xmas-checker.user.js'), 'utf8'), 'text/javascript');
     if (pth === '/app.js') return send(fs.readFileSync(path.join(APP, 'app.js'), 'utf8'), 'text/javascript');
     if (pth === '/app.css') return send(fs.readFileSync(path.join(APP, 'app.css'), 'utf8'), 'text/css');
+    // The app's manifest and icons, as files
+    if (/^\/(manifest\.webmanifest|icons\/[\w.-]+)$/.test(pth) && fs.existsSync(path.join(APP, pth))) return route.fulfill({ status: 200, contentType: { webmanifest: 'application/manifest+json', png: 'image/png', svg: 'image/svg+xml' }[pth.split('.').pop()], body: fs.readFileSync(path.join(APP, pth)) });
     if (!pth.startsWith('/api/')) return send(fs.readFileSync(path.join(APP, 'index.html'), 'utf8'), 'text/html');   // Pages serves the page for every address
     api.calls.push(req.method() + ' ' + pth + u.search);
     if (!api.signedIn) return send({ error: 'sign in' }, 'application/json', 401);
@@ -374,6 +377,39 @@ const overflow = page => page.evaluate(() => {
     s = await open(browser, { width: 412, path: '/history' });
     const f3 = await fl();
     check('History (412 px): the search box beside All ▾, the whole hint where it fits', (f3.w >= 300 ? f3.ph === 'Search: song, artist, or album' : f3.w < 240 ? f3.ph === 'Search…' : true) && f3.inRow && f3.sameLine && f3.right <= 412 && f3.page <= 412, JSON.stringify(f3));
+    await s.ctx.close();
+    // Listen (Dan, Nov 5): the station's stream from the bar of pages. Playing is stood in for (no sound here): the first
+    // server refuses, so the next one is tried; the phone's media controls get the song and its picture.
+    s = await open(browser, { width: 360, init: () => {
+      window.__plays = [];
+      HTMLMediaElement.prototype.play = function () {
+        const src = this.getAttribute('src') || ''; window.__plays.push(src);
+        setTimeout(() => this.dispatchEvent(new Event(/ice6\./.test(src) ? 'error' : 'playing')), 50);
+        return Promise.resolve();
+      };
+    } });
+    const bar = () => s.page.evaluate(() => { const b = document.querySelector('.tabs .listen'), items = [...document.querySelectorAll('.tabs a, .tabs .listen')];
+      const md = navigator.mediaSession && navigator.mediaSession.metadata;
+      return { text: b && b.textContent.trim(), cls: b && b.className, pressed: b && b.getAttribute('aria-pressed'), plays: window.__plays.slice(), right: Math.max(...items.map(i => i.getBoundingClientRect().right)), top: new Set(items.map(i => Math.round(i.getBoundingClientRect().top))).size,
+        meta: md ? { title: md.title, artist: md.artist, art: (md.artwork[0] || {}).src } : null, state: navigator.mediaSession && navigator.mediaSession.playbackState, hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, ''),
+        heroVid: ((document.querySelector('.hero .hthumb img') || {}).src || '') }; });
+    const l0 = await bar();
+    check('Listen (360 px): in the bar of pages beside the five pages, all on one line inside the window', l0.text === 'Listen' && l0.pressed === 'false' && l0.top === 1 && l0.right <= 360, JSON.stringify(l0));
+    await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
+    const l1 = await bar();
+    check('Listen: plays SomaFM\'s stream, on to the next server when one refuses; the button turns to Stop', l1.text === 'Stop' && /\bon\b/.test(l1.cls) && l1.plays.length === 2 && /^https:\/\/ice6\.somafm\.com\/christmas-/.test(l1.plays[0]) && /^https:\/\/ice2\.somafm\.com\/christmas-/.test(l1.plays[1]), JSON.stringify(l1));
+    check('Listen: the phone\'s media controls show the song playing, with its video\'s picture when it\'s in the playlist', !!l1.meta && l1.meta.title === l1.hero && l1.state === 'playing' && (l1.heroVid ? l1.meta.art === l1.heroVid : /somafm\.com\/logos/.test(l1.meta.art)), JSON.stringify(l1.meta) + ' ' + l1.heroVid);
+    await tabTo(s.page, 'History');
+    const l2 = await bar();
+    check('Listen: keeps playing on another page', l2.text === 'Stop' && l2.plays.length === 2, JSON.stringify(l2));
+    await s.page.click('.tabs .listen'); await s.page.waitForTimeout(200);
+    const l3 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), state: navigator.mediaSession.playbackState }));
+    check('Listen: Stop lets the stream go', l3.text === 'Listen' && l3.state === 'none', JSON.stringify(l3));
+    const man = await s.page.evaluate(async () => { const l = document.querySelector('link[rel="manifest"]'); const m = await (await fetch(l.href, { credentials: 'include' })).json();
+      const ok = await Promise.all(m.icons.map(async i => { const r = await fetch(i.src); const b = await createImageBitmap(await r.blob()); return b.width + 'x' + b.height === i.sizes; }));
+      return { cred: l.crossOrigin, name: m.name, display: m.display, start: m.start_url, icons: ok, maskable: m.icons.some(i => i.purpose === 'maskable') }; });
+    check('Installable: a manifest (read with the sign-in cookie), standalone, its icons the sizes it says', man.cred === 'use-credentials' && man.name === 'Christmas Lounge' && man.display === 'standalone' && man.start === '/' && man.icons.length >= 3 && man.icons.every(Boolean) && man.maskable, JSON.stringify(man));
+    check('No script errors (Listen)', s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
     // Shuffle on a phone, with the original order saved: nothing wider than the window, the reset time wraps before its "(…)"
     api.doc.original = { at: Date.now() - 864e5 * 9, playlistId: 'PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt', songs: items.slice(0, 40).map((it, k) => ({ id: 'pi' + k, videoId: it.id, title: it.title })) };

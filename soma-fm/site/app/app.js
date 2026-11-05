@@ -103,6 +103,9 @@
   }
   if (catchSignIn()) return;
 
+  // Listening to the station here (Dan, Nov 5): off, loading (connecting or buffering) or on
+  const player = { audio: null, state: 'off', at: 0, tries: 0, key: '' };
+
   /* ---------- What's kept on the server, as last read ---------- */
   const D = {
     plays: [], breaks: [], through: 0, lastRun: null, recording: true, playsAt: 0,
@@ -325,7 +328,8 @@
   async function tick(force) {
     // A read that's been going for over 20 s was cut off while the tab slept (a phone freezes background tabs mid-request):
     // it no longer holds the next one back. Reading twice is harmless: plays and documents merge.
-    if ((ticking && Date.now() - ticking < 20000) || (!force && document.hidden)) return false;
+    // Out of sight it doesn't read, unless the station is playing here (the lock screen shows what's on)
+    if ((ticking && Date.now() - ticking < 20000) || (!force && document.hidden && player.state === 'off')) return false;
     const mine = ticking = Date.now();
     try {
       await loadFeed();
@@ -334,6 +338,7 @@
       if (Date.now() - D.playlistAt > PLAYLIST_MINUTES * 60000) await loadPlaylist(false);
     } finally { if (ticking === mine) ticking = 0; }
     quietRender();
+    mediaMeta();
     return !D.err.plays;
   }
   function schedule() { clearInterval(liveTimer); if (liveOn) liveTimer = setInterval(() => tick(false), LIVE_SECONDS * 1000); }
@@ -768,6 +773,63 @@
   // Redraws wait while you're choosing a song, writing a note, or a menu is open
   let renderHeld = false;
   function quietRender() { if (S.pick || S.noteFor || menu) { renderHeld = true; return; } render(); }
+  /* ---------- Listen: SomaFM's stream of the station, played here (Dan, Nov 5) ---------- */
+  // SomaFM's own servers for it (from its .pls lists): the 128k AAC first (half the data of the 256k MP3), then the MP3
+  const STREAMS = (() => {
+    const hosts = ['ice6', 'ice2', 'ice5'], aac = !!document.createElement('audio').canPlayType('audio/aac');
+    return (aac ? hosts.map(h => `https://${h}.somafm.com/${CHANNEL}-128-aac`) : []).concat(hosts.map(h => `https://${h}.somafm.com/${CHANNEL}-256-mp3`));
+  })();
+  const LOGO = 'https://api.somafm.com/logos/256/christmas256.png';
+  const MS = 'mediaSession' in navigator ? navigator.mediaSession : null;
+  // In the bar of pages, so it's there on every page
+  function listenBtn() {
+    const s = player.state;
+    const icon = s === 'off' ? ico('open') : s === 'loading' ? '<span class="spin"></span>' : '<span class="eq"><i></i><i></i><i></i></span>';
+    return `<button class="listen ${s}" data-act="listen" aria-pressed="${s !== 'off'}" title="${s === 'off' ? 'Listen to the station' : 'Stop listening'}"><span class="lic">${icon}</span>${s === 'off' ? 'Listen' : 'Stop'}</button>`;
+  }
+  function paintListen() { const b = document.querySelector('.tabs .listen'); if (b) b.outerHTML = listenBtn(); }
+  function listenStart() {
+    if (!player.audio) {
+      const a = player.audio = new Audio();
+      a.preload = 'none';
+      a.addEventListener('playing', () => { if (player.state === 'off') return; player.state = 'on'; player.tries = 0; paintListen(); mediaState(); });
+      a.addEventListener('waiting', () => { if (player.state === 'on') { player.state = 'loading'; paintListen(); } });
+      // A server that won't answer: the next one; when none will, stop and say so
+      a.addEventListener('error', () => {
+        if (player.state === 'off' || !a.getAttribute('src')) return;
+        if (++player.tries < STREAMS.length) { player.at = (player.at + 1) % STREAMS.length; a.src = STREAMS[player.at]; a.play().catch(() => {}); return; }
+        listenStop(); toast("Couldn't reach SomaFM's stream. Try again in a moment.");
+      });
+      // The stream ended (a server restart): start it again, so it keeps playing
+      a.addEventListener('ended', () => { if (player.state !== 'off') { a.src = STREAMS[player.at]; a.play().catch(() => {}); } });
+      if (MS) { MS.setActionHandler('play', listenStart); MS.setActionHandler('pause', listenStop); MS.setActionHandler('stop', listenStop); }
+    }
+    player.state = 'loading'; player.tries = 0;
+    paintListen();
+    player.audio.src = STREAMS[player.at];
+    player.audio.play().catch(e => { if (e && e.name === 'NotAllowedError') { listenStop(); toast('The browser held the sound back. Tap Listen again.'); } });
+    mediaMeta(true); mediaState();
+  }
+  // A live stream isn't paused but let go, so starting again plays what's on now
+  function listenStop() {
+    player.state = 'off';
+    const a = player.audio;
+    if (a) { a.pause(); a.removeAttribute('src'); a.load(); }
+    paintListen(); mediaState();
+  }
+  // What's playing, for the phone's notification and lock screen: the song, and its video's picture when it's in the playlist
+  function mediaMeta(force) {
+    if (!MS || player.state === 'off' || typeof MediaMetadata === 'undefined') return;
+    const all = rows(), n = (D.nowAt && all.find(p => p.at === D.nowAt)) || all[0];
+    const key = n ? n.at + ':' + D.items.length : '';
+    if (!force && key === player.key) return;
+    player.key = key;
+    const r = n && statusOf(n.key, n.artist, n.title), vid = r && inList(r) ? r.item.id : '';
+    const art = vid ? { src: `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/mqdefault.jpg`, sizes: '320x180', type: 'image/jpeg' } : { src: LOGO, sizes: '256x256', type: 'image/png' };
+    MS.metadata = new MediaMetadata({ title: n ? n.title : 'Christmas Lounge', artist: n ? n.artist : 'SomaFM', album: n && n.album ? n.album : 'SomaFM Christmas Lounge', artwork: [art] });
+  }
+  function mediaState() { if (MS) MS.playbackState = player.state === 'off' ? 'none' : 'playing'; }
+
   // History's search box: on a phone it shares the line with All ▾ (Dan, Nov 5), so where that leaves it too narrow
   // for the whole hint, the hint is just "Search…"
   const HINT = 'Search: song, artist, or album';
@@ -786,7 +848,7 @@
     if (menu) closeMenu();
     const a = document.activeElement, fid = a && a.id, sel = a && typeof a.selectionStart === 'number' ? [a.selectionStart, a.selectionEnd] : null;
     ROWS = [];
-    document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => `<a class="${view === k ? 'on' : ''}" href="${esc(tabHref(k))}" data-nav ${view === k ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>${l}</a>`).join('');
+    document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => `<a class="${view === k ? 'on' : ''}" href="${esc(tabHref(k))}" data-nav ${view === k ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>${l}</a>`).join('') + listenBtn();
     document.getElementById('app').innerHTML = (view === 'shuffle' ? shufView : R[view])();
     document.title = 'Christmas Lounge · ' + TABS.find(t => t[0] === view)[1];
     fitHint();
@@ -860,6 +922,7 @@
   const resultOf = p => statusOf(p.key, p.artist, p.title);
   function closePanels() { S.pick = null; S.noteFor = null; S.pickQ = ''; }
   const ACT = {
+    listen() { if (player.state === 'off') listenStart(); else listenStop(); },
     row(el) {
       const p = rowOf(el);
       S.open = S.open === p.id ? null : p.id; closePanels();
