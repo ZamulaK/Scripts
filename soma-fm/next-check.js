@@ -140,6 +140,24 @@ const overflow = page => page.evaluate(() => {
 });
 
 (async () => {
+  // The move from the pages.dev addresses to Dan's own domain (site/functions/_middleware.js, Nov 5)
+  {
+    const { redirectFor } = await import(require('url').pathToFileURL(path.join(__dirname, 'site', 'functions', '_middleware.js')).href);
+    const to = (u, method = 'GET') => { const r = redirectFor(new Request(u, { method })); return r ? r.status + ' ' + r.headers.get('Location') : 'stays'; };
+    const cases = [
+      ['https://xmaslounge.pages.dev/history?q=snow&page=2', 'GET', '302 https://xmaslounge.zamulagh.fyi/history?q=snow&page=2'],
+      ['https://xmaslounge.pages.dev/', 'HEAD', '302 https://xmaslounge.zamulagh.fyi/'],
+      ['https://xmaslounge.pages.dev/old/', 'GET', '302 https://xmaslounge.zamulagh.fyi/old/'],
+      ['https://next.xmaslounge.pages.dev/stats', 'GET', '302 https://next.xmaslounge.zamulagh.fyi/stats'],
+      ['https://xmaslounge.pages.dev/api/plays?since=0', 'GET', 'stays'],
+      ['https://xmaslounge.pages.dev/api/change', 'POST', 'stays'],
+      ['https://3eb7faa0.xmaslounge.pages.dev/', 'GET', 'stays'],
+      ['https://xmaslounge.zamulagh.fyi/', 'GET', 'stays'],
+      ['https://next.xmaslounge.zamulagh.fyi/history', 'GET', 'stays'],
+    ];
+    const bad = cases.filter(([u, m, want]) => to(u, m) !== want).map(([u, m, want]) => `${m} ${u}: ${to(u, m)} (want ${want})`);
+    check('Old addresses move to the own domain (same page; not /api, not other methods, not a deployment\'s own address)', !bad.length, bad.join(' | '));
+  }
   const browser = await chromium.launch();
   let s = await open(browser);
   const now = await s.page.evaluate(() => ({ hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, ''), tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr').length,
