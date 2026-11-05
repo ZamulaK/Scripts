@@ -786,7 +786,7 @@
   // SomaFM turns away its stream when the page asking is on pages.dev, and some browsers say so (Windows Chrome, the TV's
   // TV Bro; Android Chrome plays). Where it's refused, Listen opens SomaFM's own player instead, remembered per device.
   // SomaFM's pages can't be shown inside another site, so it's a window of its own (Dan, Nov 5).
-  const SOMA_PLAYER = `https://somafm.com/player/#/now-playing/${CHANNEL}`;
+  const SOMA_PLAYER = `https://somafm.com/player24/station/${CHANNEL}`;
   const viaSoma = () => LS.get('listenVia', '') === 'somafm';
   function openSoma() {
     // A tab on every device (Dan, Nov 5), the same one each time it's still open

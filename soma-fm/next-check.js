@@ -415,7 +415,7 @@ const overflow = page => page.evaluate(() => {
     await s.page.click('.listen-fail [data-act="listenSoma"]'); await s.page.waitForTimeout(200);
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(200);
     const l5 = await s.page.evaluate(() => ({ box: !!document.querySelector('.listen-fail'), opened: window.__opened, plays: window.__plays.length, kept: localStorage.getItem('xl:listenVia') }));
-    check('Listen ↗: opens SomaFM\'s player in a tab (the same one each time), not the stream; remembered on the device', !l5.box && l5.opened.length === 2 && l5.opened.every(o => o[0] === 'https://somafm.com/player/#/now-playing/christmas' && o[1] === 'somafm-player' && !o[2]) && l5.kept === '"somafm"', JSON.stringify(l5));
+    check('Listen ↗: opens SomaFM\'s player in a tab (the same one each time), not the stream; remembered on the device', !l5.box && l5.opened.length === 2 && l5.opened.every(o => o[0] === 'https://somafm.com/player24/station/christmas' && o[1] === 'somafm-player' && !o[2]) && l5.kept === '"somafm"', JSON.stringify(l5));
     // More → Listen → Here: back to playing inside the site
     await s.page.evaluate(() => { window.__failAll = false; });
     await tabTo(s.page, 'More');
