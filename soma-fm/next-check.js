@@ -165,7 +165,7 @@ const overflow = page => page.evaluate(() => {
   }
   const browser = await chromium.launch();
   let s = await open(browser);
-  const now = await s.page.evaluate(() => ({ hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, ''), tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr').length,
+  const now = await s.page.evaluate(() => ({ hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, ''), tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr:not(.ph)').length,
     tiles: [...document.querySelectorAll('.g2 .box b.big')].map(b => b.textContent), tabs: [...document.querySelectorAll('.tabs a')].map(a => a.textContent.trim()).join() }));
   check('Now: what\'s playing (from the feed), its status, two tiles and the plays just before', now.hero === hist[0][2] && now.tag === 'Now playing' && /^st (have|other|none|gone|disliked)$/.test(now.st) && now.stText.length > 3 && now.just === 7
     && now.tiles.length === 2 && /h$/.test(now.tiles[0]) && now.tiles[1] === '700' && now.tabs === 'Now,History,Stats,Shuffle,More', JSON.stringify(now));
@@ -279,7 +279,7 @@ const overflow = page => page.evaluate(() => {
   check('Stats: the first-time share left out at 0, else broken only at the comma', ft === null || (!/^0 /.test(ft.v) && ft.parts === 2 && ft.oneLine), JSON.stringify(ft));
   check('Stats: every section',['Your playlist', 'Categories', 'Songs by status', 'SomaFM rotation', 'Most played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
   await s.page.click('[data-act="topSort"][data-v="recent"]');
-  check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most recently replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most recently replayed") + .plays .pr').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
+  check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most recently replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most recently replayed") + .plays .pr:not(.ph)').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
   check('No script errors (Stats)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
 
@@ -627,6 +627,8 @@ const overflow = page => page.evaluate(() => {
       await tabTo(s.page, 'History');
       const cols = await s.page.evaluate(() => getComputedStyle(document.querySelector('.pr.ph')).display !== 'none' && [...document.querySelectorAll('.pr.ph div')].map(x => x.textContent).join());
       check('History from 900 px: a table, Time | Song | Status | Category | Plays | Actions', cols === 'Time,Song,Status,Category,Plays,Actions', String(cols));
+      const full = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph) .c-status .stl')].slice(0, 5).map(x => Math.round(x.getBoundingClientRect().width)));
+      check('History from 900 px: the status in words where it fits', full.length && full.every(w => w > 30), JSON.stringify(full));
     }
     if (!theme) check(`Midnight, dark, whatever the device is set to (${scheme})`, look.bg === 'rgb(11, 16, 32)', look.bg);
     if (theme === 'candy') check('Xmas Red (saved as candy), a dark theme, remembered', look.bg === 'rgb(25, 17, 19)', look.bg);
@@ -635,12 +637,23 @@ const overflow = page => page.evaluate(() => {
       const dots = await s.page.evaluate(() => [...document.querySelectorAll('#plist .m-side .st')].slice(0, 5).map(x => ({ w: Math.round(x.querySelector('.stl').getBoundingClientRect().width), name: x.textContent })));
       const cut = await s.page.evaluate(() => [...document.querySelectorAll('#plist .c-song b, #plist .c-song .by')].filter(e => e.scrollWidth > e.clientWidth + 1).length);
       check('Phone (360 px): song names and artists wrap, none cut off', cut === 0, String(cut));
+      check('Phone (360 px): rows without column names', await s.page.evaluate(() => document.querySelector('#plist .pr.ph').getBoundingClientRect().height === 0));
       check('Phone (360 px): History rows show the status as its dot alone, the name kept for screen readers', dots.length && dots.every(d => d.w <= 1 && d.name.length > 1), JSON.stringify(dots));
     }
     if (width === 600 && !theme && scheme === 'light') {
       await tabTo(s.page, 'History');
-      const shown = await s.page.evaluate(() => Math.round(document.querySelector('#plist .m-side .st .stl').getBoundingClientRect().width));
-      check('Tablet (600 px): the status names stay', shown > 30, String(shown));
+      // Tablet (Dan, Nov 6): the rows as on a phone (Open/Search, the status as its dot, plays and chevron at the right end)
+      // plus a Category column with the short names, and names over Time, Song and Category; on Now too
+      const tab = () => s.page.evaluate(() => { const l = document.querySelector('#plist .plays') || document.querySelector('.plays'), h = l.querySelector('.pr.ph'), rows = [...l.querySelectorAll('.pr:not(.ph)')].slice(0, 12);
+        return { head: h && h.getBoundingClientRect().height > 0 ? h.innerText.replace(/\s+/g, ' ').trim() : '', dots: rows.map(x => Math.round(x.querySelector('.m-side .stl').getBoundingClientRect().width)), cols: rows.some(x => ['.c-status', '.c-plays', '.c-act'].some(c => x.querySelector(c).getBoundingClientRect().width > 0)), side: rows.every(x => x.querySelector('.m-side').getBoundingClientRect().width > 0),
+          cats: rows.map(x => x.querySelector('.c-cat').innerText.trim()), song: Math.round(rows[0].querySelector('.c-song').getBoundingClientRect().width),
+          lined: rows.every(x => Math.abs(x.querySelector('.c-cat').getBoundingClientRect().left - h.children[3].getBoundingClientRect().left) <= 1) }; });
+      const th = await tab();
+      check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|None|Swing|Classics|Dance|Jazz|Mellow|Funk)$/.test(c)) && th.song >= 250 && th.lined, JSON.stringify(th));
+      await tabTo(s.page, 'Now');
+      const tn = await tab();
+      check('Tablet (600 px): Just played on Now the same', /^Time Song Category$/i.test(tn.head) && !tn.cols && tn.dots.every(w => w <= 1) && tn.side && tn.lined, JSON.stringify(tn));
+      await tabTo(s.page, 'History');
       const t12 = await s.page.evaluate(() => document.querySelector('#plist .pr:not(.ph) .c-time').innerText.split('\n').filter(x => /\d:\d\d/.test(x))[0]);
       check('Tablet (600 px): the time stays 12-hour', /^\d{1,2}:\d\d [AP]M$/.test(t12), t12);
       check('History: the line under the title is "SomaFM station play history"', await s.page.locator('header.top .sub').textContent() === 'SomaFM station play history');

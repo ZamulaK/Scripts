@@ -340,6 +340,8 @@ reloaded; the likely cause was a request frozen mid-flight keeping `ticking` set
 
 **How changes ship (Dan, Nov 6):** minor tweaks go straight to live (`node site/deploy-next.js main`); only major changes, or ones with decisions to make or a lot of back and forth, go to next first.
 
+**Column names on the tablet (Nov 6, on next):** lists 540–859 px wide (History, Just played and Stats' lists on the tablet; the half-width lists on wider screens from 1280 px) keep the phone row (Open/Search and the status dot, then the play count and chevron, at the right end), add a Category column with the short names (Swing, Jazz, Funk, None; — for songs not in the playlist), and show names over Time, Song and Category. Dan's rule: Status, Plays and Actions get their own columns only in the full table (860 px and wider), where the status fits in words. Lists under 540 px (phones, and the half-width lists at 900–1279 px) stay as rows without names. The column-name row (PHEAD) is now on every list.
+
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
 

@@ -17,7 +17,7 @@
   const PAGE_SIZES = [25, 50, 100, 250];
   const CATS = [['band', 'Band/Swing', 'Swing'], ['classics', 'Classics', 'Classics'], ['dance', 'Dance', 'Dance'], ['jazz', 'Jazz/Piano', 'Jazz'], ['mellow', 'Mellow', 'Mellow'], ['soul', 'Soul/Funk', 'Funk']];
   const CATS2 = CATS.concat([['uncat', 'No category', 'None']]);
-  const CAT = {}; for (const [k, n] of CATS) CAT[k] = n;
+  const CAT = {}, CATSH = {}; for (const [k, n, sh] of CATS) { CAT[k] = n; CATSH[k] = sh; }
   const LABEL = { have: 'In playlist', other: 'Other version', none: 'Not in playlist', gone: 'Gone from playlist', disliked: 'Disliked', unknown: '—' };
   const STATUS = [['none', 'Not in playlist'], ['other', 'Other version'], ['have', 'In playlist'], ['disliked', 'Disliked']];
   const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';
@@ -455,7 +455,7 @@
       <div class="c-time"><span class="t12">${time(p.at)}</span><span class="t24">${time24(p.at)}</span><small>${short(p.at)}</small>${isNow ? '<span class="now-tag">NOW</span>' : ''}</div>
       <div class="c-song"><div class="t"><b>${esc(p.title)}</b>${star}${icons}</div><div class="by">${esc(p.artist)}${len ? ` · ${len.measured ? '~' : ''}${History.formatClock(len.secs)}` : ''}</div>${p.album ? `<div class="alb">${esc(p.album)}</div>` : ''}${lnote}</div>
       <div class="c-status">${st(r)}</div>
-      <div class="c-cat">${inList(r) ? esc(CAT[catOf(r.item.id)] || 'No category') : '—'}</div>
+      <div class="c-cat">${!inList(r) ? '—' : catOf(r.item.id) ? `<span class="cf">${esc(CAT[catOf(r.item.id)])}</span><span class="cs">${esc(CATSH[catOf(r.item.id)])}</span>` : '<span class="cf">No category</span><span class="cs">None</span>'}</div>
       <div class="c-plays">${fmt(n)}×</div>
       <div class="c-go">${quickLinks(p, r)}</div>
       <div class="c-act">${chev()}</div>
@@ -579,7 +579,7 @@
       ${heroListen()}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>
-      <div><h3>Just played <a href="${esc(tabHref('history'))}" data-nav>See all</a></h3><div class="plays">${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
+      <div><h3>Just played <a href="${esc(tabHref('history'))}" data-nav>See all</a></h3><div class="plays">${PHEAD}${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
   };
 
   // History's rows after the filters, and the counts on the chips (counted before the status, category and favorite filters)
@@ -661,9 +661,11 @@
         <button class="pill" ${S.page < pages - 1 ? '' : 'disabled'} data-act="older">Older ›</button></div>
       <div class="foot">${D.plays.length ? `Recording since ${esc(when(D.plays[D.plays.length - 1][0]))} · ${fmt(D.plays.length)} plays · ${plural(gaps, 'gap')}` : D.loaded.plays ? 'No plays recorded yet.' : 'Loading the plays…'}</div>`;
   };
+  // Column names over the lists, shown wherever a list is laid out as a table (Dan, Nov 6: tablet and wider)
+  const PHEAD = '<div class="pr ph" aria-hidden="true"><div>Time</div><div>Song</div><div>Status</div><div>Category</div><div>Plays</div><div style="text-align:right">Actions</div></div>';
   function playsList(page, list) {
     if (!page.length) return `<div class="plays"><div class="empty">${rows().length ? 'No plays match.' : D.loaded.plays ? 'No plays recorded yet.' : 'Loading the plays…'}</div></div>`;
-    return `<div class="plays"><div class="pr ph" aria-hidden="true"><div>Time</div><div>Song</div><div>Status</div><div>Category</div><div>Plays</div><div style="text-align:right">Actions</div></div>` +
+    return `<div class="plays">${PHEAD}` +
       page.map(x => playRow(x.s, '', x.s.at === D.nowAt) + (x.s.gap && !S.latest ? '<div class="gaprow">Not recording here — plays in this stretch were missed</div>' : '')).join('') + '</div>';
   }
 
@@ -699,8 +701,8 @@
         ${t.recentFirsts ? `<div class="kv"><span><span class="nw">Of the last ${fmt(t.recent)} plays,</span> <span class="nw">heard for the first time</span></span><b class="nw">${fmt(t.recentFirsts)} · ${firsts}%</b></div>` : ''}
         <div class="snote">${t.repeatIntervals ? `Comes back is the measured average time between a song's replays (${fmt(t.repeatIntervals)} replays). ` : ''}As the first-time share drops toward zero, you've seen nearly all of the rotation.</div></div>
       <h3><span>${S.topSort === 'recent' ? '<span class="lw">Most recently replayed</span><span class="ln">Latest replays</span>' : 'Most played'}</span> <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
-      <div class="plays">${top.length ? top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty left">No songs have repeated yet.</div>'}</div>
-      ${ok && missing.length ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${missing.map(p => playRow(p, 'miss:', false)).join('')}</div>` : ''}
+      <div class="plays">${top.length ? PHEAD + top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty left">No songs have repeated yet.</div>'}</div>
+      ${ok && missing.length ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${PHEAD}${missing.map(p => playRow(p, 'miss:', false)).join('')}</div>` : ''}
       <h3>Recording</h3><div class="box"><div class="kv"><span>Since</span><b>${esc(day(since))} ${esc(time(since))}</b></div><div class="kv"><span>Plays saved</span><b>${fmt(t.plays)}</b></div>
         <div class="kv"><span>Time recorded</span><b class="ph2"><span>${esc(Stats.formatSpan(t.coveredSecs))}</span>${t.perHour ? `<span><span class="lw"> · </span>${t.perHour.toFixed(1)} songs an hour</span>` : ''}</b></div><div class="kv"><span>Gaps (station or recorder down)</span><b>${fmt(t.gaps)}</b></div></div>`;
     return head(since ? 'Since ' + day(since) : 'Your playlist and SomaFM\'s rotation') + `<div class="split"><div>${left}</div><div>${right}</div></div>`;
