@@ -60,6 +60,8 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await ctx.route('https://fonts.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
+  // Google's Cast sender library: here it only reports in (a check stands in for the rest where it needs to)
+  await ctx.route('https://www.gstatic.com/cv/**', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.__onGCastApiAvailable && window.__onGCastApiAvailable(!!(window.cast && window.cast.framework))' }));
   // Listen's player page on workers.dev (player/src/player.html), or none (as where it can't load)
   await ctx.route('https://lounge-player.soma-recorder.workers.dev/**', r => noPlayer ? r.abort() : r.fulfill({ status: 200, contentType: 'text/html', body: fs.readFileSync(path.join(__dirname, 'player', 'src', 'player.html'), 'utf8') }));
   // Video pictures: a 1-pixel stand-in, and none for a video id containing "gone" (as for a deleted video)
@@ -483,6 +485,38 @@ const overflow = page => page.evaluate(() => {
     const h3 = await acts();
     check('Now card: Stop there stops it (the bar agrees) and the volume goes', h3.labels[0] === 'Listen' && h3.bar === 'Listen' && !h3.vol, JSON.stringify(h3));
     check('No script errors (Listen)', s.errors.length === 0, s.errors.join(' | '));
+    await s.ctx.close();
+    // Cast (Dan, Nov 5): Google's sender library stood in for, with one Chromecast "Living Room TV" on the network
+    s = await open(browser, { width: 360, init: () => {
+      HTMLMediaElement.prototype.play = function () { setTimeout(() => this.dispatchEvent(new Event('playing')), 30); return Promise.resolve(); };
+      window.__cast = { loads: [], requested: 0, ended: 0 };
+      const ls = {}, fire = (t, e) => (ls[t] || []).forEach(f => f(e));
+      let state = 'NOT_CONNECTED', session = null;
+      const ctx = { setOptions() {}, getCastState: () => state, getCurrentSession: () => session, addEventListener(t, f) { (ls[t] = ls[t] || []).push(f); },
+        requestSession() {
+          window.__cast.requested++;
+          session = { getCastDevice: () => ({ friendlyName: 'Living Room TV' }), loadMedia(req) { const m = req.media; window.__cast.loads.push({ url: m.contentId, type: m.contentType, live: m.streamType, title: m.metadata.title, artist: m.metadata.artist, img: m.metadata.images[0].url, autoplay: req.autoplay }); return Promise.resolve(); } };
+          state = 'CONNECTED'; fire('cs', {}); fire('ss', { sessionState: 'SESSION_STARTED', session }); return Promise.resolve();
+        },
+        endCurrentSession() { window.__cast.ended++; session = null; state = 'NOT_CONNECTED'; fire('ss', { sessionState: 'SESSION_ENDED' }); fire('cs', {}); } };
+      window.cast = { framework: { CastState: { NO_DEVICES_AVAILABLE: 'NO_DEVICES_AVAILABLE', NOT_CONNECTED: 'NOT_CONNECTED', CONNECTED: 'CONNECTED' }, SessionState: { SESSION_STARTED: 'SESSION_STARTED', SESSION_ENDED: 'SESSION_ENDED' },
+        CastContextEventType: { CAST_STATE_CHANGED: 'cs', SESSION_STATE_CHANGED: 'ss' }, CastContext: { getInstance: () => ctx } } };
+      window.chrome = Object.assign(window.chrome || {}, { cast: { AutoJoinPolicy: { ORIGIN_SCOPED: 'origin_scoped' }, Image: function (u) { this.url = u; },
+        media: { DEFAULT_MEDIA_RECEIVER_APP_ID: 'CC1AD845', StreamType: { LIVE: 'LIVE' }, MediaInfo: function (id, type) { this.contentId = id; this.contentType = type; }, MusicTrackMediaMetadata: function () {}, LoadRequest: function (m) { this.media = m; } } } });
+    } });
+    await s.page.waitForTimeout(300);
+    const c0 = await s.page.evaluate(() => { const b = document.getElementById('castbtn'), h = document.querySelector('.hero').getBoundingClientRect(), t = document.querySelector('.hero-top').children;
+      return b && { tag: b.tagName, right: b.getBoundingClientRect().right, edge: h.right, lines: new Set([...t].map(x => Math.round(x.getBoundingClientRect().top + x.getBoundingClientRect().height / 2))).size }; });
+    check('Cast (360 px): a cast button on the card\'s top line when a Chromecast is around, inside the card', !!c0 && c0.tag === 'BUTTON' && c0.right <= c0.edge && c0.lines === 1, JSON.stringify(c0));
+    await s.page.click('#hlbtn'); await s.page.waitForTimeout(300);
+    await s.page.click('#castbtn'); await s.page.waitForTimeout(400);
+    const c1 = await s.page.evaluate(() => ({ cast: window.__cast, on: document.getElementById('castbtn').classList.contains('on'), listen: document.getElementById('hlbtn').textContent.trim(), hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, '') }));
+    const ld = c1.cast.loads[0] || {};
+    check('Cast: asks for a device, then the Chromecast plays SomaFM\'s stream itself (live, with the song); Listen here stops', c1.cast.requested === 1 && /^https:\/\/ice\d\.somafm\.com\/christmas-256-mp3$/.test(ld.url) && ld.type === 'audio/mpeg' && ld.live === 'LIVE' && ld.title === c1.hero && ld.autoplay === true && c1.on && /Listen/.test(c1.listen), JSON.stringify(c1));
+    await s.page.click('#castbtn'); await s.page.waitForTimeout(300);
+    const c2 = await s.page.evaluate(() => ({ ended: window.__cast.ended, on: document.getElementById('castbtn').classList.contains('on') }));
+    check('Cast: tapping it again stops casting', c2.ended === 1 && !c2.on, JSON.stringify(c2));
+    check('No script errors (Cast)', s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();
     // Where the player page can't load, the site plays the stream itself
     s = await open(browser, { width: 360, noPlayer: true, init: () => {

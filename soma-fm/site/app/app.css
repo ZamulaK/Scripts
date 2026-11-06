@@ -371,3 +371,7 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 .hero .vol svg{width:18px;height:18px;flex:none;opacity:.9}
 .hero .vol input{flex:1;min-width:0;accent-color:#fff;height:24px;cursor:pointer}
 .hero #volv{font-size:12.5px;font-weight:600;min-width:2.8em;text-align:right;font-variant-numeric:tabular-nums}
+/* Cast (Dan, Nov 5): a round button at the right of the card's top line, only when a Chromecast is around */
+.hero .icon.cast{margin-left:auto;width:34px;height:34px;background:rgba(255,255,255,.18);color:#fff}
+.hero .icon.cast svg{width:19px;height:19px}
+.hero .icon.cast.on{background:#fff;color:var(--hero1)}

@@ -463,7 +463,7 @@
   }
   // Open (the video you have) and Search YouTube as icons on the row itself, so the row needn't be opened for them.
   // An "other version" song has both: Open compares with the version you have; Search finds the one SomaFM played.
-  const SVG = { yt: '<rect class="ytbg" x="1" y="4.5" width="22" height="15" rx="4.6" fill="#f00" stroke="none"/><path d="M9.2 8.1v7.8l6.8-3.9z" fill="#fff" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
+  const SVG = { cast: '<path d="M3 7.5V6a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 6v12a1.5 1.5 0 0 1-1.5 1.5H14"/><path d="M3 11a8.5 8.5 0 0 1 8.5 8.5M3 14.5a5 5 0 0 1 5 5"/><circle cx="3.6" cy="18.9" r=".9" fill="currentColor"/>', yt: '<rect class="ytbg" x="1" y="4.5" width="22" height="15" rx="4.6" fill="#f00" stroke="none"/><path d="M9.2 8.1v7.8l6.8-3.9z" fill="#fff" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
   const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
   // Open or closed: the chevron turns over (and fills) while the row is open; the CSS does it from .open
   const chev = on => `<span class="chev ${on ? 'on' : ''}" aria-hidden="true">${ico('chev')}</span>`;
@@ -572,7 +572,7 @@
     const thumb = w => inList(r) ? `<a class="hthumb ${w}" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop tabindex="-1" aria-hidden="true"><img src="https://i.ytimg.com/vi/${encodeURIComponent(r.item.id)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.parentNode.remove()"></a>` : '';
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
-      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>
+      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}${castBtn()}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>
       <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}<span class="lw">YouTube</span><span class="ln">YT</span></a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount"><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span> ${chev()}</span></div>
       ${heroListen()}${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
@@ -842,6 +842,57 @@
     if (player.audio) player.audio.volume = v;
     if (frame.used) frameSend({ cmd: 'volume', v });
   }
+  /* ---------- Cast: the station on a Chromecast (Dan, Nov 5) ---------- */
+  // Google's sender library (Chrome only) finds Chromecasts on the network; the button shows only when there is one. The
+  // Chromecast fetches SomaFM's stream itself (no page address goes with it, so SomaFM's pages.dev block doesn't apply),
+  // with the song playing when casting starts. Starting a cast stops Listen here.
+  const castS = { ready: false, avail: false, on: false, name: '' };
+  function castBtn() {
+    if (!castS.avail && !castS.on) return '<span id="castbtn" hidden></span>';
+    return `<button class="icon cast ${castS.on ? 'on' : ''}" id="castbtn" data-act="cast" aria-pressed="${castS.on}" title="${castS.on ? 'Casting to ' + esc(castS.name) + '. Tap to stop.' : 'Cast to a TV or speaker'}" aria-label="${castS.on ? 'Casting. Tap to stop' : 'Cast'}">${ico('cast')}</button>`;
+  }
+  function paintCast() { const b = document.getElementById('castbtn'); if (b) b.outerHTML = castBtn(); }
+  function castSetup() {
+    if (!window.chrome || castS.ready) return;
+    window.__onGCastApiAvailable = ok => {
+      if (!ok || !window.cast || !cast.framework) return;
+      const ctx = cast.framework.CastContext.getInstance();
+      ctx.setOptions({ receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID, autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED });
+      castS.ready = true;
+      const sync = () => {
+        const st = ctx.getCastState(), sess = ctx.getCurrentSession();
+        castS.avail = st !== cast.framework.CastState.NO_DEVICES_AVAILABLE;
+        castS.on = st === cast.framework.CastState.CONNECTED;
+        castS.name = sess && sess.getCastDevice ? sess.getCastDevice().friendlyName || '' : '';
+        paintCast();
+      };
+      ctx.addEventListener(cast.framework.CastContextEventType.CAST_STATE_CHANGED, sync);
+      ctx.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED, e => {
+        sync();
+        if (e.sessionState === cast.framework.SessionState.SESSION_STARTED) castLoad(e.session);
+      });
+      sync();
+    };
+    const s = document.createElement('script');
+    s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+    s.async = true;
+    document.head.appendChild(s);
+  }
+  // What the Chromecast plays: the stream, as a live music track with the song and its picture
+  function castLoad(session) {
+    if (player.state !== 'off') listenStop();
+    const all = rows(), n = (D.nowAt && all.find(p => p.at === D.nowAt)) || all[0];
+    const r = n && statusOf(n.key, n.artist, n.title), vid = r && inList(r) ? r.item.id : '';
+    const info = new chrome.cast.media.MediaInfo(`https://ice6.somafm.com/${CHANNEL}-256-mp3`, 'audio/mpeg');
+    info.streamType = chrome.cast.media.StreamType.LIVE;
+    const md = new chrome.cast.media.MusicTrackMediaMetadata();
+    md.title = n ? n.title : 'Christmas Lounge'; md.artist = n ? n.artist : 'SomaFM'; md.albumName = 'SomaFM Christmas Lounge';
+    md.images = [new chrome.cast.Image(vid ? `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/hqdefault.jpg` : LOGO)];
+    info.metadata = md;
+    const req = new chrome.cast.media.LoadRequest(info);
+    req.autoplay = true;
+    session.loadMedia(req).then(() => toast(`Playing on ${castS.name || 'the TV'}.`), e => toast("The Chromecast couldn't play the stream" + (e && e.code ? ` (${e.code})` : '') + '.'));
+  }
   // Listen first in the card's row of buttons (Dan, Nov 5); shorter words on a phone
   function heroListenBtn() {
     if (viaSoma()) return `<button class="pill solid" id="hlbtn" data-act="listen" title="Opens SomaFM's player">${ico('open')}<span class="lw">Listen on SomaFM ↗</span><span class="ln">Listen ↗</span></button>`;
@@ -1036,6 +1087,12 @@
   const resultOf = p => statusOf(p.key, p.artist, p.title);
   function closePanels() { S.pick = null; S.noteFor = null; S.pickQ = ''; }
   const ACT = {
+    cast() {
+      if (!castS.ready) return;
+      const ctx = cast.framework.CastContext.getInstance();
+      if (castS.on) { ctx.endCurrentSession(true); toast('Stopped casting.'); }
+      else ctx.requestSession().catch(() => {});
+    },
     listen() { if (viaSoma()) openSoma(); else if (player.state === 'off') listenStart(); else listenStop(); },
     listenSoma() { player.fail = null; openSoma(); render(); },
     listenVia(b) { LS.set('listenVia2', b.dataset.v === 'somafm' ? 'somafm' : null); player.fail = null; render(); },
@@ -1524,6 +1581,7 @@
   readAddress();
   render();
   if (!OWN_DOMAIN) frameSetup();
+  castSetup();
   loadConfig();
   (async () => {
     // The plays and the document first (so the page can show something), then the playlist and what's playing
