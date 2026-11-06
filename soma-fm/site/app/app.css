@@ -402,3 +402,7 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 .find input{height:48px;border-radius:24px;background:var(--sc-high);border:0;padding:0 20px}
 @media (max-width:599px){.hero .acts .pill{font-size:13px;letter-spacing:0}}
 @media (max-width:399px){.tabs a svg{width:48px;padding:4px 12px}.tabs .listen .lic{width:44px}.tabs{padding-left:6px;padding-right:6px}}
+/* The "pop" when the page changes (animateNav in app.js): a ghost pill behind the bar grows into place, then the real one shows */
+.tabs a{position:relative;z-index:1}
+.nav-ghost{position:absolute;z-index:0;pointer-events:none}
+.tabs a.nav-ghosted svg{background:transparent}

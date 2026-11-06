@@ -995,6 +995,30 @@
   }
   function mediaState() { if (MS) MS.playbackState = player.state === 'off' ? 'none' : 'playing'; }
 
+  // "Pop" when the page changes (Dan, Nov 5, as in his EPGSA convention app): the new page's pill grows out from the
+  // middle while its icon gives a small bounce and its color fades in. A "ghost" copy behind the bar does the growing, so
+  // the icon itself isn't stretched. Only on a real change of page (the bar is redrawn often), not on the first one.
+  let navShown = null;
+  function animateNav() {
+    if (navShown === view) return;
+    const first = navShown === null; navShown = view;
+    if (first || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const nav = document.querySelector('.tabs'), item = nav && nav.querySelector('a.on'), pill = item && item.querySelector('svg');
+    const to = pill && pill.getBoundingClientRect();
+    if (!to || !to.width || !pill.animate) return;
+    const ease = 'cubic-bezier(.2,0,0,1)', dur = 280, cs = getComputedStyle(pill), box = nav.getBoundingClientRect();
+    const other = nav.querySelector('a:not(.on)');
+    const ghost = document.createElement('span');
+    ghost.className = 'nav-ghost';
+    Object.assign(ghost.style, { left: (to.left - box.left) + 'px', top: (to.top - box.top) + 'px', width: to.width + 'px', height: to.height + 'px', background: cs.backgroundColor, borderRadius: cs.borderRadius });
+    nav.prepend(ghost);
+    item.classList.add('nav-ghosted');
+    const anim = ghost.animate([{ transform: 'scaleX(.3)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: dur, easing: ease });
+    if (other) item.animate([{ color: getComputedStyle(other).color }, { color: getComputedStyle(item).color }], { duration: dur, easing: ease });
+    pill.animate([{ transform: 'scale(.75)' }, { transform: 'scale(1.15)', offset: 0.6 }, { transform: 'none' }], { duration: 380, easing: 'ease-out' });
+    const done = () => { item.classList.remove('nav-ghosted'); ghost.remove(); };
+    anim.finished.then(done, done);
+  }
   // History's search box: on a phone it shares the line with All ▾ (Dan, Nov 5), so where that leaves it too narrow
   // for the whole hint, the hint is just "Search…"
   const HINT = 'Search: song, artist, or album';
@@ -1017,6 +1041,7 @@
     document.getElementById('app').innerHTML = (view === 'shuffle' ? shufView : R[view])();
     document.title = 'Christmas Lounge · ' + TABS.find(t => t[0] === view)[1];
     fitHint();
+    animateNav();
     if (fid) { const e = document.getElementById(fid); if (e) { e.focus({ preventScroll: true }); if (sel && e.setSelectionRange) try { e.setSelectionRange(sel[0], sel[1]); } catch (x) { /* not a text field */ } } }
   }
   // Only the plays and the paging, for typing in the search box

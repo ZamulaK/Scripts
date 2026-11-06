@@ -425,6 +425,14 @@ const overflow = page => page.evaluate(() => {
     const fr = await s.page.evaluate(() => { const f = document.querySelector('iframe[src^="https://lounge-player."]'); const r = f && f.getBoundingClientRect(); return f && { allow: f.allow, w: r.width, op: getComputedStyle(f).opacity, hidden: f.getAttribute('aria-hidden') }; });
     check('Listen: the player page on workers.dev sits in an invisible frame, allowed to play sound', !!fr && fr.allow === 'autoplay' && fr.w <= 1 && fr.op === '0' && fr.hidden === 'true', JSON.stringify(fr));
     check('Listen (360 px): in the bar of pages beside the five pages, all on one line inside the window', l0.text === 'Listen' && l0.pressed === 'false' && l0.top === 1 && l0.right <= 360, JSON.stringify(l0));
+    { // The "pop" when the page changes (as in the EPGSA app): a ghost pill grows behind the new page's icon, then goes
+      const p0 = await s.page.evaluate(() => !!document.querySelector(".nav-ghost"));
+      await s.page.click(".tabs a:has-text(\"Stats\")"); await s.page.waitForTimeout(60);
+      const p1 = await s.page.evaluate(() => { const g = document.querySelector(".nav-ghost"), a = document.querySelector(".tabs a.on"); return { ghost: !!g, ghosted: !!(a && a.classList.contains("nav-ghosted")), on: a && a.textContent.trim() }; });
+      await s.page.waitForTimeout(500);
+      const p2 = await s.page.evaluate(() => ({ ghost: !!document.querySelector(".nav-ghost"), ghosted: !!document.querySelector(".tabs a.nav-ghosted"), bg: getComputedStyle(document.querySelector(".tabs a.on svg")).backgroundColor }));
+      check("Bar: a new page pops in (a ghost pill grows behind it, then the real pill is back); none on first load", !p0 && p1.ghost && p1.ghosted && p1.on === "Stats" && !p2.ghost && !p2.ghosted && p2.bg !== "rgba(0, 0, 0, 0)", JSON.stringify([p0, p1, p2]));
+      await tabTo(s.page, "Now"); await s.page.waitForTimeout(400); }
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(400);
     const l1 = await bar();
     check('Listen: plays SomaFM\'s stream from the player page (not the site), on to the next server when one refuses; the button turns to Stop', l1.direct === 0 && l1.text === 'Stop' && /\bon\b/.test(l1.cls) && l1.plays.length === 2 && /^https:\/\/ice6\.somafm\.com\/christmas-/.test(l1.plays[0]) && /^https:\/\/ice2\.somafm\.com\/christmas-/.test(l1.plays[1]), JSON.stringify(l1));
