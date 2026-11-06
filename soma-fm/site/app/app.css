@@ -168,7 +168,7 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 /* Open on YouTube, in YouTube's red so it reads as YouTube in every theme (Dan, Nov 5): in the rows a red circle with
    a white screen and red ▶; on the Now card the red screen with a white ▶ */
 .icon.open{background:#f00}
-.icon.open svg{width:22px;height:22px}
+.icon.open svg{width:24px;height:24px}
 .hero .acts .yt svg{width:22px;height:22px;margin:-2px 0}
 .notewrap{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px}
 .notewrap .note{flex:1;margin:0}
