@@ -1,6 +1,6 @@
 # SomaFM → Xmas Mixed checker: handoff
 
-Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**. **Next session: start with §8d. The new site is the live site at xmaslounge.pages.dev since Nov 4, 2026 (Dan's go-ahead); the old one is kept at xmaslounge.pages.dev/old/ for reference.**
+Handoff from a claude.ai conversation (Oct 24–26, 2026) to Claude Code. Current version: **3.26.0**. **Next session: start with §8d (its later paragraphs cover Nov 5). The live site is https://xmaslounge.zamulagh.fyi (Dan's own domain since Nov 5; xmaslounge.pages.dev redirects there) and the test address https://next.xmaslounge.zamulagh.fyi; the old site is kept at /old/. Since Nov 5 the site also plays the station (Listen), casts to a Chromecast, has a Material 3 look, and is an installed Android app (PWABuilder package fyi.zamulagh.xmaslounge).**
 
 The project lives in the `soma-fm/` folder of Dan's public GitHub repo `ZamulaK/Scripts` (local clone:
 `C:\Utility\Scripts\UserScripts`), next to his other userscripts. Claude may commit and push changes to it.
@@ -405,9 +405,10 @@ HISTORY_MAX stays only in the frozen userscript and today's site); restore is Me
 
 ## 10. Open items / next steps
 
-0. **New site (Pocket v2): live at xmaslounge.pages.dev since Nov 4 (§8d).** Gates for each change: `npm run test:next` (add a check per tweak) and the worker's `npm test`; then `node site/deploy-next.js` (next, to try) and `node site/deploy-next.js main` (live). Both build the old site into /old (from `site/public`, paths moved under /old/); `node site/deploy.js` would put the old site back as the live one. Retire `site/public` + `site/deploy.js` only with Dan (they are what /old is built from).
+0. **New site (Pocket v2): live since Nov 4, at xmaslounge.zamulagh.fyi since Nov 5 (§8d).** Gates for each change: `npm run test:next` (add a check per tweak) and the worker's `npm test`; then `node site/deploy-next.js` (next, to try) and `node site/deploy-next.js main` (live). Both build the old site into /old (from `site/public`, paths moved under /old/); `node site/deploy.js` would put the old site back as the live one. Retire `site/public` + `site/deploy.js` only with Dan (they are what /old is built from).
 1. ~~Shuffle: first real run~~ done (Dan shuffles from the site; quota and last shuffle are synced since 3.26.0).
 2. ~~Laptop setup~~ no longer needed: the site records and syncs on every device.
+4. **Open from Nov 5:** (a) switch the pages.dev redirect (site/functions/_middleware.js) from 302 to 301 once Dan is settled on the new domain; (b) the workers.dev player page (player/, Worker lounge-player) is only a fallback for the pages.dev addresses now: keep, or retire with Dan; (c) Cast shows the song from when casting started (updating it would mean reloading the stream); (d) the Android app's signing key stays with Dan, and a new key needs a new assetlinks.json; (e) ask Dan whether a tab he comes back to is up to date (the resume-refresh fix from Nov 4).
 3. **Analyses once a few days are recorded** (from an exported CSV): (a) shuffled fixed list vs independent random picks, from the spread of replay intervals; (b) songs played more often than chance would explain.
 
 ## 11. Working with Dan
@@ -417,6 +418,8 @@ HISTORY_MAX stays only in the frozen userscript and today's site); restore is Me
 - **Regression gates with every shipped feature** (§9).
 - **Ask questions as plain typed text.** Pick-list / selector answers from tool UIs don't reach him; he always types answers.
 - He tests on the tablet right away and reports precisely (screenshots, exact titles). Take reports literally, and verify against his data when it's available.
+- He shapes the look by trying it: expect mock-ups first for anything visual (side-by-side screenshots made with Playwright from the site's own files against a stand-in /api), then small rounds on next. Production deploys need his explicit go-ahead in that same message ("move it to live"), each time.
+- Never hide or spoof the Referer (or similar) to get past a provider's block; he agreed. SomaFM blocks a list of free hosts, so the site plays from his own domain.
 - He corrected an earlier example I used: "Faithful Ye Come" (Tetsumi Nagaka) is a **different song** from "O Come All Ye Faithful". Don't assume songs are the same from similar titles.
 
 ## 12. Version history (short)
