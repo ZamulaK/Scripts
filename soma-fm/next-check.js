@@ -706,7 +706,7 @@ const overflow = page => page.evaluate(() => {
           cats: rows.map(x => x.querySelector('.c-cat').innerText.trim()), song: Math.round(rows[0].querySelector('.c-song').getBoundingClientRect().width),
           lined: rows.every(x => Math.abs(x.querySelector('.c-cat').getBoundingClientRect().left - h.children[3].getBoundingClientRect().left) <= 1) }; });
       const th = await tab();
-      check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|Swing|Classics|Dance|Jazz|Mellow|Funk|)$/.test(c)) && th.cats.includes('') && th.song >= 250 && th.lined, JSON.stringify(th));
+      check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|Swing|Classics|Dance|Jazz|Mellow|Funk|)$/.test(c)) && th.cats.includes('') && th.cats.includes('—') && await s.page.evaluate(() => /^↻ Refresh playlist$/.test(document.querySelector('[data-act=refresh]').textContent.trim())) && th.song >= 250 && th.lined, JSON.stringify(th));
       await tabTo(s.page, 'Now');
       const tn = await tab();
       // The Now card's category above its play count, on the tablet (Dan, Nov 6)
