@@ -485,3 +485,7 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 :root[data-theme] .hero-detail .detail{background:linear-gradient(135deg,color-mix(in srgb,var(--hero1) 26%,var(--card)) 0 44%,color-mix(in srgb,var(--hero2) 26%,var(--card)) 56% 100%)}
 .hero-detail .detail::before{content:"";display:block;height:1px;margin:-16px -22px 14px;background:rgba(255,255,255,.12)}
 @media (max-width:599px){.hero-detail .detail{padding:14px 16px 18px}.hero-detail .detail::before{margin:-14px -16px 12px}}
+/* Listen in the bar while it plays (Dan, Nov 6): white like the Now card's Listen button, so it reads as an action that's on
+   rather than as the page you're on (the accent pill) */
+.tabs .listen.on,.tabs .listen.loading{color:var(--ink)}
+.tabs .listen.on .lic,.tabs .listen.loading .lic{background:#fff;color:var(--hero1)}

@@ -474,6 +474,9 @@ const overflow = page => page.evaluate(() => {
     await tabTo(s.page, 'History');
     const l2 = await bar();
     check('Listen: keeps playing on another page', l2.text === 'Stop' && l2.plays.length === 2, JSON.stringify(l2));
+    // While it plays, the bar's Listen is white like the Now card's Listen, not the accent of the page you're on (Dan, Nov 6)
+    const lic = await s.page.evaluate(() => ({ on: getComputedStyle(document.querySelector('.tabs .listen.on .lic')).backgroundColor, page: getComputedStyle(document.querySelector('.tabs a.on svg')).backgroundColor }));
+    check('Listen: white in the bar while it plays, unlike the current page’s pill', lic.on === 'rgb(255, 255, 255)' && lic.page !== lic.on, JSON.stringify(lic));
     await s.page.click('.tabs .listen'); await s.page.waitForTimeout(200);
     const l3 = await s.page.evaluate(() => ({ text: document.querySelector('.tabs .listen').textContent.trim(), state: navigator.mediaSession.playbackState }));
     const fm3 = await fmeta();
