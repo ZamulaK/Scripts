@@ -415,6 +415,10 @@ const overflow = page => page.evaluate(() => {
       const avg = [...document.querySelectorAll('.box .k')].find(e => /avg/.test(e.innerText)), rec = document.querySelector('.ph2');
       return { title: h.firstElementChild.innerText, oneLine: Math.abs(tt.top + tt.height / 2 - (sg.top + sg.height / 2)) <= 6 && tt.height < 26, avg: avg && avg.innerText, avgLines: avg && Math.round(avg.getBoundingClientRect().height / parseFloat(getComputedStyle(avg).lineHeight)), rec: rec && rec.innerText.split('\n') }; });
     check('Stats (412 px): "avg song" on one line, "Latest replays" beside its sort, Time recorded as total then songs an hour', st412.avg === 'avg song' && st412.avgLines === 1 && st412.title === 'Latest replays' && st412.oneLine && st412.rec && st412.rec.length === 2 && / h /.test(st412.rec[0]) && /songs an hour$/.test(st412.rec[1]), JSON.stringify(st412));
+    // "until a song comes back" is the measured average between replays (Dan, Nov 6), the same as that row's average
+    const back = await s.page.evaluate(() => { const tile = [...document.querySelectorAll('.box')].find(b => /until a song comes back/.test(b.innerText)), row = [...document.querySelectorAll('.kv')].find(k => /Between/.test(k.innerText));
+      const m = /(?:(\d+) h )?(\d+) min average/.exec(row.innerText.replace(/\s+/g, ' ')); return { tile: tile.querySelector('b.big').innerText, avgH: m ? ((+m[1] || 0) + +m[2] / 60) : null, note: /measured average time between a song's replays/.test(document.body.innerText) }; });
+    check('Stats: "until a song comes back" is the measured average between replays', back.avgH !== null && Math.abs(parseFloat(back.tile) - back.avgH) <= 0.06 && back.note, JSON.stringify(back));
     await s.ctx.close();
     // Listen (Dan, Nov 5): the station's stream from the bar of pages. Playing is stood in for (no sound here): the first
     // server refuses, so the next one is tried; the phone's media controls get the song and its picture.

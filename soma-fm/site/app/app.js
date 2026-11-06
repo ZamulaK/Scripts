@@ -556,7 +556,8 @@
     const open = S.open === id, plays = counts.get(n.key) || 0;
     const t = stats();
     // Dan, Nov 4: each count with its words beside it (under it when there's no room); shorter words on a phone
-    const tiles = `<div class="g2" style="margin-top:12px"><div class="box mid"><div class="tl"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song repeats</span></div></div>` +
+    // Until a song repeats / comes back: the measured average between replays, not the rotation estimate (Dan, Nov 6)
+    const tiles = `<div class="g2" style="margin-top:12px"><div class="box mid"><div class="tl"><b class="big">${t.repeatIntervals ? esc(backText(t.avgRepeatSecs)) : '—'}</b><span class="k">until a song repeats</span></div></div>` +
       `<div class="box"><div class="tl"><b class="big">${fmt(D.plays.length)}</b><span class="k"><span class="lw">plays recorded</span><span class="ln">plays</span></span></div><div class="tl tl2"><b>${fmt(t.unique)}</b><span class="k"><span class="lw">distinct songs</span><span class="ln">songs</span></span></div></div></div>`;
     // Favorite: a star beside the song's name (Dan, Nov 4), so the buttons fit on one line on a phone
     const f = inList(r) && isFav(r.item.id);
@@ -691,11 +692,11 @@
 `;
     }
     const firsts = t.recent ? Math.round(t.recentFirsts / t.recent * 100) : 0;
-    const right = !t.plays ? '<h3>SomaFM rotation</h3><div class="box">No plays recorded yet.</div>' : `<h3>SomaFM rotation</h3><div class="g2"><div class="box"><b class="big">${t.rateRepeatSecs ? esc(backText(t.rateRepeatSecs)) : '—'}</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.unique)}</b><span class="k">different songs played</span></div></div>
+    const right = !t.plays ? '<h3>SomaFM rotation</h3><div class="box">No plays recorded yet.</div>' : `<h3>SomaFM rotation</h3><div class="g2"><div class="box"><b class="big">${t.repeatIntervals ? esc(backText(t.avgRepeatSecs)) : '—'}</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.unique)}</b><span class="k">different songs played</span></div></div>
       <div class="box" style="margin-top:12px"><div class="kv"><span>Songs played more than once</span><b>${fmt(t.repeated)}</b></div><div class="kv"><span>Plays per song</span><b>${t.avgPlays.toFixed(1)}</b></div>
         ${t.repeatIntervals ? `<div class="kv"><span><span class="lw">Between a song's replays</span><span class="ln">Between replays</span></span><span class="r lines"><span>${numsBold(Stats.formatSpan(t.avgRepeatSecs))} average</span><span>${numsBold(Stats.formatSpan(t.medianRepeatSecs))} median</span></span></div>` : ''}
         ${t.recentFirsts ? `<div class="kv"><span><span class="nw">Of the last ${fmt(t.recent)} plays,</span> <span class="nw">heard for the first time</span></span><b class="nw">${fmt(t.recentFirsts)} · ${firsts}%</b></div>` : ''}
-        <div class="snote">${t.rateRepeatSecs ? `Comes back worked out from ${esc(Stats.formatSpan(t.coveredSecs))} of recorded time and ${fmt(t.plays)} plays of ${fmt(t.unique)} songs. ` : ''}As the first-time share drops toward zero, you've seen nearly all of the rotation.</div></div>
+        <div class="snote">${t.repeatIntervals ? `Comes back is the measured average time between a song's replays (${fmt(t.repeatIntervals)} replays). ` : ''}As the first-time share drops toward zero, you've seen nearly all of the rotation.</div></div>
       <h3><span>${S.topSort === 'recent' ? '<span class="lw">Most recently replayed</span><span class="ln">Latest replays</span>' : 'Most played'}</span> <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
       <div class="plays">${top.length ? top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty left">No songs have repeated yet.</div>'}</div>
       ${ok && missing.length ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${missing.map(p => playRow(p, 'miss:', false)).join('')}</div>` : ''}
