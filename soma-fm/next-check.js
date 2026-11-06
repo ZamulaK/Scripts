@@ -507,7 +507,7 @@ const overflow = page => page.evaluate(() => {
       const al = JSON.parse(fs.readFileSync(path.join(APP, ".well-known", "assetlinks.json"), "utf8"))[0];
       check("Android app link: assetlinks.json names the PWABuilder package and its key", al.target.package_name === "fyi.zamulagh.xmaslounge" && /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(al.target.sha256_cert_fingerprints[0]), JSON.stringify(al));
     // Listen on the Now Playing card: first in its row of buttons, short words on a phone; the volume under them while it
-    // plays; YouTube shortened to YT on a phone (Dan, Nov 5)
+    // plays. No Note button since Nov 6 (Dan: Add a note is in the opened card), so "YouTube" fits in full on a phone
     await tabTo(s.page, 'Now');
     const acts = () => s.page.evaluate(() => { const kids = [...document.querySelectorAll('.hero .acts > *')], hero = document.querySelector('.hero').getBoundingClientRect(), r = document.getElementById('hlisten');
       const shown = el => [...el.querySelectorAll('.lw, .ln')].filter(x => x.offsetWidth).map(x => x.textContent).join('') || el.textContent.trim();
@@ -515,7 +515,7 @@ const overflow = page => page.evaluate(() => {
         vol: !!(r && r.querySelector('#vol')), volRight: r && r.querySelector('#vol') ? r.getBoundingClientRect().right : 0, bar: document.querySelector('.tabs .listen').textContent.trim(),
         ytColor: (() => { const y = document.querySelector('.hero .acts .yt svg .ytbg'); return y ? y.getAttribute('fill') : ''; })(), listenSolid: document.getElementById('hlbtn').classList.contains('solid') }; });
     const h0 = await acts();
-    check('Now card (360 px): Listen first in the row of buttons, "Listen", "YT" and the plays as "14×" on a phone, all on one line; no volume while it isn\'t playing', h0.first === 'hlbtn' && h0.labels[0] === 'Listen' && h0.labels.includes('YT') && /^[0-9]+×$/.test(h0.labels[h0.labels.length - 1]) && h0.lines === 1 && h0.right <= h0.edge && !h0.vol, JSON.stringify(h0));
+    check('Now card (360 px): Listen first in the row of buttons, "Listen", "YouTube" (no Note) and the plays as "14×" on a phone, all on one line; no volume while it isn\'t playing', h0.first === 'hlbtn' && h0.labels[0] === 'Listen' && h0.labels.includes('YouTube') && !h0.labels.some(l => /Note/.test(l)) && /^[0-9]+×$/.test(h0.labels[h0.labels.length - 1]) && h0.lines === 1 && h0.right <= h0.edge && !h0.vol, JSON.stringify(h0));
     check('Now card: the YouTube mark is YouTube\'s red with a white ▶; Listen has the highlight', h0.ytColor === '#f00' && h0.listenSolid, JSON.stringify(h0));
     const rowYt = await s.page.evaluate(() => { const b = document.querySelector('.plays .icon.open'), c = document.querySelector('.plays .icon:not(.open)'); return b && { bg: getComputedStyle(b).backgroundColor, plain: c && getComputedStyle(c).backgroundColor, rect: b.querySelector('.ytbg') && b.querySelector('.ytbg').getAttribute('fill') }; });
     check('Song rows: the open button is the small red YouTube mark on the plain round button (like the search one)', !!rowYt && rowYt.rect === '#f00' && (!rowYt.plain || rowYt.bg === rowYt.plain), JSON.stringify(rowYt));
