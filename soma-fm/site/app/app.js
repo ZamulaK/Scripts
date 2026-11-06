@@ -607,7 +607,8 @@
       // sh: a shorter name below 900 px, on the first row (the names today's site uses on the tablet)
       st: (k, l, sh) => `<button class="${z(count(k), S.status.has(k))}" aria-pressed="${S.status.has(k)}" data-act="fstatus" data-v="${k}" aria-label="${l} ${fmt(count(k))}">${sh ? `<span class="wide">${l}</span><span class="narrow">${sh}</span>` : l} <span class="n">${fmt(count(k))}</span></button>`,
       fav: sh => `<button class="${z(favN, S.favOnly)}" aria-pressed="${S.favOnly}" data-act="ffav" aria-label="Favorites ${fmt(favN)}">★${sh ? '<span class="wide"> Favorites</span>' : ' Favorites'} <span class="n">${fmt(favN)}</span></button>`,
-      cat: (k, l) => `<button class="${z(catN(k), S.cats.has(k))}" aria-pressed="${S.cats.has(k)}" data-act="fcat" data-v="${k}">${l} <span class="n">${fmt(catN(k))}</span></button>`,
+      // sh: the short name on phones (Swing, Jazz, Funk; Dan, Nov 6)
+      cat: (k, l, sh) => `<button class="${z(catN(k), S.cats.has(k))}" aria-pressed="${S.cats.has(k)}" data-act="fcat" data-v="${k}" aria-label="${l} ${fmt(catN(k))}">${sh && sh !== l ? `<span class="lw">${l}</span><span class="ln">${sh}</span>` : l} <span class="n">${fmt(catN(k))}</span></button>`,
       latest: () => `<button class="chip" aria-pressed="${S.latest}" data-act="flatest" title="One row per song, at its most recent play" aria-label="Latest play only"><span class="wide">Latest play only</span><span class="narrow">Latest</span></button>`,
     };
     // In All filters, the ones with nothing in them go to the end of their group (the order is kept otherwise)
@@ -621,7 +622,7 @@
       if (S.allFilters) {
         // Latest is always the second chip (Dan, Nov 4)
         const sts = STATUS.map(([k, l]) => ({ n: count(k), on: S.status.has(k), html: C.st(k, l) }));
-        const fc = [{ n: favN, on: S.favOnly, html: C.fav() }].concat(CATS2.map(([k, l]) => ({ n: catN(k), on: S.cats.has(k), html: C.cat(k, l) })));
+        const fc = [{ n: favN, on: S.favOnly, html: C.fav() }].concat(CATS2.map(([k, l, sh]) => ({ n: catN(k), on: S.cats.has(k), html: C.cat(k, l, k === 'uncat' ? '' : sh) })));
         filters = `<div class="fpanel" role="group" aria-label="All filters"><h5>Status</h5><div class="grp">${C.all()}${C.latest()}${zeroLast(sts)}</div>
           <h5>Favorites and categories</h5><div class="grp">${zeroLast(fc)}</div>
           <div class="end"><button class="pill" ${active ? '' : 'disabled'} data-act="fclear">Clear all</button><button class="pill primary" data-act="fdone">Done</button></div></div>`;
@@ -677,7 +678,7 @@
     if (!ok) left = `<h3>Your playlist</h3><div class="box">${D.playlistError ? `Couldn't read the playlist: ${esc(D.playlistError)}` : 'Reading the playlist…'}</div>`;
     else {
       const heard = P.heard, notHeard = P.notHeard;
-      left = `<h3>Your playlist</h3><div class="g3 wide-mid"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmin(P.total)}</b><span class="k">total length</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k">average song</span></div></div>
+      left = `<h3>Your playlist</h3><div class="g3 wide-mid"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmin(P.total)}</b><span class="k">total length</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k"><span class="lw">average song</span><span class="ln">avg song</span></span></div></div>
       <h3>Songs by status</h3>${inOut(t)}${statusBox(t)}
       <h3>Heard so far</h3><div class="box"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
         ${notHeard.length ? `<details class="sub"><summary>Not heard yet: ${fmt(notHeard.length)}</summary><ul>${notHeard.map(it => `<li><span class="nh">${esc(it.title)}</span><span class="acts">${starBtn(it.id, it.title)}<a class="pill" href="${ytWatch(it.id)}" target="_blank" rel="noopener">Open</a></span></li>`).join('')}</ul></details>` : '<div class="kv"><span>Not heard yet</span><b>0</b></div>'}
@@ -695,11 +696,11 @@
         ${t.repeatIntervals ? `<div class="kv"><span><span class="lw">Between a song's replays</span><span class="ln">Between replays</span></span><span class="r lines"><span>${numsBold(Stats.formatSpan(t.avgRepeatSecs))} average</span><span>${numsBold(Stats.formatSpan(t.medianRepeatSecs))} median</span></span></div>` : ''}
         ${t.recentFirsts ? `<div class="kv"><span><span class="nw">Of the last ${fmt(t.recent)} plays,</span> <span class="nw">heard for the first time</span></span><b class="nw">${fmt(t.recentFirsts)} · ${firsts}%</b></div>` : ''}
         <div class="snote">${t.rateRepeatSecs ? `Comes back worked out from ${esc(Stats.formatSpan(t.coveredSecs))} of recorded time and ${fmt(t.plays)} plays of ${fmt(t.unique)} songs. ` : ''}As the first-time share drops toward zero, you've seen nearly all of the rotation.</div></div>
-      <h3>${S.topSort === 'recent' ? 'Most recently replayed' : 'Most played'} <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
+      <h3><span>${S.topSort === 'recent' ? '<span class="lw">Most recently replayed</span><span class="ln">Latest replays</span>' : 'Most played'}</span> <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
       <div class="plays">${top.length ? top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty left">No songs have repeated yet.</div>'}</div>
       ${ok && missing.length ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${missing.map(p => playRow(p, 'miss:', false)).join('')}</div>` : ''}
       <h3>Recording</h3><div class="box"><div class="kv"><span>Since</span><b>${esc(day(since))} ${esc(time(since))}</b></div><div class="kv"><span>Plays saved</span><b>${fmt(t.plays)}</b></div>
-        <div class="kv"><span>Time recorded</span><b>${esc(Stats.formatSpan(t.coveredSecs))}${t.perHour ? ` · ${t.perHour.toFixed(1)} songs an hour` : ''}</b></div><div class="kv"><span>Gaps (station or recorder down)</span><b>${fmt(t.gaps)}</b></div></div>`;
+        <div class="kv"><span>Time recorded</span><b class="ph2"><span>${esc(Stats.formatSpan(t.coveredSecs))}</span>${t.perHour ? `<span><span class="lw"> · </span>${t.perHour.toFixed(1)} songs an hour</span>` : ''}</b></div><div class="kv"><span>Gaps (station or recorder down)</span><b>${fmt(t.gaps)}</b></div></div>`;
     return head(since ? 'Since ' + day(since) : 'Your playlist and SomaFM\'s rotation') + `<div class="split"><div>${left}</div><div>${right}</div></div>`;
   };
   // In your playlist and disliked, as two cards: of the different songs played, and of all plays (Dan, Nov 4).

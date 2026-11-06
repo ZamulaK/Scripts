@@ -440,3 +440,13 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
    colored buttons keep their own. */
 .pill:where(:not(.primary,.solid,.good,.bad,.dis,.on,.danger)){background:color-mix(in srgb,var(--accent) 20%,var(--card))}
 .hero .pill:where(:not(.solid)){background:rgba(255,255,255,.22)}
+/* Filter chips on phones (Dan, Nov 6): tighter, so the first row (All, Latest, In list, Not in list, ★) fits on one line on
+   his Pixel with only All ▾ and the search on the next; the All filters panel likewise, with the short category names */
+@media (max-width:599px){
+  .quick,.fpanel .grp{gap:4px}
+  .quick .chip,.fpanel .chip{padding:0 6px;font-size:12px;gap:3px;letter-spacing:-.01em}
+  .quick .chip .n,.fpanel .chip .n{font-size:11px}
+  .chip[aria-pressed="true"]::before{margin-right:0}
+  .quick .more-f{padding:0 8px;gap:4px}
+  .ph2 > span{display:block}
+}

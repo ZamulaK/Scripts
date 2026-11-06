@@ -399,6 +399,22 @@ const overflow = page => page.evaluate(() => {
     s = await open(browser, { width: 412, path: '/history' });
     const f3 = await fl();
     check('History (412 px): the search box beside All ▾, the whole hint where it fits', (f3.w >= 300 ? f3.ph === 'Search: song, artist, or album' : f3.w < 240 ? f3.ph === 'Search…' : true) && f3.inRow && f3.sameLine && f3.right <= 412 && f3.page <= 412, JSON.stringify(f3));
+    // Tighter chips (Dan, Nov 6): with four-digit counts, All, Latest, In list, Not in list and ★ still share the first line,
+    // All ▾ alone on the next (with the search); in All filters, the short category names on a phone
+    const chipRow = await s.page.evaluate(() => { const v = ['1,388', '1,016', '372', '24']; [...document.querySelectorAll('.quick .chip .n')].forEach((n, i) => n.textContent = v[i]);
+      const k = [...document.querySelectorAll('.quick .chip')], m = document.querySelector('.quick .more-f'), t = k.map(e => Math.round(e.getBoundingClientRect().top));
+      return { n: k.length, oneLine: t.every(x => x === t[0]), moreBelow: m.getBoundingClientRect().top > t[0] + 10, right: Math.round(k[k.length - 1].getBoundingClientRect().right) }; });
+    check('History (412 px): the five first-row chips on one line with four-digit counts, All ▾ on the next', chipRow.n === 5 && chipRow.oneLine && chipRow.moreBelow && chipRow.right <= 412 - 16, JSON.stringify(chipRow));
+    await s.page.click('.more-f'); await s.page.waitForTimeout(300);
+    const catNames = await s.page.evaluate(() => [...document.querySelectorAll('.fpanel [data-act=fcat]')].map(e => e.innerText.replace(/\s*\d+$/, '').trim()));
+    check('History (412 px): All filters shows Swing, Jazz and Funk for the categories', ['Swing', 'Jazz', 'Funk', 'Classics', 'No category'].every(x => catNames.includes(x)) && !catNames.some(x => /\//.test(x)), JSON.stringify(catNames));
+    // Stats on the phone: "avg song", Latest replays on the heading's line, Time recorded on two lines
+    await tabTo(s.page, 'Stats');
+    await s.page.click('[data-act=topSort][data-v=recent]'); await s.page.waitForTimeout(300);
+    const st412 = await s.page.evaluate(() => { const h = [...document.querySelectorAll('h3')].find(e => e.querySelector('.seg')), tt = h.firstElementChild.getBoundingClientRect(), sg = h.querySelector('.seg').getBoundingClientRect();
+      const avg = [...document.querySelectorAll('.box .k')].find(e => /avg/.test(e.innerText)), rec = document.querySelector('.ph2');
+      return { title: h.firstElementChild.innerText, oneLine: Math.abs(tt.top + tt.height / 2 - (sg.top + sg.height / 2)) <= 6 && tt.height < 26, avg: avg && avg.innerText, avgLines: avg && Math.round(avg.getBoundingClientRect().height / parseFloat(getComputedStyle(avg).lineHeight)), rec: rec && rec.innerText.split('\n') }; });
+    check('Stats (412 px): "avg song" on one line, "Latest replays" beside its sort, Time recorded as total then songs an hour', st412.avg === 'avg song' && st412.avgLines === 1 && st412.title === 'Latest replays' && st412.oneLine && st412.rec && st412.rec.length === 2 && / h /.test(st412.rec[0]) && /songs an hour$/.test(st412.rec[1]), JSON.stringify(st412));
     await s.ctx.close();
     // Listen (Dan, Nov 5): the station's stream from the bar of pages. Playing is stood in for (no sound here): the first
     // server refuses, so the next one is tried; the phone's media controls get the song and its picture.
