@@ -474,5 +474,14 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 /* Now card (Dan, Nov 6): the song's category above its play count, on the tablet and wider (phones leave it out for room) */
 .hero .hct{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.25}
 .hero .hcat{font-size:12px;font-weight:500;opacity:.85}
-.hero .hcat.none{opacity:.6}
+
 @media (max-width:599px){.hero .hcat{display:none}}
+/* The Now card opened (Dan, Nov 6): its details hang from the card as one piece: the card's lower corners squared, the
+   details right under it in a deep tint of the card's own colors, rounded at the bottom like the card */
+.hero.open{border-bottom-left-radius:0;border-bottom-right-radius:0;box-shadow:none}
+.hero-detail .detail{margin-top:0;border:0;border-radius:0 0 28px 28px;padding:16px 22px 20px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--hero1) 30%,var(--card)),color-mix(in srgb,var(--hero2) 30%,var(--card)));
+  box-shadow:0 4px 12px rgba(0,0,0,.25)}
+:root[data-theme] .hero-detail .detail{background:linear-gradient(135deg,color-mix(in srgb,var(--hero1) 26%,var(--card)) 0 44%,color-mix(in srgb,var(--hero2) 26%,var(--card)) 56% 100%)}
+.hero-detail .detail::before{content:"";display:block;height:1px;margin:-16px -22px 14px;background:rgba(255,255,255,.12)}
+@media (max-width:599px){.hero-detail .detail{padding:14px 16px 18px}.hero-detail .detail::before{margin:-14px -16px 12px}}

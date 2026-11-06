@@ -457,7 +457,7 @@
       <div class="c-time"><span class="t12">${time(p.at)}</span><span class="t24">${time24(p.at)}</span><small>${short(p.at)}</small>${isNow ? '<span class="now-tag">NOW</span>' : ''}</div>
       <div class="c-song"><div class="t"><b>${title}</b></div><div class="by">${esc(p.artist)}${len ? ` · ${len.measured ? '~' : ''}${History.formatClock(len.secs)}` : ''}</div>${p.album ? `<div class="alb">${esc(p.album)}</div>` : ''}${lnote}</div>
       <div class="c-status">${st(r)}</div>
-      <div class="c-cat">${!inList(r) ? '—' : catOf(r.item.id) ? `<span class="cf">${esc(CAT[catOf(r.item.id)])}</span><span class="cs">${esc(CATSH[catOf(r.item.id)])}</span>` : '<span class="cf">No category</span><span class="cs">None</span>'}</div>
+      <div class="c-cat">${!inList(r) ? '—' : catOf(r.item.id) ? `<span class="cf">${esc(CAT[catOf(r.item.id)])}</span><span class="cs">${esc(CATSH[catOf(r.item.id)])}</span>` : ''}</div>
       <div class="c-plays">${fmt(n)}×</div>
       <div class="c-go">${quickLinks(p, r)}</div>
       <div class="c-act">${chev()}</div>
@@ -577,7 +577,7 @@
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
       <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}${castBtn()}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>${note ? `<div class="hnote">${esc(note)}</div>` : ''}
-      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}<span class="lw">YouTube</span><span class="ln">YT</span></a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount"><span class="hct">${inList(r) ? `<span class="hcat ${catOf(r.item.id) ? '' : 'none'}">${esc(CAT[catOf(r.item.id)] || 'No category')}</span>` : ''}<span><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span></span></span> ${chev()}</span></div>
+      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}<span class="lw">YouTube</span><span class="ln">YT</span></a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount"><span class="hct">${inList(r) && catOf(r.item.id) ? `<span class="hcat">${esc(CAT[catOf(r.item.id)])}</span>` : ''}<span><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span></span></span> ${chev()}</span></div>
       ${heroListen()}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>

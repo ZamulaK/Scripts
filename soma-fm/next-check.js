@@ -657,13 +657,28 @@ const overflow = page => page.evaluate(() => {
           cats: rows.map(x => x.querySelector('.c-cat').innerText.trim()), song: Math.round(rows[0].querySelector('.c-song').getBoundingClientRect().width),
           lined: rows.every(x => Math.abs(x.querySelector('.c-cat').getBoundingClientRect().left - h.children[3].getBoundingClientRect().left) <= 1) }; });
       const th = await tab();
-      check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|None|Swing|Classics|Dance|Jazz|Mellow|Funk)$/.test(c)) && th.song >= 250 && th.lined, JSON.stringify(th));
+      check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|Swing|Classics|Dance|Jazz|Mellow|Funk|)$/.test(c)) && th.cats.includes('') && th.song >= 250 && th.lined, JSON.stringify(th));
       await tabTo(s.page, 'Now');
       const tn = await tab();
       // The Now card's category above its play count, on the tablet (Dan, Nov 6)
-      const hc = await s.page.evaluate(() => { const c = document.querySelector('.hero .hcat'), p = document.querySelector('.hero .hct > span:last-child'); if (!c) return null; const a = c.getBoundingClientRect(), b = p.getBoundingClientRect();
+      // Nothing at all for a song without one (Dan, Nov 6: rather nothing than "No category"), here and in the lists
+      const heroCat = () => s.page.evaluate(() => { const c = document.querySelector('.hero .hcat'), p = document.querySelector('.hero .hct > span:last-child'); if (!c) return { none: !/No category/.test(document.querySelector('.hero').textContent) }; const a = c.getBoundingClientRect(), b = p.getBoundingClientRect();
         return { text: c.textContent, above: a.bottom <= b.top + 1 && a.width > 0, right: Math.abs(a.right - b.right) <= 1 }; });
-      check('Tablet (600 px): the Now card shows the song’s category above its play count', hc && /^(No category|Band\/Swing|Classics|Dance|Jazz\/Piano|Mellow|Soul\/Funk)$/.test(hc.text) && hc.above && hc.right, JSON.stringify(hc));
+      const nowItem = items.find(it => { const m = it.title.split(' - '), a = m.length > 1 ? [m[0], m[1]] : [it.ch.replace(/ - Topic$/, ''), it.title]; return a[0] === hist[0][1] && a[1] === hist[0][2]; });
+      const hc0 = await heroCat();
+      const keptCats = api.doc.categories;
+      api.doc.categories = Object.assign({}, keptCats, { [nowItem.id]: { c: 'jazz', at: Date.now() } }); api.version++;
+      await s.page.reload({ waitUntil: 'load' }); await s.page.waitForSelector('.hero'); await s.page.waitForTimeout(800);
+      const hc = await heroCat();
+      api.doc.categories = keptCats; api.version++;
+      await s.page.reload({ waitUntil: 'load' }); await s.page.waitForSelector('.hero'); await s.page.waitForTimeout(800);
+      check('Tablet (600 px): the Now card shows the song’s category above its play count, and nothing without one', hc.text === 'Jazz/Piano' && hc.above && hc.right && hc0.none === true && !hc0.text, JSON.stringify({ hc, hc0 }));
+      // Opened, the Now card's details hang from it as one piece (Dan, Nov 6)
+      await s.page.click('.hero .hero-top small'); await s.page.waitForTimeout(300);
+      const joined = await s.page.evaluate(() => { const h = document.querySelector('.hero'), d = document.querySelector('.hero-detail .detail'); if (!d) return null; const a = h.getBoundingClientRect(), b = d.getBoundingClientRect(), hs = getComputedStyle(h), ds = getComputedStyle(d);
+        return { touch: Math.abs(b.top - a.bottom) <= 1, sameWidth: Math.abs(a.width - b.width) <= 1, heroBottom: hs.borderBottomLeftRadius, detailTop: ds.borderTopLeftRadius, detailBottom: ds.borderBottomLeftRadius }; });
+      check('Tablet (600 px): the opened Now card’s details join the card (no gap, square where they meet, round at the bottom)', joined && joined.touch && joined.sameWidth && joined.heroBottom === '0px' && joined.detailTop === '0px' && parseFloat(joined.detailBottom) >= 20, JSON.stringify(joined));
+      await s.page.click('.hero .hero-top small'); await s.page.waitForTimeout(300);
       check('Tablet (600 px): Just played on Now the same', /^Time Song Category$/i.test(tn.head) && !tn.cols && tn.dots.every(w => w <= 1) && tn.side && tn.lined, JSON.stringify(tn));
       await tabTo(s.page, 'History');
       // The star right after the title's last word, also when the title wraps (Dan, Nov 6)
