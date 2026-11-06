@@ -460,6 +460,10 @@ const overflow = page => page.evaluate(() => {
       const ok = await Promise.all(m.icons.map(async i => { const r = await fetch(i.src); const b = await createImageBitmap(await r.blob()); return b.width + 'x' + b.height === i.sizes; }));
       return { cred: l.crossOrigin, name: m.name, display: m.display, start: m.start_url, icons: ok, maskable: m.icons.some(i => i.purpose === 'maskable') }; });
     check('Installable: a manifest (read with the sign-in cookie), standalone, its icons the sizes it says', man.cred === 'use-credentials' && man.name === 'Christmas Lounge' && man.display === 'standalone' && man.start === '/' && man.icons.length >= 3 && man.icons.every(Boolean) && man.maskable, JSON.stringify(man));
+    { // The public install page (for PWABuilder and the like): names the manifest, and everything it uses is a real file
+      const ip = fs.readFileSync(path.join(APP, "install", "index.html"), "utf8");
+      const used = [...ip.matchAll(/(?:href|src)="(\/[^"]*)"/g)].map(m => m[1]).filter(u => u !== "/");
+      check("Install page: links the manifest, and its icons and manifest exist", /<link rel="manifest" href="\/manifest\.webmanifest">/.test(ip) && used.every(u => fs.existsSync(path.join(APP, u))), used.join(" ")); }
     // Listen on the Now Playing card: first in its row of buttons, short words on a phone; the volume under them while it
     // plays; YouTube shortened to YT on a phone (Dan, Nov 5)
     await tabTo(s.page, 'Now');
