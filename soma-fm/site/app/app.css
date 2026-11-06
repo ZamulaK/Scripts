@@ -58,7 +58,7 @@ header.top .sub{font-size:12.5px;color:var(--muted)}
 .hero .acts{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;position:relative;z-index:1}
 .hero .acts svg{width:15px;height:15px}
 /* Phones: the card's buttons on one line (Dan, Nov 4) */
-@media (max-width:599px){.hero{padding:18px 16px}.hero .acts{flex-wrap:nowrap;gap:6px}.hero .acts .pill{padding:7px 10px}.hero .acts .yt svg{width:18px;height:18px}.hero .hcount{gap:6px}}
+@media (max-width:599px){.hero{padding:18px 16px}.hero .acts{flex-wrap:nowrap;gap:6px}.hero .acts .pill{padding:7px 10px}.hero .acts .yt svg{width:20px;height:20px}.hero .hcount{gap:6px}}
 .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:var(--chip);color:var(--ink);text-decoration:none;white-space:nowrap;line-height:1.2}
 .pill:disabled{opacity:.45;cursor:default}
 .pill.primary{background:var(--accent);color:var(--on)}
@@ -165,10 +165,11 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 /* Round icon buttons: Open and Search on each row, Edit beside a note */
 .icon{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:50%;border:0;background:var(--chip);color:var(--ink);cursor:pointer;flex:none;text-decoration:none;font-size:15px}
 .icon svg{width:17px;height:17px}
-.icon.open{background:var(--accent);color:var(--on)}
-/* The YouTube mark in YouTube's red, a size up (Dan, Nov 5) */
-.icon.open svg{width:24px;height:24px;color:#f00}
-.hero .acts .yt svg{width:20px;height:20px;color:#f00}
+/* Open on YouTube, in YouTube's red so it reads as YouTube in every theme (Dan, Nov 5): in the rows a red circle with
+   a white screen and red ▶; on the Now card the red screen with a white ▶ */
+.icon.open{background:#f00}
+.icon.open svg{width:22px;height:22px}
+.hero .acts .yt svg{width:22px;height:22px;margin:-2px 0}
 .notewrap{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px}
 .notewrap .note{flex:1;margin:0}
 .notewrap .icon{width:32px;height:32px}

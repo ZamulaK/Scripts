@@ -463,13 +463,13 @@
   }
   // Open (the video you have) and Search YouTube as icons on the row itself, so the row needn't be opened for them.
   // An "other version" song has both: Open compares with the version you have; Search finds the one SomaFM played.
-  const SVG = { yt: '<rect x="2.5" y="5" width="19" height="14" rx="4.5"/><path d="M10 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
+  const SVG = { ytc: '<rect x="4.5" y="7" width="15" height="10.5" rx="3" fill="#fff" stroke="none"/><path d="M10.1 9.2v6.1l5.2-3.05z" fill="#f00" stroke="none"/>', yt: '<rect class="ytbg" x="1" y="4.5" width="22" height="15" rx="4.6" fill="#f00" stroke="none"/><path d="M9.2 8.1v7.8l6.8-3.9z" fill="#fff" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
   const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
   // Open or closed: the chevron turns over (and fills) while the row is open; the CSS does it from .open
   const chev = on => `<span class="chev ${on ? 'on' : ''}" aria-hidden="true">${ico('chev')}</span>`;
   function quickLinks(p, r) {
     const out = [];
-    if (canOpen(r)) out.push(`<a class="icon open" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop aria-label="Open on YouTube: ${esc(p.title)}" title="Open on YouTube">${ico('yt')}</a>`);
+    if (canOpen(r)) out.push(`<a class="icon open" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop aria-label="Open on YouTube: ${esc(p.title)}" title="Open on YouTube">${ico('ytc')}</a>`);
     if (!canOpen(r) || r.status === 'other') out.push(`<a class="icon" href="${ytSearch(M.searchQuery(p.artist, p.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube: ${esc(p.title)}" title="Search YouTube">${ico('search')}</a>`);
     return out.join('');
   }
@@ -573,7 +573,7 @@
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
       <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>
-      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill solid yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}<span class="lw">YouTube</span><span class="ln">YT</span></a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount"><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span> ${chev()}</span></div>
+      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}<span class="lw">YouTube</span><span class="ln">YT</span></a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<button class="pill" data-act="heroNote" data-i="${i}">✎ Note</button><span class="hcount"><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span> ${chev()}</span></div>
       ${heroListen()}${note ? `<div class="hnote">${esc(note)}</div>` : ''}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>
@@ -844,10 +844,10 @@
   }
   // Listen first in the card's row of buttons (Dan, Nov 5); shorter words on a phone
   function heroListenBtn() {
-    if (viaSoma()) return `<button class="pill" id="hlbtn" data-act="listen" title="Opens SomaFM's player">${ico('open')}<span class="lw">Listen on SomaFM ↗</span><span class="ln">Listen ↗</span></button>`;
+    if (viaSoma()) return `<button class="pill solid" id="hlbtn" data-act="listen" title="Opens SomaFM's player">${ico('open')}<span class="lw">Listen on SomaFM ↗</span><span class="ln">Listen ↗</span></button>`;
     const s = player.state;
-    if (s === 'off') return `<button class="pill" id="hlbtn" data-act="listen" aria-pressed="false">${ico('open')}<span class="lw">Listen live</span><span class="ln">Listen</span></button>`;
-    return `<button class="pill on" id="hlbtn" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span><span class="lw">Connecting</span><span class="ln">Stop</span>' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`;
+    if (s === 'off') return `<button class="pill solid" id="hlbtn" data-act="listen" aria-pressed="false">${ico('open')}<span class="lw">Listen live</span><span class="ln">Listen</span></button>`;
+    return `<button class="pill solid on" id="hlbtn" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span><span class="lw">Connecting</span><span class="ln">Stop</span>' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`;
   }
   // While it plays, a row under the buttons with the volume
   function heroListen() {
