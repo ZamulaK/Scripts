@@ -463,13 +463,13 @@
   }
   // Open (the video you have) and Search YouTube as icons on the row itself, so the row needn't be opened for them.
   // An "other version" song has both: Open compares with the version you have; Search finds the one SomaFM played.
-  const SVG = { ytc: '<rect x="2.6" y="5.6" width="18.8" height="12.8" rx="3.6" fill="#fff" stroke="none"/><path d="M9.8 8.7v6.6l5.6-3.3z" fill="#f00" stroke="none"/>', yt: '<rect class="ytbg" x="1" y="4.5" width="22" height="15" rx="4.6" fill="#f00" stroke="none"/><path d="M9.2 8.1v7.8l6.8-3.9z" fill="#fff" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
+  const SVG = { yt: '<rect class="ytbg" x="1" y="4.5" width="22" height="15" rx="4.6" fill="#f00" stroke="none"/><path d="M9.2 8.1v7.8l6.8-3.9z" fill="#fff" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
   const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
   // Open or closed: the chevron turns over (and fills) while the row is open; the CSS does it from .open
   const chev = on => `<span class="chev ${on ? 'on' : ''}" aria-hidden="true">${ico('chev')}</span>`;
   function quickLinks(p, r) {
     const out = [];
-    if (canOpen(r)) out.push(`<a class="icon open" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop aria-label="Open on YouTube: ${esc(p.title)}" title="Open on YouTube">${ico('ytc')}</a>`);
+    if (canOpen(r)) out.push(`<a class="icon open" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop aria-label="Open on YouTube: ${esc(p.title)}" title="Open on YouTube">${ico('yt')}</a>`);
     if (!canOpen(r) || r.status === 'other') out.push(`<a class="icon" href="${ytSearch(M.searchQuery(p.artist, p.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube: ${esc(p.title)}" title="Search YouTube">${ico('search')}</a>`);
     return out.join('');
   }

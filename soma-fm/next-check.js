@@ -469,8 +469,8 @@ const overflow = page => page.evaluate(() => {
     const h0 = await acts();
     check('Now card (360 px): Listen first in the row of buttons, "Listen", "YT" and the plays as "14×" on a phone, all on one line; no volume while it isn\'t playing', h0.first === 'hlbtn' && h0.labels[0] === 'Listen' && h0.labels.includes('YT') && /^[0-9]+×$/.test(h0.labels[h0.labels.length - 1]) && h0.lines === 1 && h0.right <= h0.edge && !h0.vol, JSON.stringify(h0));
     check('Now card: the YouTube mark is YouTube\'s red with a white ▶; Listen has the highlight', h0.ytColor === '#f00' && h0.listenSolid, JSON.stringify(h0));
-    const rowYt = await s.page.evaluate(() => { const b = document.querySelector('.plays .icon.open'); return b && { bg: getComputedStyle(b).backgroundColor, rect: (b.querySelector('rect') || {}).getAttribute && b.querySelector('rect').getAttribute('fill'), tri: b.querySelector('path') && b.querySelector('path').getAttribute('fill') }; });
-    check('Song rows: the open button is a red circle with a white screen and red ▶ (Dan\'s pick)', !!rowYt && rowYt.bg === 'rgb(255, 0, 0)' && rowYt.rect === '#fff' && rowYt.tri === '#f00', JSON.stringify(rowYt));
+    const rowYt = await s.page.evaluate(() => { const b = document.querySelector('.plays .icon.open'), c = document.querySelector('.plays .icon:not(.open)'); return b && { bg: getComputedStyle(b).backgroundColor, plain: c && getComputedStyle(c).backgroundColor, rect: b.querySelector('.ytbg') && b.querySelector('.ytbg').getAttribute('fill') }; });
+    check('Song rows: the open button is the small red YouTube mark on the plain round button (like the search one)', !!rowYt && rowYt.rect === '#f00' && (!rowYt.plain || rowYt.bg === rowYt.plain), JSON.stringify(rowYt));
     await s.page.click('#hlbtn'); await s.page.waitForTimeout(400);
     const h1 = await acts();
     check('Now card (360 px): Listen there plays (the bar agrees), its button turns to Stop, and a volume slider shows under the buttons', h1.labels[0] === 'Stop' && h1.bar === 'Stop' && h1.lines === 1 && h1.vol && h1.volRight <= h1.edge, JSON.stringify(h1));

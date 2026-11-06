@@ -165,9 +165,8 @@ h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;text-deco
 /* Round icon buttons: Open and Search on each row, Edit beside a note */
 .icon{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:50%;border:0;background:var(--chip);color:var(--ink);cursor:pointer;flex:none;text-decoration:none;font-size:15px}
 .icon svg{width:17px;height:17px}
-/* Open on YouTube, in YouTube's red so it reads as YouTube in every theme (Dan, Nov 5): in the rows a red circle with
-   a white screen and red ▶; on the Now card the red screen with a white ▶ */
-.icon.open{background:#f00}
+/* Open on YouTube: YouTube's red mark with a white ▶, in the rows on the plain round button like 🔍 (Dan picked this
+   over a full red circle, which was too loud, Nov 5), and on the Now card */
 .icon.open svg{width:24px;height:24px}
 .hero .acts .yt svg{width:22px;height:22px;margin:-2px 0}
 .notewrap{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px}
