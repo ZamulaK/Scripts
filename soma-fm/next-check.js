@@ -668,10 +668,13 @@ const overflow = page => page.evaluate(() => {
       const star = s.page.locator('#plist .pr:not(.ph) .star').first();
       const was = await star.getAttribute('aria-pressed');
       await star.click(); await s.page.waitForTimeout(200);
-      const t1 = await s.page.evaluate(() => ({ text: document.querySelector('#toast').textContent, undo: !!document.querySelector('#toast .tbtn'), pressed: document.querySelector('#plist .pr:not(.ph) .star').getAttribute('aria-pressed') }));
+      // ...right by the star tapped, inside the window (Dan, Nov 6)
+      const t1 = await s.page.evaluate(() => { const t = document.querySelector('#toast').getBoundingClientRect(), st = document.querySelector('#plist .pr:not(.ph) .star').getBoundingClientRect();
+        return { text: document.querySelector('#toast').textContent, undo: !!document.querySelector('#toast .tbtn'), pressed: document.querySelector('#plist .pr:not(.ph) .star').getAttribute('aria-pressed'),
+          near: Math.min(Math.abs(t.top - st.bottom), Math.abs(st.top - t.bottom)) <= 12 && t.left >= 0 && t.right <= document.documentElement.clientWidth && !(t.bottom > st.top && t.top < st.bottom) }; });
       await s.page.click('#toast .tbtn'); await s.page.waitForTimeout(300);
       const back = await s.page.evaluate(() => ({ pressed: document.querySelector('#plist .pr:not(.ph) .star').getAttribute('aria-pressed'), hidden: document.querySelector('#toast').hidden }));
-      check('A star toggled shows a toast with Undo, and Undo puts it back', t1.undo && /favorites/.test(t1.text) && t1.pressed !== was && back.pressed === was && back.hidden, JSON.stringify({ was, t1, back }));
+      check('A star toggled shows a toast with Undo right by it, and Undo puts it back', t1.undo && t1.near && /favorites/.test(t1.text) && t1.pressed !== was && back.pressed === was && back.hidden, JSON.stringify({ was, t1, back }));
       // Stats: a 0% share quieter than the other; every status's counts on the line under its name
       await tabTo(s.page, 'Stats');
       const sz = await s.page.evaluate(() => { const z = document.querySelector('.io-in.zero b.big'), g = document.querySelector('.io-in.good:not(.zero) b.big');

@@ -53,17 +53,27 @@
   let toastTimer = null;
   // undo: a function, for a toast with an Undo button (a star tapped by mistake; Dan, Nov 6). Shown a little longer.
   let toastUndo = null;
-  function toast(text, undo) {
+  // near: the rectangle of what was tapped; the toast then shows right by it (under it, or over it near the bottom bar)
+  // rather than at the bottom of the screen, so Undo is a short reach (Dan, Nov 6)
+  function toast(text, undo, near) {
     const t = $('#toast'); toastUndo = undo || null;
     t.textContent = text;
     if (undo) { const b = document.createElement('button'); b.className = 'tbtn'; b.dataset.act = 'toastUndo'; b.textContent = 'Undo'; t.append(b); }
-    t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; toastUndo = null; }, undo ? 5000 : 3500);
+    t.classList.toggle('near', !!near); t.style.left = t.style.top = '';
+    t.hidden = false;
+    if (near) {
+      const w = t.offsetWidth, h = t.offsetHeight, bar = ($('.tabs') || { getBoundingClientRect: () => ({ top: innerHeight }) }).getBoundingClientRect().top;
+      const below = near.bottom + 8, top = below + h <= bar - 8 ? below : Math.max(8, near.top - 8 - h);
+      t.style.left = Math.round(Math.min(Math.max(8, near.left + near.width / 2 - w / 2), document.documentElement.clientWidth - w - 8)) + 'px';
+      t.style.top = Math.round(top) + 'px';
+    }
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; toastUndo = null; }, undo ? 5000 : 3500);
   }
-  // A star turned on or off, with Undo
-  function favWithUndo(id) {
-    const on = !isFav(id);
+  // A star turned on or off, with Undo by the star
+  function favWithUndo(id, el) {
+    const on = !isFav(id), near = el && el.getBoundingClientRect();
     setFav(id, on); render();
-    toast(on ? 'Added to favorites' : 'Removed from favorites', () => { setFav(id, !on); render(); });
+    toast(on ? 'Added to favorites' : 'Removed from favorites', () => { setFav(id, !on); render(); }, near);
   }
   // "Working…" after a short wait, for actions that go over the network
   let busyN = 0;
@@ -1173,8 +1183,8 @@
     unlink(el) { setMark(rowOf(el).key, 'have'); render(); },   // two-level undo: Unlink keeps "I have it"; Undo then clears it
     dislike(el) { setDislike(rowOf(el).key, true); render(); },
     undislike(el) { setDislike(rowOf(el).key, false); render(); },
-    fav(el) { const r = resultOf(rowOf(el)); if (inList(r)) favWithUndo(r.item.id); },
-    star(el) { favWithUndo(el.dataset.v); },
+    fav(el) { const r = resultOf(rowOf(el)); if (inList(r)) favWithUndo(r.item.id, el); },
+    star(el) { favWithUndo(el.dataset.v, el); },
     toastUndo() { const u = toastUndo; toastUndo = null; $('#toast').hidden = true; clearTimeout(toastTimer); if (u) u(); },
     catmenu(el) { const p = rowOf(el), r = resultOf(p); if (inList(r)) catMenu(el, r.item.id, p.title); },
     catmenuId(el) { catMenu(el, el.dataset.v, el.dataset.name || ''); },

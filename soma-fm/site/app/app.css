@@ -511,3 +511,5 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 .kv.stack .r{text-align:left}
 /* The toast's Undo */
 .toast .tbtn{background:none;border:0;color:var(--hero1);text-decoration:underline;text-underline-offset:2px;font:inherit;font-weight:700;margin-left:10px;cursor:pointer;padding:4px 2px}
+/* A toast by what was tapped (a star's Undo): placed by toast() at that spot, not at the bottom of the screen */
+.toast.near{bottom:auto;transform:none;max-width:calc(100% - 16px);white-space:nowrap}
