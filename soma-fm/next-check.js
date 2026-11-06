@@ -697,10 +697,10 @@ const overflow = page => page.evaluate(() => {
     if (theme === 'evergreen') check('Xmas Green (saved as evergreen), remembered', look.bg === 'rgb(16, 21, 17)', look.bg);
     if (width === 600 && !theme && scheme === 'light') {
       await tabTo(s.page, 'History');
-      const top = await s.page.evaluate(() => { const q = document.querySelector('.quick'), kids = [...q.children].filter(k => !k.classList.contains('find')); return { ph: document.querySelector('#find').placeholder, lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, last: kids[kids.length - 1].innerText.trim(), w: q.clientWidth, ws: kids.map(k => Math.round(k.getBoundingClientRect().width)).join('+') }; });
+      const top = await s.page.evaluate(() => { const q = document.querySelector('.quick'), kids = [...q.children].filter(k => !k.classList.contains('find')); return { ph: document.querySelector('#find').placeholder, lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, last: kids[kids.length - 1].innerText.trim(), icon: !!(kids[kids.length - 1].querySelector('.fic svg') && kids[kids.length - 1].querySelector('.fic').offsetWidth), w: q.clientWidth, ws: kids.map(k => Math.round(k.getBoundingClientRect().width)).join('+') }; });
       const line = await s.page.evaluate(() => { const g = document.querySelector('.bar-line .grow'), c = [...g.querySelectorAll('.nw')].pop(); return c.getClientRects().length; });
       check('600 px: "checked … ago" moves to the next line whole, never split', line === 1, String(line));
-      check('600 px: the first row of filters fits on one line, ending in "All ▾"', top.lines === 1 && top.last.replace(/\s+/g, ' ') === 'All ▾' && top.ph === 'Search: song, artist, or album', JSON.stringify(top));
+      check('600 px: the first row of filters fits on one line, ending in the filter icon ▾ (Dan, Nov 6: not "All", which the first chip says)', top.lines === 1 && top.last.replace(/\s+/g, ' ').trim() === '▾' && top.icon && top.ph === 'Search: song, artist, or album', JSON.stringify(top));
     }
     check(`No script errors (${width} px)`, s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();

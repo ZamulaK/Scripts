@@ -489,3 +489,5 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
    rather than as the page you're on (the accent pill) */
 .tabs .listen.on,.tabs .listen.loading{color:var(--ink)}
 .tabs .listen.on .lic,.tabs .listen.loading .lic{background:#fff;color:var(--hero1)}
+/* All filters below 900 px: a filter icon instead of "All" (the first chip is All; Dan, Nov 6) */
+.more-f .fic svg{width:16px;height:16px;display:block}

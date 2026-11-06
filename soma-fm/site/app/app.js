@@ -466,7 +466,7 @@
   }
   // Open (the video you have) and Search YouTube as icons on the row itself, so the row needn't be opened for them.
   // An "other version" song has both: Open compares with the version you have; Search finds the one SomaFM played.
-  const SVG = { cast: '<path d="M3 7.5V6a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 6v12a1.5 1.5 0 0 1-1.5 1.5H14"/><path d="M3 11a8.5 8.5 0 0 1 8.5 8.5M3 14.5a5 5 0 0 1 5 5"/><circle cx="3.6" cy="18.9" r=".9" fill="currentColor"/>', yt: '<rect class="ytbg" x="1" y="4.5" width="22" height="15" rx="4.6" fill="#f00" stroke="none"/><path d="M9.2 8.1v7.8l6.8-3.9z" fill="#fff" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
+  const SVG = { cast: '<path d="M3 7.5V6a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 6v12a1.5 1.5 0 0 1-1.5 1.5H14"/><path d="M3 11a8.5 8.5 0 0 1 8.5 8.5M3 14.5a5 5 0 0 1 5 5"/><circle cx="3.6" cy="18.9" r=".9" fill="currentColor"/>', yt: '<rect class="ytbg" x="1" y="4.5" width="22" height="15" rx="4.6" fill="#f00" stroke="none"/><path d="M9.2 8.1v7.8l6.8-3.9z" fill="#fff" stroke="none"/>', vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>', open: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>', search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', chev: '<path d="M6 9l6 6 6-6"/>', filter: '<path d="M4 5h16l-6.2 7.4V19l-3.6-1.8v-4.8z"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>' };
   const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[k]}</svg>`;
   // Open or closed: the chevron turns over (and fills) while the row is open; the CSS does it from .open
   const chev = on => `<span class="chev ${on ? 'on' : ''}" aria-hidden="true">${ico('chev')}</span>`;
@@ -638,7 +638,7 @@
         q.push(C.fav(true));
         for (const [k, l] of STATUS) if (k !== 'have' && k !== 'none' && S.status.has(k)) q.push(C.st(k, l));
         for (const [k, , sh] of CATS2) if (S.cats.has(k)) q.push(C.cat(k, sh));
-        filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false" aria-label="All filters"><span class="wide">All filters</span><span class="narrow">All</span>${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button>${find}</div>`;
+        filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false" aria-label="All filters"><span class="wide">All filters</span><span class="narrow fic">${ico('filter')}</span>${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button>${find}</div>`;
         findIn = true;
       }
     }
