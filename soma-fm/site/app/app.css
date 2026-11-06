@@ -424,3 +424,5 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 .pr:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .tabs a:not(.on):active svg{background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .tabs .listen:active .lic{filter:brightness(1.18)}
+/* Selected text (a long press on a song's name) in a tint of the theme's accent rather than the browser's own color */
+::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:inherit}
