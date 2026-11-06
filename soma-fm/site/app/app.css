@@ -415,3 +415,12 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 .tabs a{position:relative;z-index:1}
 .nav-ghost{position:absolute;z-index:0;pointer-events:none}
 .tabs a.nav-ghosted svg{background:transparent}
+/* Touch (Dan, Nov 5): no grey rectangle when an element is pressed or held on Android (as in the EPGSA app); buttons
+   don't select their text or open the long-press menu; each gives its own pressed look instead. Song names and notes
+   can still be selected. */
+html{-webkit-tap-highlight-color:transparent}
+button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.pill:active,.chip:active,.icon:active,.more-f:active,.toggle:active,.menubtn:active,.seg button:active{filter:brightness(1.18)}
+.pr:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.tabs a:not(.on):active svg{background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.tabs .listen:active .lic{filter:brightness(1.18)}
