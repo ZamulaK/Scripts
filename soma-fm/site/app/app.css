@@ -378,25 +378,34 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 /* ---------- Material 3 look (Dan, Nov 5) ----------
    Tonal surfaces tinted by each theme's accent, 40 px buttons, outlined filter chips with a check when on, a pill behind
    the current page in the bar, and a filled search bar. Midnight's accent became Material's dark-mode blue (#a8c7fa). */
-:root{--sc:color-mix(in srgb,var(--accent) 8%,var(--bg));--sc-high:color-mix(in srgb,var(--accent) 12%,var(--bg));--sec:color-mix(in srgb,var(--accent) 26%,var(--bg));--outline:color-mix(in srgb,var(--ink) 28%,var(--bg))}
+:root{--sc:color-mix(in srgb,var(--accent) 3%,var(--card));--sc-high:color-mix(in srgb,var(--accent) 5%,var(--card));--sec:color-mix(in srgb,var(--accent) 26%,var(--bg));--outline:color-mix(in srgb,var(--ink) 28%,var(--bg))}
+/* Toned down after a first look (Dan, Nov 5, as in the EPGSA themes): cards and the bar are the theme's card color with only a
+   hint of the accent, the bar sits on a line like the cards; selected chips get the full accent so they stand out */
+:root:not([data-theme]){--sc:color-mix(in srgb,var(--accent) 5%,var(--card))}
 .plays,.box,.fpanel{background:var(--sc);border-radius:16px}
 .pr{border-top-color:color-mix(in srgb,var(--ink) 8%,transparent)}
 .hero{border-radius:28px;box-shadow:0 1px 3px rgba(0,0,0,.3),0 4px 12px rgba(0,0,0,.25)}
 .hero .acts .pill{height:40px;font-size:14px;letter-spacing:.01em}
 .hero .acts .pill:not(.solid){background:rgba(255,255,255,.22)}
 .pill{min-height:36px;font-size:14px}
-.icon{width:40px;height:40px;background:var(--sec)}
+.icon{width:40px;height:40px;background:var(--chip)}
 .hero .icon.cast{background:rgba(255,255,255,.22)}
 .chip{height:32px;border-radius:8px;background:transparent;border:1px solid var(--outline);padding:0 12px;font-weight:500}
-.chip[aria-pressed="true"]{background:var(--sec);border-color:transparent;color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:transparent;color:var(--on)}
 .chip[aria-pressed="true"]::before{content:"✓";font-weight:700;margin-right:2px}
 .chip.zero{outline:0;border-style:dashed;border-color:var(--faint)}
 .more-f{height:32px;border-radius:8px;border-style:solid;border-color:var(--outline)}
-.tabs{background:var(--sc-high);backdrop-filter:none;-webkit-backdrop-filter:none;padding-top:12px}
+.tabs{background:var(--card);border-top:1px solid var(--line);backdrop-filter:none;-webkit-backdrop-filter:none;padding-top:12px}
 .tabs a{gap:4px;padding:0 2px;font-weight:500;color:var(--muted)}
 .tabs a svg{width:64px;height:32px;padding:4px 20px;border-radius:16px;box-sizing:border-box}
-.tabs a.on{color:var(--ink);font-weight:700}
-.tabs a.on svg{background:var(--sec)}
+/* The current page as in the EPGSA app (Dan, Nov 5): a rich accent pill with the icon dark on it, the label in the accent */
+.tabs a.on{color:var(--accent);font-weight:700}
+.tabs a.on svg{background:var(--accent);color:var(--on)}
+/* Listen in the bar: a quiet pill until it plays, then the accent (so it doesn't look like a selected page) */
+.tabs .listen{color:var(--muted)}
+.tabs .listen .lic{background:var(--chip);color:var(--accent)}
+.tabs .listen.on,.tabs .listen.loading{color:var(--accent)}
+.tabs .listen.on .lic,.tabs .listen.loading .lic{background:var(--accent);color:var(--on)}
 .tabs .listen{padding:0 2px}
 .tabs .listen .lic{width:56px;height:32px;border-radius:16px}
 .find input{height:48px;border-radius:24px;background:var(--sc-high);border:0;padding:0 20px}
