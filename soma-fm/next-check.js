@@ -472,6 +472,8 @@ const overflow = page => page.evaluate(() => {
       const ip = fs.readFileSync(path.join(APP, "install", "index.html"), "utf8");
       const used = [...ip.matchAll(/(?:href|src)="(\/[^"]*)"/g)].map(m => m[1]).filter(u => u !== "/");
       check("Install page: links the manifest, and its icons and manifest exist", /<link rel="manifest" href="\/manifest\.webmanifest">/.test(ip) && used.every(u => fs.existsSync(path.join(APP, u))), used.join(" ")); }
+      const al = JSON.parse(fs.readFileSync(path.join(APP, ".well-known", "assetlinks.json"), "utf8"))[0];
+      check("Android app link: assetlinks.json names the PWABuilder package and its key", al.target.package_name === "fyi.zamulagh.xmaslounge" && /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(al.target.sha256_cert_fingerprints[0]), JSON.stringify(al));
     // Listen on the Now Playing card: first in its row of buttons, short words on a phone; the volume under them while it
     // plays; YouTube shortened to YT on a phone (Dan, Nov 5)
     await tabTo(s.page, 'Now');

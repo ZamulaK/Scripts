@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "fyi.zamulagh.xmaslounge",
+    "sha256_cert_fingerprints": ["B7:E5:DB:74:AF:AD:BC:9B:5E:9C:A4:8C:11:45:F4:FD:FA:CC:8D:16:C7:60:24:27:61:50:F1:47:E8:69:0F:9E"]
+  }
+}]
