@@ -3,7 +3,7 @@
    'candy' and 'evergreen'). Remembered per device (data-theme on <html>).
    Text in three levels (Dan, Nov 4): --ink, --muted (secondary, made brighter) and --faint (third level: the old --muted,
    for notes in the lists and footnotes). */
-:root{color-scheme:dark;--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#bcc6db;--faint:#97a3bd;--line:#232c45;--accent:#8fb4ff;--on:#0b1020;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a;--star:#f5c542}
+:root{color-scheme:dark;--bg:#0b1020;--card:#141b2f;--ink:#e8ecf6;--muted:#bcc6db;--faint:#97a3bd;--line:#232c45;--accent:#a8c7fa;--on:#062e6f;--chip:#1c2540;--good:#5ad19a;--warn:#f0b955;--bad:#ff8a80;--dis:#c3a6d6;--hero1:#283a8f;--hero2:#6a3fb5;--row:#18203a;--star:#f5c542}
 /* Xmas Red and Xmas Green in a Material style (Dan, Nov 4: both felt too strongly red and green): near-neutral surfaces with
    a faint hue and a pale accent with just a tint of the color; the one place with strong color is the Now card, red to green
    for Xmas Red and green to red for Xmas Green */
@@ -375,3 +375,30 @@ details.sub li .acts{display:flex;gap:6px;flex:none}
 .hero .icon.cast{margin-left:auto;width:34px;height:34px;background:rgba(255,255,255,.18);color:#fff}
 .hero .icon.cast svg{width:19px;height:19px}
 .hero .icon.cast.on{background:#fff;color:var(--hero1)}
+/* ---------- Material 3 look (Dan, Nov 5) ----------
+   Tonal surfaces tinted by each theme's accent, 40 px buttons, outlined filter chips with a check when on, a pill behind
+   the current page in the bar, and a filled search bar. Midnight's accent became Material's dark-mode blue (#a8c7fa). */
+:root{--sc:color-mix(in srgb,var(--accent) 8%,var(--bg));--sc-high:color-mix(in srgb,var(--accent) 12%,var(--bg));--sec:color-mix(in srgb,var(--accent) 26%,var(--bg));--outline:color-mix(in srgb,var(--ink) 28%,var(--bg))}
+.plays,.box,.fpanel{background:var(--sc);border-radius:16px}
+.pr{border-top-color:color-mix(in srgb,var(--ink) 8%,transparent)}
+.hero{border-radius:28px;box-shadow:0 1px 3px rgba(0,0,0,.3),0 4px 12px rgba(0,0,0,.25)}
+.hero .acts .pill{height:40px;font-size:14px;letter-spacing:.01em}
+.hero .acts .pill:not(.solid){background:rgba(255,255,255,.22)}
+.pill{min-height:36px;font-size:14px}
+.icon{width:40px;height:40px;background:var(--sec)}
+.hero .icon.cast{background:rgba(255,255,255,.22)}
+.chip{height:32px;border-radius:8px;background:transparent;border:1px solid var(--outline);padding:0 12px;font-weight:500}
+.chip[aria-pressed="true"]{background:var(--sec);border-color:transparent;color:var(--ink)}
+.chip[aria-pressed="true"]::before{content:"✓";font-weight:700;margin-right:2px}
+.chip.zero{outline:0;border-style:dashed;border-color:var(--faint)}
+.more-f{height:32px;border-radius:8px;border-style:solid;border-color:var(--outline)}
+.tabs{background:var(--sc-high);backdrop-filter:none;-webkit-backdrop-filter:none;padding-top:12px}
+.tabs a{gap:4px;padding:0 2px;font-weight:500;color:var(--muted)}
+.tabs a svg{width:64px;height:32px;padding:4px 20px;border-radius:16px;box-sizing:border-box}
+.tabs a.on{color:var(--ink);font-weight:700}
+.tabs a.on svg{background:var(--sec)}
+.tabs .listen{padding:0 2px}
+.tabs .listen .lic{width:56px;height:32px;border-radius:16px}
+.find input{height:48px;border-radius:24px;background:var(--sc-high);border:0;padding:0 20px}
+@media (max-width:599px){.hero .acts .pill{font-size:13px;letter-spacing:0}}
+@media (max-width:399px){.tabs a svg{width:48px;padding:4px 12px}.tabs .listen .lic{width:44px}.tabs{padding-left:6px;padding-right:6px}}
