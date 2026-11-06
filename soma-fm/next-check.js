@@ -181,7 +181,7 @@ const overflow = page => page.evaluate(() => {
   let h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.innerText.replace(/\s+\d[\d,]*$/, '').trim()), more: !!document.querySelector('.more-f'),
     rows: document.querySelectorAll('#plist .pr:not(.ph)').length, gaps: document.querySelectorAll('.gaprow').length, line: document.querySelector('.bar-line .grow').textContent, gone: (document.querySelector('#gonebox summary') || {}).textContent }));
   check('History: five chips to start (All, Latest, In playlist, Not in playlist, Favorites; short names at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,Latest,In list,Not in list,★' && h.more, JSON.stringify(h));
-  check('History: 50 plays a page, gap rows between plays, the playlist line and the gone-from-playlist notice', h.rows === 50 && h.gaps === 0 && /Xmas Mixed playlist · 61 songs \(1 unavailable left out\) · checked 2 min ago/.test(h.line) && /1 song is gone/.test(h.gone), JSON.stringify(h));
+  check('History: 50 plays a page, gap rows between plays, the playlist line and the gone-from-playlist notice', h.rows === 50 && h.gaps === 0 && /Xmas Mixed playlist · 61 songs · checked 2 min ago \(1 unavailable left out\)/.test(h.line) && /1 song is gone/.test(h.gone), JSON.stringify(h));
   await s.page.click('.more-f');
   const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length, latest: (document.querySelectorAll('.fpanel .grp')[0].children[1] || {}).dataset.act === 'flatest' }));
   check('History: All filters opens Status (Latest play only second) / Favorites and categories, with Clear all and Done', panel.heads === 'Status|Favorites and categories' && panel.latest && panel.chips >= 12, JSON.stringify(panel));
@@ -590,8 +590,9 @@ const overflow = page => page.evaluate(() => {
     s = await open(browser, { width: 360, path: '/shuffle' });
     await s.page.waitForTimeout(400);
     const shOver = await overflow(s.page);
-    const sh360 = await s.page.evaluate(() => { const dl = document.querySelector('[data-act="shDownload"]'), kv = [...document.querySelectorAll('.kv')].find(x => /^Resets/.test(x.textContent)), par = kv && kv.querySelector('.nw');
-      return { dl: dl && dl.getBoundingClientRect().right <= document.documentElement.clientWidth, par: par && par.getClientRects().length === 1 && /^\(.*\)$/.test(par.textContent), text: (document.querySelector('.box .k') || {}).textContent }; });
+    const sh360 = await s.page.evaluate(() => { const dl = document.querySelector('[data-act="shDownload"]'), kv = [...document.querySelectorAll('.kv')].find(x => /^Resets/.test(x.textContent)), lines = kv ? [...kv.querySelectorAll('.lines > span')] : [];
+      // since Nov 6: two lines, "in 11 h 5 min", then "midnight Pacific (3:00 AM)", each whole
+      return { dl: dl && dl.getBoundingClientRect().right <= document.documentElement.clientWidth, par: lines.length === 2 && /^in /.test(lines[0].textContent) && /^midnight Pacific \(.*\)$/.test(lines[1].textContent) && lines.every(l => l.getClientRects().length === 1) && lines[1].getBoundingClientRect().top >= lines[0].getBoundingClientRect().bottom - 1, text: (document.querySelector('.box .k') || {}).textContent }; });
     check('Shuffle (360 px): fits the window, Download in sight, the reset time\'s "(…)" kept whole, the short sign-in line', !shOver.length && sh360.dl && sh360.par && sh360.text === 'Sign in with the Google account that owns Xmas Mixed.', JSON.stringify({ shOver, sh360 }));
     await s.ctx.close();
     delete api.doc.original;
@@ -650,6 +651,38 @@ const overflow = page => page.evaluate(() => {
       check('Phone (360 px): song names and artists wrap, none cut off', cut === 0, String(cut));
       check('Phone (360 px): rows without column names', await s.page.evaluate(() => document.querySelector('#plist .pr.ph').getBoundingClientRect().height === 0));
       check('Phone (360 px): History rows show the status as its dot alone, the name kept for screen readers', dots.length && dots.every(d => d.w <= 1 && d.name.length > 1), JSON.stringify(dots));
+    }
+    // The polish after the design review (Dan, Nov 6), on a phone
+    if (width === 360 && !theme && scheme === 'light') {
+      await tabTo(s.page, 'History');
+      // The status as a shape too: filled in the playlist, an empty ring not, half filled another version, a struck ring disliked
+      const shapes = await s.page.evaluate(() => { const o = {}; for (const k of ['have', 'none', 'other', 'gone', 'disliked']) { const e = document.createElement('span'); e.className = 'st ' + k; document.body.append(e); const b = getComputedStyle(e, '::before'); o[k] = { bg: b.backgroundColor, img: b.backgroundImage, border: b.borderTopStyle + ' ' + b.borderTopWidth }; e.remove(); } return o; });
+      check('Status shapes: filled for In playlist, an empty ring for Not, half for Other version, a broken ring for Gone, struck for Disliked',
+        shapes.have.bg !== 'rgba(0, 0, 0, 0)' && shapes.have.img === 'none' && shapes.none.bg === 'rgba(0, 0, 0, 0)' && shapes.none.img === 'none' && shapes.none.border === 'solid 2px'
+        && /linear-gradient\(90deg/.test(shapes.other.img) && shapes.gone.border === 'dashed 2px' && /linear-gradient\(135deg/.test(shapes.disliked.img), JSON.stringify(shapes));
+      // The playlist line: the name, then "61 songs", "checked …" and the unavailable one, a line each
+      const pl = await s.page.evaluate(() => { const g = document.querySelector('.bar-line .grow'), m = g.querySelector('.plmeta'), b = g.querySelector('b'), h = g.querySelector('.plhid');
+        return { meta: m.innerText.split('\n').map(x => x.trim()).filter(Boolean), below: m.getBoundingClientRect().top >= b.getBoundingClientRect().bottom - 1, hidBelow: !h || h.getBoundingClientRect().top >= m.querySelector('.nw').getBoundingClientRect().bottom - 1 }; });
+      check('History (360 px): the playlist line as the name, then "61 songs", "checked …" and the unavailable song, a line each', pl.below && pl.hidBelow && pl.meta[0] === '61 songs' && /^checked /.test(pl.meta[1]) && /unavailable/.test(pl.meta[2]), JSON.stringify(pl));
+      // A star tapped by mistake can be undone from the toast
+      const star = s.page.locator('#plist .pr:not(.ph) .star').first();
+      const was = await star.getAttribute('aria-pressed');
+      await star.click(); await s.page.waitForTimeout(200);
+      const t1 = await s.page.evaluate(() => ({ text: document.querySelector('#toast').textContent, undo: !!document.querySelector('#toast .tbtn'), pressed: document.querySelector('#plist .pr:not(.ph) .star').getAttribute('aria-pressed') }));
+      await s.page.click('#toast .tbtn'); await s.page.waitForTimeout(300);
+      const back = await s.page.evaluate(() => ({ pressed: document.querySelector('#plist .pr:not(.ph) .star').getAttribute('aria-pressed'), hidden: document.querySelector('#toast').hidden }));
+      check('A star toggled shows a toast with Undo, and Undo puts it back', t1.undo && /favorites/.test(t1.text) && t1.pressed !== was && back.pressed === was && back.hidden, JSON.stringify({ was, t1, back }));
+      // Stats: a 0% share quieter than the other; every status's counts on the line under its name
+      await tabTo(s.page, 'Stats');
+      const sz = await s.page.evaluate(() => { const z = document.querySelector('.io-in.zero b.big'), g = document.querySelector('.io-in.good:not(.zero) b.big');
+        const rows = [...document.querySelectorAll('.kv.stat')].map(k => k.querySelector('.r').getBoundingClientRect().top >= k.querySelector('.st').getBoundingClientRect().bottom - 1);
+        return { zero: !!z, smaller: !!(z && g && parseFloat(getComputedStyle(z).fontSize) < parseFloat(getComputedStyle(g).fontSize)), dim: !!(z && g && getComputedStyle(z).color !== getComputedStyle(g).color), rows }; });
+      check('Stats (360 px): 0% disliked drawn quieter; every status’s counts under its name', sz.zero && sz.smaller && sz.dim && sz.rows.length >= 2 && sz.rows.every(Boolean), JSON.stringify(sz));
+      // Shuffle: the quota bar shows what's left (full on a fresh day); "Original order" with its sentence under it
+      await tabTo(s.page, 'Shuffle');
+      const q = await s.page.evaluate(() => { const m = document.querySelector('.meter[aria-label="Quota left today"]'), i = m && m.querySelector('i'), st = document.querySelector('.kv.stack');
+        return { fill: m ? Math.round(i.getBoundingClientRect().width / m.getBoundingClientRect().width * 100) : null, left: m && m.getAttribute('aria-valuenow'), stack: st ? st.querySelector('.r').getBoundingClientRect().top >= st.firstElementChild.getBoundingClientRect().bottom - 1 && getComputedStyle(st.querySelector('.r')).textAlign === 'left' : null }; });
+      check('Shuffle (360 px): the quota bar shows what’s left (full when none is used); a sentence goes under its label', q.fill !== null && q.fill >= 99 && Number(q.left) > 0 && q.stack !== false, JSON.stringify(q));
     }
     if (width === 600 && !theme && scheme === 'light') {
       await tabTo(s.page, 'History');

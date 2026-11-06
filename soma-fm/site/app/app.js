@@ -51,7 +51,20 @@
   };
   const $ = sel => document.querySelector(sel);
   let toastTimer = null;
-  function toast(text) { const t = $('#toast'); t.textContent = text; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3500); }
+  // undo: a function, for a toast with an Undo button (a star tapped by mistake; Dan, Nov 6). Shown a little longer.
+  let toastUndo = null;
+  function toast(text, undo) {
+    const t = $('#toast'); toastUndo = undo || null;
+    t.textContent = text;
+    if (undo) { const b = document.createElement('button'); b.className = 'tbtn'; b.dataset.act = 'toastUndo'; b.textContent = 'Undo'; t.append(b); }
+    t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; toastUndo = null; }, undo ? 5000 : 3500);
+  }
+  // A star turned on or off, with Undo
+  function favWithUndo(id) {
+    const on = !isFav(id);
+    setFav(id, on); render();
+    toast(on ? 'Added to favorites' : 'Removed from favorites', () => { setFav(id, !on); render(); });
+  }
   // "Working…" after a short wait, for actions that go over the network
   let busyN = 0;
   async function busy(fn) {
@@ -650,7 +663,8 @@
         return `<div class="kv"><span><b>${esc(g.title)}</b><small>${g.ch ? esc(noTopic(g.ch)) + ' · ' : ''}last seen ${esc(History.formatDate(g.last / 1000))}</small></span><span><a class="pill" href="${ytSearch(M.searchQuery('', q))}" target="_blank" rel="noopener">Search YouTube</a> <button class="pill" data-act="dismiss" data-v="${esc(g.id)}">Dismiss</button></span></div>`; }).join('')}</details>` : '';
     const pl = D.playlistError ? `<span class="grow err">Couldn't read “${PLAYLIST_NAME}”: ${esc(D.playlistError)}. Songs aren't labeled until it can be read.</span>`
       : D.playlistLoading && !D.items.length ? `<span class="grow">Reading “${PLAYLIST_NAME}”…</span>`
-      : `<span class="grow"><b>${PLAYLIST_NAME}</b> playlist <span class="nw">· ${fmt(D.items.length)} songs</span>${D.hidden ? ` <span class="nw">(${D.hidden} unavailable left out)</span>` : ''} <span class="nw">· checked ${ago(D.playlistAt)}</span></span>`;
+      // On a phone: the name, then "61 songs", "checked 2 min ago" and any unavailable songs, each on a line, muted (.plmeta; Dan, Nov 6)
+      : `<span class="grow"><b>${PLAYLIST_NAME}</b> playlist<span class="plmeta"><span class="nw"><span class="sep1"> · </span>${fmt(D.items.length)} songs</span> <span class="nw"><span class="sep">· </span>checked ${ago(D.playlistAt)}</span>${D.hidden ? ` <span class="nw plhid">(${D.hidden} unavailable left out)</span>` : ''}</span></span>`;
     const gaps = D.plays.filter(p => p[4]).length;
     return head('SomaFM station play history') + `
       <div class="bar-line">${pl}<button class="pill" data-act="refresh">↻ Refresh playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live updates</button></div>
@@ -715,7 +729,8 @@
     if (!t.labeledSongs) return '';
     const h = t.breakdown.have || { songs: 0, plays: 0 }, d = t.breakdown.disliked || { songs: 0, plays: 0 };
     // Each share as a %, its words beside it (under it on a phone) and the count below them; disliked laid out the same
-    const share = (cls, n, of, wide, narrow) => `<div class="io-in ${cls}"><b class="big">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">${wide}</span><span class="ln">${narrow}</span></span><span class="io-n"><b>${fmt(n)}</b> of <b>${fmt(of)}</b></span></span></div>`;
+    // A share at 0 is drawn quieter (.zero), so it doesn't compete with the other (Dan, Nov 6)
+    const share = (cls, n, of, wide, narrow) => `<div class="io-in ${cls}${n ? '' : ' zero'}"><b class="big">${pct(n, of)}</b><span class="io-t"><span class="io-l"><span class="lw">${wide}</span><span class="ln">${narrow}</span></span><span class="io-n"><b>${fmt(n)}</b> of <b>${fmt(of)}</b></span></span></div>`;
     const card = (n, dn, of, what) => `<div class="box io">${share('good', n, of, `of ${what} in your playlist`, `of ${what} in playlist`)}${share('dis', dn, of, `of ${what} disliked`, `of ${what} disliked`)}</div>`;
     return `<div class="g2" style="margin-bottom:12px">${card(h.songs, d.songs, t.labeledSongs, 'songs')}${card(h.plays, d.plays, t.labeledPlays, 'plays')}</div>`;
   }
@@ -1158,8 +1173,9 @@
     unlink(el) { setMark(rowOf(el).key, 'have'); render(); },   // two-level undo: Unlink keeps "I have it"; Undo then clears it
     dislike(el) { setDislike(rowOf(el).key, true); render(); },
     undislike(el) { setDislike(rowOf(el).key, false); render(); },
-    fav(el) { const r = resultOf(rowOf(el)); if (inList(r)) { setFav(r.item.id, !isFav(r.item.id)); render(); } },
-    star(el) { setFav(el.dataset.v, !isFav(el.dataset.v)); render(); },
+    fav(el) { const r = resultOf(rowOf(el)); if (inList(r)) favWithUndo(r.item.id); },
+    star(el) { favWithUndo(el.dataset.v); },
+    toastUndo() { const u = toastUndo; toastUndo = null; $('#toast').hidden = true; clearTimeout(toastTimer); if (u) u(); },
     catmenu(el) { const p = rowOf(el), r = resultOf(p); if (inList(r)) catMenu(el, r.item.id, p.title); },
     catmenuId(el) { catMenu(el, el.dataset.v, el.dataset.name || ''); },
     note(el) { const p = rowOf(el); S.open = p.id; S.noteFor = p.id; S.pick = null; S.noteDraft = noteOf(p.key); render(); focusNote(); },
@@ -1545,8 +1561,9 @@
     const used = usedToday(), left = Math.max(0, Shuffle.DAILY_UNITS - used), r = resetMins(), run = D.doc.shuffle.run, last = lastOrder();
     const until = r >= 60 ? `${Math.floor(r / 60)} h ${r % 60} min` : `${r} min`;
     const what = run ? (run.kind === 'shuffle' ? 'Last shuffle' : KINDS[run.kind] ? KINDS[run.kind].name : 'Last run') : '';
-    return `<div class="box"><h4>Quota today</h4><div class="meter" role="progressbar" aria-label="Quota used today" aria-valuemin="0" aria-valuemax="${Shuffle.DAILY_UNITS}" aria-valuenow="${Math.min(used, Shuffle.DAILY_UNITS)}"><i style="width:${Math.min(100, used / Shuffle.DAILY_UNITS * 100)}%"></i></div>
-      <div class="kv"><span>Left today (all your devices)</span><b>about ${fmt(left)} of ${fmt(Shuffle.DAILY_UNITS)}</b></div><div class="kv"><span>Resets</span><b>midnight Pacific · in ${until} <span class="nw">(${esc(quotaReset())})</span></b></div>
+    // The bar shows what's left (full at the start of the day), so a fresh day doesn't look like an empty, broken bar (Dan, Nov 6)
+    return `<div class="box"><h4>Quota today</h4><div class="meter" role="progressbar" aria-label="Quota left today" aria-valuemin="0" aria-valuemax="${Shuffle.DAILY_UNITS}" aria-valuenow="${left}"><i style="width:${Math.min(100, left / Shuffle.DAILY_UNITS * 100)}%"></i></div>
+      <div class="kv"><span>Left today<span class="lw"> (all your devices)</span></span><b>about ${fmt(left)} of ${fmt(Shuffle.DAILY_UNITS)}</b></div><div class="kv"><span>Resets</span><b class="lines"><span>in ${until}</span><span>midnight Pacific (${esc(quotaReset())})</span></b></div>
       ${run ? `<div class="kv"><span>${esc(what)}</span><b>${esc(when(run.at / 1000))}</b></div><div class="kv"><span>It used</span><b>about ${fmt(run.units)} units · ${plural(run.moves, 'move')}${run.complete ? '' : ' · stopped partway'}</b></div>` : ''}
       ${last ? `<div class="kv"><span>Order last changed</span><b>${esc(when(last.at / 1000))}</b></div>` : ''}
       <div class="kv"><span>Google's own count</span><a class="pill" href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas" target="_blank" rel="noopener">Cloud Console</a></div>
@@ -1603,7 +1620,7 @@
       main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() || D.keepsSignIn ? 'shStart' : 'shSignIn'}">${validToken() || D.keepsSignIn ? 'Try again' : 'Sign in again'}</button></div></div>`;
     }
     const o = D.doc.original;
-    const extra = `<div class="box" style="margin-top:12px">${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv"><span>Original order</span><span class="r">not saved yet: it is kept when you first open a shuffle</span></div>'}
+    const extra = `<div class="box" style="margin-top:12px">${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv stack"><span>Original order</span><span class="r">Not saved yet: it is kept when you first open a shuffle.</span></div>'}
       ${sh.savedNow ? '<div class="snote">Saved just now from the playlist as it is.</div>' : ''}
       ${(validToken() || (D.keepsSignIn && sh.channel)) && v !== 'running' && v !== 'signin' ? `<div class="kv btnrow"><span>Signed in with Google${D.keepsSignIn ? ' on all your devices' : ''}</span><span><button class="pill" data-act="shSignOut">Sign out</button></span></div>` : ''}</div>`;
     return head('Reorder your YouTube playlist') + `<div class="split"><div>${main}${extra}</div><div>${quotaBox()}<p class="foot" style="text-align:left">Play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order.</p></div></div>`;

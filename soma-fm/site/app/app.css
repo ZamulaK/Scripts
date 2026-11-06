@@ -491,3 +491,23 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 .tabs .listen.on .lic,.tabs .listen.loading .lic{background:#fff;color:var(--hero1)}
 /* All filters below 900 px: a filter icon instead of "All" (the first chip is All; Dan, Nov 6) */
 .more-f .fic svg{width:16px;height:16px;display:block}
+/* ---------- Polish after the design review (Dan, Nov 6) ---------- */
+/* The status as a shape as well as a color: filled = in the playlist, an empty ring = not, half filled = another version,
+   a broken ring = gone from it, a ring struck through = disliked. Everywhere a status dot shows. */
+.st:before{box-sizing:border-box;width:10px;height:10px;border:2px solid currentColor;background:currentColor}
+.st.none:before{background:transparent}
+.st.other:before{background:linear-gradient(90deg,currentColor 50%,transparent 50%)}
+.st.gone:before{background:transparent;border-style:dashed}
+.st.disliked:before{background:linear-gradient(135deg,transparent 0 40%,currentColor 40% 60%,transparent 60%)}
+/* Stats: a share at 0 is quieter, so it doesn't compete with the one that isn't */
+.io-in.zero b.big{color:var(--faint);font-size:19px}
+@media (max-width:599px){.io-in.zero b.big{font-size:16px}}
+/* Stats → Songs by status on a phone: every status's counts on the line under its name, so the rows match */
+@media (max-width:599px){.kv.stat .r{flex-basis:100%;justify-content:flex-start;padding-left:16px}}
+/* History's playlist line on a phone: the name, then "61 songs", "checked 2 min ago" and any unavailable songs, a line each, muted */
+@media (max-width:599px){.plmeta{display:block;color:var(--muted);font-size:13px}.plmeta .nw{display:block}.plmeta .sep1,.plmeta .sep{display:none}.plmeta .plhid{color:var(--faint)}}
+/* A sentence beside a label goes under it, left-aligned, rather than as a ragged right-aligned paragraph */
+.kv.stack{flex-direction:column;align-items:flex-start;gap:2px}
+.kv.stack .r{text-align:left}
+/* The toast's Undo */
+.toast .tbtn{background:none;border:0;color:var(--hero1);text-decoration:underline;text-underline-offset:2px;font:inherit;font-weight:700;margin-left:10px;cursor:pointer;padding:4px 2px}
