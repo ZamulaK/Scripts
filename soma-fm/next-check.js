@@ -685,6 +685,16 @@ const overflow = page => page.evaluate(() => {
       await tabTo(s.page, 'Shuffle');
       const q = await s.page.evaluate(() => { const m = document.querySelector('.meter[aria-label="Quota left today"]'), i = m && m.querySelector('i'), st = document.querySelector('.kv.stack');
         return { fill: m ? Math.round(i.getBoundingClientRect().width / m.getBoundingClientRect().width * 100) : null, left: m && m.getAttribute('aria-valuenow'), stack: st ? st.querySelector('.r').getBoundingClientRect().top >= st.firstElementChild.getBoundingClientRect().bottom - 1 && getComputedStyle(st.querySelector('.r')).textAlign === 'left' : null }; });
+      // More: each theme tile shows its colors; the bar's Listen keeps a margin from the edge, here and on Dan's Pixel (412 px)
+      await tabTo(s.page, 'More');
+      const sw = await s.page.evaluate(() => [...document.querySelectorAll('.theme i')].map(i => Math.round(i.getBoundingClientRect().width)));
+      check('More: every theme tile shows a color preview across it', sw.length === 3 && sw.every(w => w > 60), JSON.stringify(sw));
+      const edge = [];
+      for (const vw of [360, 412, 440]) { await s.page.setViewportSize({ width: vw, height: 900 }); await s.page.waitForTimeout(150);
+        edge.push(await s.page.evaluate(() => { const l = document.querySelector('.tabs .listen .lic').getBoundingClientRect(), a = document.querySelector('.tabs a svg').getBoundingClientRect(); return { w: innerWidth, gap: Math.round(document.documentElement.clientWidth - l.right), first: Math.round(a.left) }; })); }
+      await s.page.setViewportSize({ width: 360, height: 1000 });
+      check('The bar: Listen at least 8 px from the right edge at 360, 412 and 440 px', edge.every(e => e.gap >= 8), JSON.stringify(edge));
+      await tabTo(s.page, 'Shuffle');
       check('Shuffle (360 px): the quota bar shows what’s left (full when none is used); a sentence goes under its label', q.fill !== null && q.fill >= 99 && Number(q.left) > 0 && q.stack !== false, JSON.stringify(q));
     }
     if (width === 600 && !theme && scheme === 'light') {

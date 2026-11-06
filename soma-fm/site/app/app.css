@@ -513,3 +513,7 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 .toast .tbtn{background:none;border:0;color:var(--hero1);text-decoration:underline;text-underline-offset:2px;font:inherit;font-weight:700;margin-left:10px;cursor:pointer;padding:4px 2px}
 /* A toast by what was tapped (a star's Undo): placed by toast() at that spot, not at the bottom of the screen */
 .toast.near{bottom:auto;transform:none;max-width:calc(100% - 16px);white-space:nowrap}
+/* The bar on a phone 400–439 px wide (Dan's Pixel): slightly narrower pills, so Listen keeps the bar's edge margin (Dan, Nov 6) */
+@media (min-width:400px) and (max-width:439px){.tabs a svg{width:56px;padding:4px 16px}.tabs .listen .lic{width:50px}}
+/* The theme tiles' color previews: stretched across the tile (they had shrunk to nothing; Dan, Nov 6) */
+.theme i{align-self:stretch}

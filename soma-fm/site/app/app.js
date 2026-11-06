@@ -51,7 +51,7 @@
   };
   const $ = sel => document.querySelector(sel);
   let toastTimer = null;
-  // undo: a function, for a toast with an Undo button (a star tapped by mistake; Dan, Nov 6). Shown a little longer.
+  // undo: a function, for a toast with an Undo button (a star tapped by mistake; Dan, Nov 6), shown 3 s (Dan's choice)
   let toastUndo = null;
   // near: the rectangle of what was tapped; the toast then shows right by it (under it, or over it near the bottom bar)
   // rather than at the bottom of the screen, so Undo is a short reach (Dan, Nov 6)
@@ -67,7 +67,7 @@
       t.style.left = Math.round(Math.min(Math.max(8, near.left + near.width / 2 - w / 2), document.documentElement.clientWidth - w - 8)) + 'px';
       t.style.top = Math.round(top) + 'px';
     }
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; toastUndo = null; }, undo ? 5000 : 3500);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; toastUndo = null; }, undo ? 3000 : 3500);
   }
   // A star turned on or off, with Undo by the star
   function favWithUndo(id, el) {
@@ -480,7 +480,7 @@
       <div class="c-time"><span class="t12">${time(p.at)}</span><span class="t24">${time24(p.at)}</span><small>${short(p.at)}</small>${isNow ? '<span class="now-tag">NOW</span>' : ''}</div>
       <div class="c-song"><div class="t"><b>${title}</b></div><div class="by">${esc(p.artist)}${len ? ` · ${len.measured ? '~' : ''}${History.formatClock(len.secs)}` : ''}</div>${p.album ? `<div class="alb">${esc(p.album)}</div>` : ''}${lnote}</div>
       <div class="c-status">${st(r)}</div>
-      <div class="c-cat">${!inList(r) ? '—' : catOf(r.item.id) ? `<span class="cf">${esc(CAT[catOf(r.item.id)])}</span><span class="cs">${esc(CATSH[catOf(r.item.id)])}</span>` : ''}</div>
+      <div class="c-cat">${!inList(r) ? '' : catOf(r.item.id) ? `<span class="cf">${esc(CAT[catOf(r.item.id)])}</span><span class="cs">${esc(CATSH[catOf(r.item.id)])}</span>` : ''}</div>
       <div class="c-plays">${fmt(n)}×</div>
       <div class="c-go">${quickLinks(p, r)}</div>
       <div class="c-act">${chev()}</div>
@@ -677,7 +677,7 @@
       : `<span class="grow"><b>${PLAYLIST_NAME}</b> playlist<span class="plmeta"><span class="nw"><span class="sep1"> · </span>${fmt(D.items.length)} songs</span> <span class="nw"><span class="sep">· </span>checked ${ago(D.playlistAt)}</span>${D.hidden ? ` <span class="nw plhid">(${D.hidden} unavailable left out)</span>` : ''}</span></span>`;
     const gaps = D.plays.filter(p => p[4]).length;
     return head('SomaFM station play history') + `
-      <div class="bar-line">${pl}<button class="pill" data-act="refresh">↻ Refresh playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live updates</button></div>
+      <div class="bar-line">${pl}<button class="pill" data-act="refresh">Refresh playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live updates</button></div>
       ${D.archiveNote ? `<div class="warn">⚠ ${esc(D.archiveNote)}</div>` : ''}${goneBox}${filters}
       ${findIn ? '' : find}
       <div id="plist">${playsList(page, list)}</div>
