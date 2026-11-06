@@ -202,7 +202,7 @@ const overflow = page => page.evaluate(() => {
   await s.page.click('.quick .chip:has-text("All")');
 
   // A song's row: its choices, and each change sent to /api/change
-  const rowFor = title => s.page.locator('#plist .pr:not(.ph)', { has: s.page.locator(`.c-song b:text-is("${title}")`) }).first();
+  const rowFor = title => s.page.locator('#plist .pr:not(.ph)', { has: s.page.locator('.c-song b', { hasText: new RegExp('^' + title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s☆★✎]*$') }) }).first();
   await rowFor('Rotation Song 2').click();
   let d = await s.page.evaluate(() => { const x = document.querySelector('.pr.open .detail'); return x && { rows: x.querySelectorAll('.row').length, buttons: [...x.querySelectorAll('.row button, .row a')].map(b => b.textContent.trim()), log: x.querySelectorAll('.log li').length }; });
   check('Row: tapping opens I have it, Dislike and Add a note in one row, and every play of the song', d && d.rows === 1 && d.buttons.join() === '✓ I have it,👎 Dislike,✎ Add a note' && d.log > 1, JSON.stringify(d));
@@ -661,6 +661,12 @@ const overflow = page => page.evaluate(() => {
       const tn = await tab();
       check('Tablet (600 px): Just played on Now the same', /^Time Song Category$/i.test(tn.head) && !tn.cols && tn.dots.every(w => w <= 1) && tn.side && tn.lined, JSON.stringify(tn));
       await tabTo(s.page, 'History');
+      // The star right after the title's last word, also when the title wraps (Dan, Nov 6)
+      const stars = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph) .c-song .t')].filter(t => t.querySelector('.star')).map(t => {
+        const st = t.querySelector('.star').getBoundingClientRect(), r = document.createRange(); r.selectNodeContents(t.querySelector('.nw').firstChild);
+        const lines = [...r.getClientRects()], l = lines[lines.length - 1], b = t.querySelector('b').getBoundingClientRect();
+        return { gap: Math.round(st.left - l.right), same: st.top < l.bottom && st.bottom > l.top, wrapped: b.height > 30 }; }));
+      check('Tablet (600 px): the star right after the title’s last word, wrapped or not', stars.length > 3 && stars.some(x => x.wrapped) && stars.every(x => x.gap >= 0 && x.gap <= 10 && x.same), JSON.stringify(stars.slice(0, 6)));
       const t12 = await s.page.evaluate(() => document.querySelector('#plist .pr:not(.ph) .c-time').innerText.split('\n').filter(x => /\d:\d\d/.test(x))[0]);
       check('Tablet (600 px): the time stays 12-hour', /^\d{1,2}:\d\d [AP]M$/.test(t12), t12);
       check('History: the line under the title is "SomaFM station play history"', await s.page.locator('header.top .sub').textContent() === 'SomaFM station play history');

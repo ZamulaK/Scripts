@@ -451,9 +451,11 @@
     const lnote = note && S.listNotes !== 'off' ? `<div class="lnote ${S.listNotes}">${esc(S.listNotes === 'one' ? note.split('\n')[0] : note)}</div>` : '';
     const icons = note && !lnote ? '<span class="ic" title="Has a note">✎</span>' : '';
     const len = songLength(p.key, r);
+    // The star (and ✎) right after the title's last word, on its line, when the title wraps (Dan, Nov 6)
+    const tw = esc(p.title).split(' '), last = tw.pop(), title = (tw.length ? tw.join(' ') + ' ' : '') + `<span class="nw">${last}${star}${icons}</span>`;
     return `<div class="pr ${open ? 'open' : ''} ${S.flash === p.key ? 'flash' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">
       <div class="c-time"><span class="t12">${time(p.at)}</span><span class="t24">${time24(p.at)}</span><small>${short(p.at)}</small>${isNow ? '<span class="now-tag">NOW</span>' : ''}</div>
-      <div class="c-song"><div class="t"><b>${esc(p.title)}</b>${star}${icons}</div><div class="by">${esc(p.artist)}${len ? ` · ${len.measured ? '~' : ''}${History.formatClock(len.secs)}` : ''}</div>${p.album ? `<div class="alb">${esc(p.album)}</div>` : ''}${lnote}</div>
+      <div class="c-song"><div class="t"><b>${title}</b></div><div class="by">${esc(p.artist)}${len ? ` · ${len.measured ? '~' : ''}${History.formatClock(len.secs)}` : ''}</div>${p.album ? `<div class="alb">${esc(p.album)}</div>` : ''}${lnote}</div>
       <div class="c-status">${st(r)}</div>
       <div class="c-cat">${!inList(r) ? '—' : catOf(r.item.id) ? `<span class="cf">${esc(CAT[catOf(r.item.id)])}</span><span class="cs">${esc(CATSH[catOf(r.item.id)])}</span>` : '<span class="cf">No category</span><span class="cs">None</span>'}</div>
       <div class="c-plays">${fmt(n)}×</div>
