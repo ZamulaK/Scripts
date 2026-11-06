@@ -1005,7 +1005,7 @@
     const cs = getComputedStyle(e), c = (hintCanvas = hintCanvas || document.createElement('canvas')).getContext('2d');
     c.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
     const room = e.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    e.placeholder = c.measureText(HINT).width <= room ? HINT : 'Search…';
+    e.placeholder = c.measureText(HINT).width + 10 <= room ? HINT : 'Search…';   // a little to spare: the font may still be loading when this measures
   }
   addEventListener('resize', fitHint);
   function render() {
