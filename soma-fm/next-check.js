@@ -94,9 +94,12 @@ async function open(browser, { width = 600, height = 1000, scheme = 'light', pat
     if (pth === '/api/youtube/connect') { if (JSON.parse(req.postData()).code !== 'good-code') return send({ error: 'Google refused the sign-in: bad code' }, 'application/json', 502); api.yt = 'kept'; return send({ access_token: 'kept-token', expires_in: 3599, kept: true }); }
     if (pth === '/api/youtube/token') { api.ytTokens = (api.ytTokens || 0) + 1; return api.yt ? send({ access_token: 'fresh-token', expires_in: 3599 }) : send({ error: 'not signed in', connected: false }, 'application/json', 409); }
     if (pth === '/api/youtube/disconnect') { api.yt = null; return send({ ok: true, revoked: true }); }
+    if (pth === '/api/feed') api.fed = true;
     if (pth === '/api/feed') return send({ songs: hist.slice(0, 15).map(x => ({ date: String(x[0]), artist: x[1], title: x[2], album: x[3] })) });
     if (pth === '/api/playlist') { api.playlistReads++; return send({ items, hidden: 1, complete: true, read: items.length + 1, expected: items.length, at: Date.now() - 120000 }); }
     if (pth === '/api/plays' && req.method() === 'POST') { api.posted += JSON.parse(req.postData()).plays.length; return send({ received: 1, changed: 0 }); }
+    // staleUntilFeed: the stored plays lack the newest three until SomaFM's list is read (the recorder's 10-minute look)
+    if (pth === '/api/plays' && api.staleUntilFeed) { const since = Number(u.searchParams.get('since')) || 0, have = api.fed ? hist : hist.slice(3); return send({ channel: 'christmas', now, recording: true, lastRun: { at: now - 600, ok: true, added: 1, note: '', lastOk: now - 600 }, plays: have.filter(x => x[0] >= since), breaks: [] }); }
     if (pth === '/api/plays') return send({ channel: 'christmas', now, recording: true, lastRun: { at: now - 60, ok: true, added: 1, note: '', lastOk: now - 60 }, plays: Number(u.searchParams.get('since')) ? [] : hist, breaks: [] });
     if (pth === '/api/state') return send({ version: api.version, state: api.doc });
     if (pth === '/api/change') {
@@ -395,6 +398,15 @@ const overflow = page => page.evaluate(() => {
     const f2 = await s.page.evaluate(() => { const f = document.querySelector('#find'); return { inRow: !!f.closest('.quick'), below: f.getBoundingClientRect().top >= document.querySelector('.fpanel').getBoundingClientRect().bottom - 1 }; });
     check('History (360 px): with all the filters open, the search box below them', !f2.inRow && f2.below, JSON.stringify(f2));
     await s.ctx.close();
+    // Opening the site (Dan, Nov 6): the stored plays can be 10 minutes old; reading SomaFM's list records the rest, and the
+    // page reads the plays again right after, so it shows what's on now well before the first live update
+    const keptApi = api; api = freshApi(); api.staleUntilFeed = true;
+    s = await open(browser, { width: 412, path: '/' });
+    await s.page.waitForTimeout(1500);
+    const opening = await s.page.evaluate(() => (document.querySelector('.hero h2') || {}).textContent || '');
+    check('Opening the site: Now shows the latest play at once, not the recorder’s last look', opening.includes(hist[0][2]) && api.fed, JSON.stringify({ opening, want: hist[0][2] }));
+    await s.ctx.close();
+    api = keptApi;
     // Dan's Pixel 8 Pro (412 px), where All ▾ had a line to itself: the box beside it with the whole hint
     s = await open(browser, { width: 412, path: '/history' });
     const f3 = await fl();

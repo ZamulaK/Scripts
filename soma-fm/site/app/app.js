@@ -276,9 +276,10 @@
     } catch (e) { D.err.plays = e.message; }
   }
   // SomaFM's list read now (the server records its plays on the way through); it says which song is playing
-  async function loadFeed() {
+  // pending: a read already asked for (at start, sent alongside the first reads and worked out once the plays are in)
+  async function loadFeed(pending) {
     try {
-      const { data, headers } = await api(`/feed?channel=${CHANNEL}`);
+      const { data, headers } = await (pending || api(`/feed?channel=${CHANNEL}`));
       const served = Date.parse(headers.get('Date') || '');
       const fetched = History.fromFeed(data.songs, (isFinite(served) ? served : Date.now()) / 1000, D.plays);
       D.nowAt = fetched.length ? fetched[0][0] : null;
@@ -1611,11 +1612,16 @@
   castSetup();
   loadConfig();
   (async () => {
-    // The plays and the document first (so the page can show something), then the playlist and what's playing
+    // The plays and the document first (so the page can show something), then the playlist and what's playing.
+    // SomaFM's list is asked for at once: reading it records the latest plays on the server, so the plays are read again
+    // right after it. The stored plays are only as new as the recorder's last 10-minute look, and without this the page
+    // started up to 10 minutes behind until the first live update a minute later (Dan, Nov 6).
+    const feedReq = api(`/feed?channel=${CHANNEL}`);
+    feedReq.catch(() => {});
     await Promise.all([loadState(), loadPlays()]);
     if (!D.loaded.state) stateReady(false);
     render();
-    await Promise.all([loadPlaylist(false), loadFeed()]);
+    await Promise.all([loadPlaylist(false), loadFeed(feedReq).then(loadPlays).then(() => render())]);
     render();
     if (view === 'shuffle') shufOpen();
     schedule();
