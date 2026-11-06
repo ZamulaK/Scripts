@@ -640,6 +640,7 @@ const overflow = page => page.evaluate(() => {
     if (!theme) check(`Midnight, dark, whatever the device is set to (${scheme})`, look.bg === 'rgb(11, 16, 32)', look.bg);
     if (theme === 'candy') check('Xmas Red (saved as candy), a dark theme, remembered', look.bg === 'rgb(25, 17, 19)', look.bg);
     if (width === 360) {
+      check('Phone (360 px): the Now card leaves the category out', await s.page.evaluate(() => { const c = document.querySelector('.hero .hcat'); return !c || c.getBoundingClientRect().width === 0; }));
       await tabTo(s.page, 'History');
       const dots = await s.page.evaluate(() => [...document.querySelectorAll('#plist .m-side .st')].slice(0, 5).map(x => ({ w: Math.round(x.querySelector('.stl').getBoundingClientRect().width), name: x.textContent })));
       const cut = await s.page.evaluate(() => [...document.querySelectorAll('#plist .c-song b, #plist .c-song .by')].filter(e => e.scrollWidth > e.clientWidth + 1).length);
@@ -659,6 +660,10 @@ const overflow = page => page.evaluate(() => {
       check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|None|Swing|Classics|Dance|Jazz|Mellow|Funk)$/.test(c)) && th.song >= 250 && th.lined, JSON.stringify(th));
       await tabTo(s.page, 'Now');
       const tn = await tab();
+      // The Now card's category above its play count, on the tablet (Dan, Nov 6)
+      const hc = await s.page.evaluate(() => { const c = document.querySelector('.hero .hcat'), p = document.querySelector('.hero .hct > span:last-child'); if (!c) return null; const a = c.getBoundingClientRect(), b = p.getBoundingClientRect();
+        return { text: c.textContent, above: a.bottom <= b.top + 1 && a.width > 0, right: Math.abs(a.right - b.right) <= 1 }; });
+      check('Tablet (600 px): the Now card shows the song’s category above its play count', hc && /^(No category|Band\/Swing|Classics|Dance|Jazz\/Piano|Mellow|Soul\/Funk)$/.test(hc.text) && hc.above && hc.right, JSON.stringify(hc));
       check('Tablet (600 px): Just played on Now the same', /^Time Song Category$/i.test(tn.head) && !tn.cols && tn.dots.every(w => w <= 1) && tn.side && tn.lined, JSON.stringify(tn));
       await tabTo(s.page, 'History');
       // The star right after the title's last word, also when the title wraps (Dan, Nov 6)

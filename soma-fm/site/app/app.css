@@ -471,3 +471,8 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 }
 /* Open and Search on the rows: a subtle tint of the accent behind them, so they read as buttons (Dan, Nov 6) */
 .c-go .icon{background:color-mix(in srgb,var(--accent) 16%,var(--card))}
+/* Now card (Dan, Nov 6): the song's category above its play count, on the tablet and wider (phones leave it out for room) */
+.hero .hct{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.25}
+.hero .hcat{font-size:12px;font-weight:500;opacity:.85}
+.hero .hcat.none{opacity:.6}
+@media (max-width:599px){.hero .hcat{display:none}}
