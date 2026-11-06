@@ -629,6 +629,13 @@ const overflow = page => page.evaluate(() => {
       check('History from 900 px: a table, Time | Song | Status | Category | Plays | Actions', cols === 'Time,Song,Status,Category,Plays,Actions', String(cols));
       const full = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph) .c-status .stl')].slice(0, 5).map(x => Math.round(x.getBoundingClientRect().width)));
       check('History from 900 px: the status in words where it fits', full.length && full.every(w => w > 30), JSON.stringify(full));
+      // The half-width Just played on a wide screen (Dan's TV, Nov 6): column names and Category, the status as its dot;
+      // Open and Search on a subtle tint
+      await tabTo(s.page, 'Now');
+      const half = await s.page.evaluate(() => { const l = document.querySelector('.plays'), h = l.querySelector('.pr.ph'), row = l.querySelector('.pr:not(.ph)'), ic = l.querySelector('.c-go .icon');
+        return { w: Math.round(l.getBoundingClientRect().width), head: h.innerText.replace(/\s+/g, ' ').trim(), dot: Math.round(row.querySelector('.m-side .stl').getBoundingClientRect().width), cat: row.querySelector('.c-cat').getBoundingClientRect().width > 0, bg: getComputedStyle(ic).backgroundColor, card: getComputedStyle(l).backgroundColor }; });
+      check('Now (1024 px): Just played, half width, with Time, Song, Category names and the status as its dot; Open/Search tinted', half.w < 860 && /^Time Song Category$/i.test(half.head) && half.dot <= 1 && half.cat && half.bg !== half.card && !/rgba\(0, 0, 0, 0\)/.test(half.bg), JSON.stringify(half));
+      await tabTo(s.page, 'History');
     }
     if (!theme) check(`Midnight, dark, whatever the device is set to (${scheme})`, look.bg === 'rgb(11, 16, 32)', look.bg);
     if (theme === 'candy') check('Xmas Red (saved as candy), a dark theme, remembered', look.bg === 'rgb(25, 17, 19)', look.bg);

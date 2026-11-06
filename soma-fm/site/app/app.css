@@ -450,13 +450,16 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
   .quick .more-f{padding:0 8px;gap:4px}
   .ph2 > span{display:block}
 }
-/* Lists 540–859 px wide (Dan's tablet, Nov 6): the rows as on a phone (Open/Search and the status dot, the play count and
+/* Lists 420–859 px wide (Dan's tablet, and the half-width lists on his TV and other wide screens; Nov 6): the rows as on a phone (Open/Search and the status dot, the play count and
    chevron under them, at the right end) plus a Category column with the short names, and column names over Time, Song and
    Category. Status, Plays and Actions get columns of their own only in the full table (860 px and wider), where the status
    fits in words. Narrower lists stay as rows without names. */
 .c-cat .cs{display:none}
-@container (min-width:540px) and (max-width:859px){
-  .ph,.pr{grid-template-columns:60px minmax(0,1fr) 66px 78px 12px;column-gap:8px}
+@container (min-width:420px) and (max-width:859px){
+  .ph,.pr{grid-template-columns:60px minmax(0,1fr) 62px 36px 12px;column-gap:8px}
+  /* Open and Search both (an other version): one above the other, so the column stays one button wide */
+  .pr > .c-go{flex-direction:column;align-items:flex-end;gap:4px}
+  .pr > .m-cnt{justify-self:end}
   .m-side .st .stl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   .m-side .st:before{width:11px;height:11px}
   .pr{grid-template-areas:"time song cat go st" "time song cat cnt cnt"}
@@ -466,3 +469,5 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
   .pr > .c-cat{grid-area:cat;display:block;align-self:center;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
   .c-cat .cf{display:none}.c-cat .cs{display:inline}
 }
+/* Open and Search on the rows: a subtle tint of the accent behind them, so they read as buttons (Dan, Nov 6) */
+.c-go .icon{background:color-mix(in srgb,var(--accent) 16%,var(--card))}
