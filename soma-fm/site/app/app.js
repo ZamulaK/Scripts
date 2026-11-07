@@ -574,6 +574,55 @@
   }
 
   const R = {};
+  // The two cards under the Now card take turns (Dan, Nov 7): first the rotation and the plays, as before, then figures
+  // from Stats, each pair for ROT_SECS, round and round. All pairs are written into one grid cell, so the cards keep the
+  // height of the tallest and nothing below them moves; only the pair showing is visible (and read by screen readers).
+  // A pointer over them, or keyboard focus in them, holds the pair; a tap on a dot shows that pair. Each card opens Stats.
+  const ROT_SECS = 10;
+  let rotAt = 0, rotHeld = false, rotN = 0, rotLast = Date.now();
+  function nowTiles(t) {
+    const P = t.playlist, ok = !D.playlistError && D.items.length;
+    // a card: a heading, then a big figure and its words, then smaller ones; words: [wide, narrow] or one for both
+    const words = w => Array.isArray(w) ? `<span class="lw">${w[0]}</span><span class="ln">${w[1]}</span>` : w;
+    const card = (kick, rows) => `<a class="box rtile${rows.length === 1 ? ' mid' : ''}" href="/stats" data-nav><span class="kick">${kick}</span>${rows.map(([big, w, cls], i) => `<div class="tl${i ? ' tl2' : ''}">${i ? `<b>${big}</b>` : `<b class="big">${big}</b>`}<span class="k${cls ? ' ' + cls : ''}">${words(w)}</span></div>`).join('')}</a>`;
+    const pairs = [];
+    pairs.push([card('SomaFM Rotation', [[t.repeatIntervals ? esc(backText(t.avgRepeatSecs)) : '—', 'until a song repeats']]),
+      card('Recording', [[fmt(D.plays.length), ['plays recorded', 'plays']], [fmt(t.unique), ['distinct songs', 'songs']]])]);
+    if (ok) {
+      pairs.push([card('Your Playlist', [[fmt(P.songs), 'songs'], [hmin(P.total), 'total']]),
+        card('Heard So Far', [[pct(P.heard, P.songs), ['of your playlist', 'of playlist']], [fmt(P.heard), ['songs heard on SomaFM', 'songs heard']]])]);
+      const h = t.labeledSongs && t.breakdown.have;
+      if (h) pairs.push([card('In Your Playlist', [[pct(h.songs, t.labeledSongs), ['of the songs SomaFM played', 'of songs played']]]),
+        card('In Your Playlist', [[pct(h.plays, t.labeledPlays), ['of all plays', 'of plays']]])]);
+    }
+    if (t.plays) {
+      const firsts = t.recent ? Math.round(t.recentFirsts / t.recent * 100) + '%' : '—';
+      pairs.push([card('SomaFM Rotation', [[t.avgPlays.toFixed(1), 'plays per song'], [fmt(t.repeated), ['songs played more than once', 'repeated']]]),
+        card('First Plays', [[firsts, [`of the last ${fmt(t.recent)} plays were new`, `new in the last ${fmt(t.recent)} plays`]]])]);
+      const top = t.top[0] && latestRow.get(t.top[0].key), rep = t.recentRepeats[0] && latestRow.get(t.recentRepeats[0].key);
+      if (top && rep) pairs.push([card('Most Played', [[`${fmt(counts.get(top.key) || 0)}×`, esc(top.title), 'song']]),
+        card('Latest Replay', [[time(rep.at), esc(rep.title), 'song']])]);
+      const since = D.plays.length ? D.plays[D.plays.length - 1][0] : 0;
+      pairs.push([card('Recording', [[esc(new Date(since * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' })), 'started'], [esc(Stats.formatSpan(t.coveredSecs)), 'recorded']]),
+        card('Recording', [[t.perHour ? t.perHour.toFixed(1) : '—', 'songs an hour'], [fmt(t.gaps), ['gaps (station or recorder down)', 'gaps']]])]);
+    }
+    rotN = pairs.length;
+    const on = rotAt % rotN;
+    return `<div class="rot" id="rot" style="margin-top:12px">${pairs.map((p, i) => `<div class="g2 rotp${i === on ? ' on' : ''}"${i === on ? '' : ' aria-hidden="true" inert'}>${p.join('')}</div>`).join('')}</div>` +
+      (rotN > 1 ? `<div class="rotdots" role="group" aria-label="Cards">${pairs.map((p, i) => `<button class="${i === on ? 'on' : ''}" data-act="rotTo" data-v="${i}" aria-label="Cards ${i + 1} of ${rotN}" aria-pressed="${i === on}"></button>`).join('')}</div>` : '');
+  }
+  // The next pair: the cards and dots change in place (no render), so nothing else on the page moves or flickers
+  function rotShow(i) {
+    rotAt = i; rotLast = Date.now();
+    const box = $('#rot'); if (!box) return;
+    const ps = box.querySelectorAll('.rotp'), on = rotAt % ps.length;
+    ps.forEach((p, k) => { p.classList.toggle('on', k === on); if (k === on) { p.removeAttribute('aria-hidden'); p.inert = false; } else { p.setAttribute('aria-hidden', 'true'); p.inert = true; } });
+    document.querySelectorAll('.rotdots button').forEach((b, k) => { b.classList.toggle('on', k === on); b.setAttribute('aria-pressed', String(k === on)); });
+  }
+  setInterval(() => { if (view === 'now' && !document.hidden && !rotHeld && rotN > 1 && Date.now() - rotLast >= ROT_SECS * 1000 - 300) rotShow((rotAt + 1) % rotN); }, 1000);
+  // held by a mouse resting on them (a tap on a phone isn't a hover, so it doesn't hold them)
+  document.addEventListener('pointerover', e => { if (e.pointerType === 'mouse') rotHeld = !!(e.target.closest && e.target.closest('#rot, .rotdots')); });
+  document.addEventListener('focusin', e => { rotHeld = !!(e.target.closest && e.target.closest('#rot, .rotdots') && e.target.matches(':focus-visible')); });
   // Off the air (Dan, Nov 7): the Now card is about the playlist rather than SomaFM's last song, which could be months
   // old. The site can't see what YouTube plays, so it names the first song of the current order as where it starts.
   const offSince = at => Date.now() / 1000 - at > 18 * 3600 ? new Date(at * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }) : time(at);
@@ -597,8 +646,7 @@
     const t = stats();
     // Dan, Nov 4: each count with its words beside it (under it when there's no room); shorter words on a phone
     // Until a song repeats / comes back: the measured average between replays, not the rotation estimate (Dan, Nov 6)
-    const tiles = `<div class="g2" style="margin-top:12px"><div class="box mid"><div class="tl"><b class="big">${t.repeatIntervals ? esc(backText(t.avgRepeatSecs)) : '—'}</b><span class="k">until a song repeats</span></div></div>` +
-      `<div class="box"><div class="tl"><b class="big">${fmt(D.plays.length)}</b><span class="k"><span class="lw">plays recorded</span><span class="ln">plays</span></span></div><div class="tl tl2"><b>${fmt(t.unique)}</b><span class="k"><span class="lw">distinct songs</span><span class="ln">songs</span></span></div></div></div>`;
+    const tiles = nowTiles(t);
     // Favorite: a star beside the song's name (Dan, Nov 4), so the buttons fit on one line on a phone
     const f = inList(r) && isFav(r.item.id);
     const fav = inList(r) ? `<button class="star" data-act="fav" data-i="${i}" aria-pressed="${f}" aria-label="${f ? 'Remove from favorites' : 'Add to favorites'}: ${esc(n.title)}" title="${f ? 'Favorite. Tap to remove.' : 'Add to favorites'}">${f ? '★' : '☆'}</button>` : '';
@@ -1217,6 +1265,7 @@
     },
     listen(b) { if (player.state !== 'off') listenStop(); else if (listenAsk()) listenMenu(b); else if (autoYT()) playYouTube(); else playSoma(); },
     listenMenu(b) { listenMenu(b); },
+    rotTo(b) { rotShow(Number(b.dataset.v)); },
     lmSoma() { if (player.state !== 'off') { closeLMenu(); listenStop(); } else playSoma(); },
     lmYT() { playYouTube(); },
     listenMode(b) { LS.set('listenMode', b.dataset.v === 'ask' ? 'ask' : null); render(); },
@@ -1510,11 +1559,12 @@
       const fresh = SH.view === 'idle' || SH.view === 'signin' || SH.view === 'loading';
       if (fresh && !validToken()) shufSet('loading', 'Signing in…');
       const t = fresh ? await freshToken().catch(() => null) : validToken();
-      if (t) { if (fresh) shufStart(); }
+      if (t) { if (fresh) shufSet('home'); }   // signed in: wait for New Shuffle (Dan, Nov 7), nothing read yet
       else if (SH.view !== 'error') shufSet('signin');
     } finally { shOpening = false; }
   }
-  async function shufStart() {
+  // then: 'original' to go on to putting back the original order once the playlist is read
+  async function shufStart(then) {
     try { shToken = await freshToken(); } catch (e) { return shufSet('error', `Couldn't get a Google key from the site (${e.message}).`); }
     if (!shToken) return shufSet('signin');
     shufSet('loading', 'Reading your playlist…');
@@ -1536,7 +1586,7 @@
         else if (Shuffle.matches(sh.current, job.target)) finished(job);
         else return prepare(job.target, job.kind, job.before, job.at);
       }
-      newShuffle();
+      if (then === 'original' && D.doc.original) SHACT.shOriginal(); else newShuffle();
     } catch (e) { shufSet('error', e.status !== undefined ? trouble(e) : `Can't shuffle: ${e.message}.`); }
   }
   function prepare(target, kind, before, resumeOf) {
@@ -1622,6 +1672,7 @@
     },
     shCancelWait() { clearInterval(shWait); shWait = null; shufSet('signin'); },
     shStart() { shufStart(); },
+    shStartOriginal() { shufStart('original'); },
     shNew() { newShuffle(); },
     shNewInstead() { LS.set('shuffle:job', null); newShuffle(); },
     shEarlier() { const l = lastOrder(); if (l && l.before) prepare(l.before, 'undo', sh.current, 0); },
@@ -1656,7 +1707,13 @@
     const v = SH.view, m = SH.msg, n = D.items.length;
     const say = (t, cls) => t ? `<div class="msg ${cls || ''}">${esc(t)}</div>` : '';
     let main = '';
-    if (v === 'signin' || v === 'idle') {
+    if (v === 'home') {
+      // Signed in, before anything is read: one button to plan a shuffle (Dan, Nov 7: it used to read and plan on opening)
+      const last = lastOrder(), job = LS.get('shuffle:job', null);
+      main = `<div class="box"><h4>Shuffle ${PLAYLIST_NAME}${n ? ` (${fmt(n)} songs)` : ''}</h4>${say(m)}<span class="k">${last ? `Order last changed ${esc(when(last.at / 1000))}.` : 'Not shuffled from this site yet.'} New Shuffle reads the playlist and plans a new order to look at first; nothing changes until you start it.</span>
+        ${job && job.target ? '<div class="msg">A shuffle didn’t finish. New Shuffle offers to finish it first.</div>' : ''}
+        <div class="btns"><button class="big-btn" data-act="shStart">New Shuffle</button>${D.doc.original ? '<button class="big-btn alt" data-act="shStartOriginal">Restore Original Order</button>' : ''}</div></div>`;
+    } else if (v === 'signin' || v === 'idle') {
       main = `<div class="box"><h4>Shuffle ${PLAYLIST_NAME}${n ? ` (${fmt(n)} songs)` : ''}</h4>${say(m, 'err')}<span class="k">Sign in with the Google account that owns ${PLAYLIST_NAME}.${D.keepsSignIn ? ' It stays signed in on all your devices until you sign out.' : ''}</span>
         <div class="btns"><button class="big-btn" data-act="shSignIn">Sign In with Google</button></div></div>`;
     } else if (v === 'waiting') {
@@ -1703,9 +1760,9 @@
       main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() || D.keepsSignIn ? 'shStart' : 'shSignIn'}">${validToken() || D.keepsSignIn ? 'Try Again' : 'Sign In Again'}</button></div></div>`;
     }
     const o = D.doc.original;
-    const extra = `<div class="box" style="margin-top:12px"><div class="kv btnrow"><span>${PLAYLIST_NAME} in its current order</span><span><a class="pill" href="${ytPlaylist()}" target="_blank" rel="noopener">${ico('yt')}Play on YouTube</a></span></div>${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv stack"><span>Original order</span><span class="r">Not saved yet: it is kept when you first open a shuffle.</span></div>'}
+    const extra = `<div class="box" style="margin-top:12px"><div class="kv btnrow"><span>${PLAYLIST_NAME} in its current order</span><span><a class="pill" href="${ytPlaylist()}" target="_blank" rel="noopener">${ico('yt')}Play on YouTube</a></span></div>${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv stack"><span>Original order</span><span class="r">Not saved yet: it is kept when you first plan a shuffle.</span></div>'}
       ${sh.savedNow ? '<div class="snote">Saved just now from the playlist as it is.</div>' : ''}
-      ${(validToken() || (D.keepsSignIn && sh.channel)) && v !== 'running' && v !== 'signin' ? `<div class="kv btnrow"><span>Signed in with Google${D.keepsSignIn ? ' on all your devices' : ''}</span><span><button class="pill" data-act="shSignOut">Sign Out</button></span></div>` : ''}</div>`;
+      ${(validToken() || (D.keepsSignIn && (sh.channel || v === 'home'))) && v !== 'running' && v !== 'signin' ? `<div class="kv btnrow"><span>Signed in with Google${D.keepsSignIn ? ' on all your devices' : ''}</span><span><button class="pill" data-act="shSignOut">Sign Out</button></span></div>` : ''}</div>`;
     return head('Reorder your YouTube playlist') + `<div class="split"><div>${main}${extra}</div><div>${quotaBox()}<p class="foot" style="text-align:left">Play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order.</p></div></div>`;
   }
 

@@ -561,3 +561,18 @@ a.big-btn svg{width:24px;height:24px}
 @media (max-width:399px){.tabs .lgrp.split .listen .lic{width:34px}.tabs .lcar{width:18px}}
 @media (min-width:400px) and (max-width:439px){.tabs .lgrp.split .listen .lic{width:40px}}
 .box .kv .pill svg{width:20px;height:20px}
+/* The cards under the Now card take turns (Dan, Nov 7): every pair in one grid cell (the tallest sets the height), the
+   one showing fades in; dots under them show which and pick one */
+.rot{display:grid}
+.rotp{grid-area:1/1;opacity:0;visibility:hidden;transition:opacity .6s ease,visibility 0s linear .6s}
+.rotp.on{opacity:1;visibility:visible;transition:opacity .6s ease}
+@media (prefers-reduced-motion:reduce){.rotp,.rotp.on{transition:none}}
+.rtile{display:flex;flex-direction:column;color:inherit;text-decoration:none}
+.rtile.mid .tl{margin:auto 0}
+.rtile .kick{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.rtile .k.song{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink);font-weight:600}
+.rtile:active{filter:brightness(1.12)}
+.rotdots{display:flex;justify-content:center;margin-top:4px}
+.rotdots button{width:22px;height:22px;padding:0;border:0;background:none;cursor:pointer;display:grid;place-items:center}
+.rotdots button::before{content:"";width:6px;height:6px;border-radius:50%;background:color-mix(in srgb,var(--muted) 55%,transparent);transition:width .3s,background .3s}
+.rotdots button.on::before{width:16px;border-radius:3px;background:var(--accent)}

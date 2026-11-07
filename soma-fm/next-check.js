@@ -166,7 +166,7 @@ const overflow = page => page.evaluate(() => {
   const browser = await chromium.launch();
   let s = await open(browser);
   const now = await s.page.evaluate(() => ({ hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, ''), tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr:not(.ph)').length,
-    tiles: [...document.querySelectorAll('.g2 .box b.big')].map(b => b.textContent), tabs: [...document.querySelectorAll('.tabs a')].map(a => a.textContent.trim()).join() }));
+    tiles: [...document.querySelectorAll('.rotp.on .box b.big')].map(b => b.textContent), tabs: [...document.querySelectorAll('.tabs a')].map(a => a.textContent.trim()).join() }));
   check('Now: what\'s playing (from the feed), its status, two tiles and the plays just before', now.hero === hist[0][2] && now.tag === 'Now Playing' && /^st (have|other|none|gone|disliked)$/.test(now.st) && now.stText.length > 3 && now.just === 7
     && now.tiles.length === 2 && /h$/.test(now.tiles[0]) && now.tiles[1] === '700' && now.tabs === 'Now,History,Stats,Shuffle,More', JSON.stringify(now));
   check('Loads the plays, the document, the playlist (the kept read, within 15 min) and the feed from /api', ['GET /api/state', 'GET /api/plays?channel=christmas&since=0', 'GET /api/feed?channel=christmas'].every(c => api.calls.indexOf(c) >= 0)
@@ -291,12 +291,13 @@ const overflow = page => page.evaluate(() => {
     const root = await s.page.evaluate(() => { const c = getComputedStyle(document.documentElement); return [c.getPropertyValue('--muted').trim(), c.getPropertyValue('--faint').trim()]; });
     check('Text in three levels: secondary text brighter, the old color kept for the third level', root[0] === '#bcc6db' && root[1] === '#97a3bd', root.join());
     check('Now: the line under the title is just "SomaFM Christmas Lounge"', await s.page.locator('header.top .sub').textContent() === 'SomaFM Christmas Lounge');
-    const tileText = pg => pg.evaluate(() => [...document.querySelectorAll('.g2 .box')].slice(0, 2).map(b => b.innerText.replace(/\s+/g, ' ').trim()));
+    const tileText = pg => pg.evaluate(() => [...document.querySelectorAll('.rotp.on .box')].slice(0, 2).map(b => [...b.querySelectorAll('.tl')].map(x => x.innerText).join(' ').replace(/\s+/g, ' ').trim()));
     const tl360 = await tileText(s.page);
     const w600 = await open(browser, { width: 600 }), tl600 = await tileText(w600.page);
-    const beside = await w600.page.evaluate(() => [...document.querySelectorAll('.g2 .tl')].every(r => { const b = r.querySelector('b').getBoundingClientRect(), k = r.querySelector('.k').getBoundingClientRect(); return k.left > b.right - 1 && Math.abs(k.bottom - b.bottom) < 8; }));
+    const beside = await w600.page.evaluate(() => [...document.querySelectorAll('.rotp.on .tl')].every(r => { const b = r.querySelector('b').getBoundingClientRect(), k = r.querySelector('.k').getBoundingClientRect(); return k.left > b.right - 1 && Math.abs(k.bottom - b.bottom) < 8; }));
     // "until a song repeats" is one line beside a card of two: centered top to bottom (Dan, Nov 4)
-    const mid = await w600.page.evaluate(() => { const box = document.querySelector('.g2 .box').getBoundingClientRect(), tl = document.querySelector('.g2 .box .tl').getBoundingClientRect(); return Math.abs((tl.top - box.top) - (box.bottom - tl.bottom)); });
+    // (since Nov 7 under its heading: centered in the space below it)
+    const mid = await w600.page.evaluate(() => { const bx = document.querySelector('.rotp.on .box'), box = bx.getBoundingClientRect(), k = bx.querySelector('.kick').getBoundingClientRect(), tl = bx.querySelector('.tl').getBoundingClientRect(), cs = getComputedStyle(bx); return Math.abs((tl.top - k.bottom - parseFloat(getComputedStyle(bx.querySelector('.kick')).marginBottom)) - (box.bottom - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth) - tl.bottom)); });
     await w600.ctx.close();
     check('Now (600 px): the repeat card\'s line centered top to bottom', mid < 2, String(mid));
     check('Now cards: "until a song repeats"; plays and distinct songs, short words on a phone', /^[\d.]+ h until a song repeats$/.test(tl360[0]) && /^700 plays \d+ songs$/.test(tl360[1]) && /^700 plays recorded \d+ distinct songs$/.test(tl600[1]), JSON.stringify({ tl360, tl600 }));
@@ -794,8 +795,12 @@ const overflow = page => page.evaluate(() => {
   // Another device: nothing on it, yet no sign-in: a fresh key from the server
   s = await open(browser, { path: '/shuffle' });
   await s.page.waitForTimeout(800);
+  // Signed in, Shuffle waits for New Shuffle (Dan, Nov 7) before reading anything
+  const home = await s.page.evaluate(() => ({ btn: (document.querySelector('[data-act="shStart"]') || {}).textContent, calls: 0 }));
+  const ytBefore = api.ytTokens || 0;
+  await s.page.click('[data-act="shStart"]'); await s.page.waitForTimeout(800);
   const other = await s.page.evaluate(() => ({ text: document.querySelector('#app').textContent, token: (JSON.parse(localStorage.getItem('xl:signin:token') || 'null') || {}).token, signIn: !!document.querySelector('[data-act="shSignIn"]') }));
-  check('Shuffle (kept sign-in): another device goes straight to YouTube with a fresh key, no sign-in', other.token === 'fresh-token' && !other.signIn && /YouTube refused/.test(other.text) && api.ytTokens >= 1, JSON.stringify(other).slice(0, 300));
+  check('Shuffle (kept sign-in): another device is signed in with a fresh key (no sign-in) and shows New Shuffle; New Shuffle goes to YouTube', home.btn === 'New Shuffle' && other.token === 'fresh-token' && !other.signIn && /YouTube refused/.test(other.text) && api.ytTokens >= 1, JSON.stringify(other).slice(0, 300));
   await s.page.click('[data-act="shSignOut"]');
   await s.page.waitForTimeout(500);
   const out = await s.page.evaluate(() => ({ signIn: !!document.querySelector('[data-act="shSignIn"]'), token: localStorage.getItem('xl:signin:token') }));
@@ -915,6 +920,19 @@ const overflow = page => page.evaluate(() => {
     await s.ctx.close();
     const src = fs.readFileSync(path.join(APP, 'app.js'), 'utf8');
     check("Shuffle: when it's done, Play on YouTube from the new order's first song", src.includes('<a class="big-btn" href="${sh.target && sh.target[0] ? ytWatch(sh.target[0]) : ytPlaylist()}" target="_blank" rel="noopener">${ico(\'yt\')}Play on YouTube</a>'));
+  }
+
+  // The cards under the Now card take turns (Dan, Nov 7): the rotation and plays first, then figures from Stats; one pair
+  // showing, all in one grid cell (same height, nothing below moves); a dot shows a pair; each card opens Stats
+  {
+    s = await open(browser, { width: 412 });
+    const r0 = await s.page.evaluate(() => { const ps = [...document.querySelectorAll('#rot .rotp')], jp = document.querySelector('.plays').getBoundingClientRect().top;
+      return { n: ps.length, on: ps.filter(p => p.classList.contains('on')).length, shown: ps.filter(p => getComputedStyle(p).visibility === 'visible').length, tops: new Set(ps.map(p => Math.round(p.getBoundingClientRect().top))).size, dots: document.querySelectorAll('.rotdots button').length, first: document.querySelector('.rotp.on .kick').textContent, jp, href: document.querySelector('.rotp.on a.rtile').getAttribute('href') }; });
+    await s.page.click('.rotdots button:nth-child(2)'); await s.page.waitForTimeout(900);
+    const r1 = await s.page.evaluate(() => ({ kicks: [...document.querySelectorAll('.rotp.on .kick')].map(k => k.textContent).join(), hidden: [...document.querySelectorAll('.rotp:not(.on)')].every(p => p.inert && p.getAttribute('aria-hidden') === 'true'), jp: document.querySelector('.plays').getBoundingClientRect().top, pressed: document.querySelector('.rotdots button:nth-child(2)').getAttribute('aria-pressed') }));
+    check('Now: the cards take turns, a pair at a time in one place (the list below doesn’t move); the rotation first, then Your Playlist / Heard So Far; dots pick a pair; cards open Stats',
+      r0.n >= 5 && r0.on === 1 && r0.shown === 1 && r0.tops === 1 && r0.dots === r0.n && r0.first === 'SomaFM Rotation' && r0.href === '/stats' && r1.kicks === 'Your Playlist,Heard So Far' && r1.hidden && r1.jp === r0.jp && r1.pressed === 'true', JSON.stringify({ r0, r1 }));
+    await s.ctx.close();
   }
 
   // The playlist can't be read: songs aren't labeled, and it says why
