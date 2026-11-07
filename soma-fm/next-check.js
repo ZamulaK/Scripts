@@ -518,7 +518,7 @@ const overflow = page => page.evaluate(() => {
         vol: !!(r && r.querySelector('#vol')), volRight: r && r.querySelector('#vol') ? r.getBoundingClientRect().right : 0, bar: document.querySelector('.tabs .listen').textContent.trim(),
         ytColor: (() => { const y = document.querySelector('.hero .acts .yt svg .ytbg'); return y ? y.getAttribute('fill') : ''; })(), listenSolid: document.getElementById('hlbtn').classList.contains('solid') }; });
     const h0 = await acts();
-    check('Now card (360 px): Listen first in the row of buttons, "Listen", "YouTube" (no Note) and the plays as "14×" on a phone, all on one line; no volume while it isn\'t playing', h0.first === 'hlbtn' && h0.labels[0] === 'Listen' && h0.labels.includes('YouTube') && !h0.labels.some(l => /Note/.test(l)) && /^[0-9]+×$/.test(h0.labels[h0.labels.length - 1]) && h0.lines === 1 && h0.right <= h0.edge && !h0.vol, JSON.stringify(h0));
+    check('Now card (360 px): Listen first in the row of buttons, "Listen", "YouTube" (no Note) and the plays as "14×" on a phone, all on one line; no volume while it isn\'t playing', h0.first === 'hlsplit' && h0.labels[0] === 'Listen' && h0.labels.includes('YouTube') && !h0.labels.some(l => /Note/.test(l)) && /^[0-9]+×$/.test(h0.labels[h0.labels.length - 1]) && h0.lines === 1 && h0.right <= h0.edge && !h0.vol, JSON.stringify(h0));
     check('Now card: the YouTube mark is YouTube\'s red with a white ▶; Listen has the highlight', h0.ytColor === '#f00' && h0.listenSolid, JSON.stringify(h0));
     const rowYt = await s.page.evaluate(() => { const b = document.querySelector('.plays .icon.open'), c = document.querySelector('.plays .icon:not(.open)'); return b && { bg: getComputedStyle(b).backgroundColor, plain: c && getComputedStyle(c).backgroundColor, rect: b.querySelector('.ytbg') && b.querySelector('.ytbg').getAttribute('fill') }; });
     check('Song rows: the open button is the small red YouTube mark on the plain round button (like the search one)', !!rowYt && rowYt.rect === '#f00' && (!rowYt.plain || rowYt.bg === rowYt.plain), JSON.stringify(rowYt));
@@ -856,6 +856,55 @@ const overflow = page => page.evaluate(() => {
   const firstKey = Object.keys(api.doc.notes)[0];
   check('…and goes once it can', firstKey && api.doc.notes[firstKey].t === 'kept' && !(await s.page.$('.warn.err')), JSON.stringify(api.doc.notes));
   await s.ctx.close();
+
+  // Listen: SomaFM or the YouTube playlist (Dan, Nov 7). Auto: SomaFM, with ▾ beside it on the Now card giving both; off
+  // the air (no new song for the interval, 4 hours unless chosen) Listen opens the playlist and the card says so.
+  // Always Ask: Listen opens the menu. The bar's Listen opens it on a long press. History's playlist name and Shuffle's
+  // done screen play the playlist on YouTube too.
+  {
+    const spy = () => { window.__opened = []; window.open = (u, n, f) => { window.__opened.push([u, n, f || '']); return {}; }; HTMLMediaElement.prototype.play = function () { return Promise.resolve(); }; };
+    const first = 'https://www.youtube.com/watch?v=' + encodeURIComponent(items[0].id) + '&list=PLRpb0eQM5sYC0-Fhol0BnOwYygZy_UTyt';
+    s = await open(browser, { width: 360, init: spy });
+    const a1 = await s.page.evaluate(() => ({ split: !!document.querySelector('#hlsplit #hlbtn + .lcaret'), top: document.querySelector('.hero-top small').textContent, bar: document.querySelector('.tabs .listen').textContent.trim(),
+      right: Math.max(...[...document.querySelectorAll('.hero .acts > *')].map(k => k.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right - 15 }));
+    await s.page.click('.lcaret'); await s.page.waitForTimeout(150);
+    const m1 = await s.page.evaluate(() => [...document.querySelectorAll('#lmenu:not([hidden]) button')].map(b => b.textContent.trim()));
+    await s.page.click('[data-act="lmYT"]'); await s.page.waitForTimeout(150);
+    const o1 = await s.page.evaluate(() => ({ opened: window.__opened.map(x => x[0]), menu: document.querySelector('#lmenu').hidden }));
+    check('Listen, on the air: ▾ joined to Listen on the Now card (in the row at 360 px); its menu has SomaFM Live and YouTube Playlist, which opens the playlist from its first song', a1.split && a1.top === 'Now Playing' && a1.bar === 'Listen' && a1.right <= a1.edge && m1.join() === 'SomaFM Live,YouTube Playlist' && o1.opened[0] === first && o1.menu, JSON.stringify({ a1, m1, o1 }));
+    await s.page.click('.tabs .listen', { button: 'right' }); await s.page.waitForTimeout(150);
+    const m2 = await s.page.evaluate(() => ({ n: document.querySelectorAll('#lmenu:not([hidden]) button').length }));
+    await s.page.mouse.click(5, 300); await s.page.waitForTimeout(100);
+    const m3 = await s.page.evaluate(() => document.querySelector('#lmenu').hidden);
+    check("Listen: a long press on the bar's Listen opens the same menu; a tap elsewhere closes it", m2.n === 2 && m3, JSON.stringify({ m2, m3 }));
+    await s.page.goto(SITE + 'history'); await s.page.waitForTimeout(600);
+    const hl = await s.page.evaluate(() => { const a = document.querySelector('.bar-line a.pllink'); return a && a.href; });
+    check("History: the playlist's name plays it on YouTube", hl === first, hl);
+    await s.page.goto(SITE + 'more'); await s.page.waitForTimeout(600);
+    const mo = await s.page.evaluate(() => ({ seg: [...document.querySelectorAll('[data-act="listenMode"]')].map(b => b.textContent + (b.classList.contains('on') ? '*' : '')).join(), opts: [...document.querySelectorAll('#offair option')].map(o => o.textContent + (o.selected ? '*' : '')).join() }));
+    await s.page.selectOption('#offair', '30'); await s.page.waitForTimeout(150);
+    await s.page.click('[data-act="listenMode"][data-v="ask"]'); await s.page.waitForTimeout(150);
+    const mo2 = await s.page.evaluate(() => ({ mins: localStorage.getItem('xl:offAirMins'), mode: localStorage.getItem('xl:listenMode'), interval: !!document.querySelector('#offair') }));
+    check('More: Listen Button Auto / Always Ask; Off-Air Detection Interval 30 Minutes to 24 Hours (4 Hours unless chosen), shown only with Auto', mo.seg === 'Auto*,Always Ask' && mo.opts === '30 Minutes,1 Hour,2 Hours,4 Hours*,8 Hours,24 Hours' && mo2.mins === '30' && mo2.mode === '"ask"' && !mo2.interval, JSON.stringify({ mo, mo2 }));
+    await s.page.goto(SITE); await s.page.waitForTimeout(600);
+    const ak = await s.page.evaluate(() => ({ caret: !!document.querySelector('.lcaret'), opened: window.__opened.length }));
+    await s.page.click('#hlbtn'); await s.page.waitForTimeout(150);
+    const ak2 = await s.page.evaluate(() => ({ menu: [...document.querySelectorAll('#lmenu:not([hidden]) button')].length, opened: window.__opened.length }));
+    check('Always Ask: no ▾; Listen opens the menu rather than playing', !ak.caret && ak2.menu === 2 && ak2.opened === 0, JSON.stringify({ ak, ak2 }));
+    await s.ctx.close();
+    // Off the air: six hours on from the last song (the default interval is 4 hours)
+    s = await open(browser, { width: 360, init: () => { const r = Date.now; Date.now = () => r() + 6 * 3600e3; window.__opened = []; window.open = (u, n, f) => { window.__opened.push([u, n, f || '']); return {}; }; } });
+    const f1 = await s.page.evaluate(() => ({ top: document.querySelector('.hero-top small').innerText, hero: document.getElementById('hlbtn').innerText.trim(), bar: document.querySelector('.tabs .listen').textContent.trim(),
+      right: Math.max(...[...document.querySelectorAll('.hero .acts > *')].map(k => k.getBoundingClientRect().right)), edge: document.querySelector('.hero').getBoundingClientRect().right - 15,
+      card: !!document.querySelector('.hero.offcard'), name: document.querySelector('.hero h2').textContent, starts: (document.querySelector('.offstart b') || {}).textContent, live: document.querySelector('.live').textContent.trim(), warn: !!document.querySelector('.warn'), jp: document.querySelectorAll('.plays .pr:not(.ph)').length }));
+    await s.page.click('#hlbtn'); await s.page.waitForTimeout(150);
+    const f2 = await s.page.evaluate(() => window.__opened.map(x => x[0]));
+    check("Off the air (Auto): the Now card is the playlist's (Off the Air since…, Xmas Mixed, Starts with its first song); Listen reads Playlist (in the row at 360 px) and opens it; the header waits quietly (no recorder warning); Just Played has 7 songs",
+      /^OFF THE AIR · SINCE /i.test(f1.top) && f1.card && f1.name === 'Xmas Mixed' && f1.starts === items[0].title && f1.live === 'Waiting' && !f1.warn && f1.jp === 7 && f1.hero === 'Playlist' && f1.bar === 'Playlist' && f1.right <= f1.edge && f2[0] === first, JSON.stringify({ f1, f2 }));
+    await s.ctx.close();
+    const src = fs.readFileSync(path.join(APP, 'app.js'), 'utf8');
+    check("Shuffle: when it's done, Play on YouTube from the new order's first song", src.includes('<a class="big-btn" href="${sh.target && sh.target[0] ? ytWatch(sh.target[0]) : ytPlaylist()}" target="_blank" rel="noopener">${ico(\'yt\')}Play on YouTube</a>'));
+  }
 
   // The playlist can't be read: songs aren't labeled, and it says why
   const saved = items.splice(0, items.length);

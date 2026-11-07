@@ -387,7 +387,7 @@
     if (D.err.plays) return `The plays couldn't be read (${D.err.plays}).`;
     const r = D.lastRun;
     if (r && !r.ok) return `The recorder couldn't read SomaFM's song list last time (${r.note}).`;
-    if (r && r.lastOk && Date.now() / 1000 - r.lastOk > 45 * 60) return `The recorder hasn't recorded anything since ${when(r.lastOk)}.`;
+    if (r && r.lastOk && Date.now() / 1000 - r.lastOk > 45 * 60 && !offAir()) return `The recorder hasn't recorded anything since ${when(r.lastOk)}.`;
     if (!D.recording) return "The recorder isn't set to record this station.";
     return '';
   }
@@ -456,7 +456,7 @@
   function head(sub) {
     const w = warning(), bad = !!w && !D.err.save;
     return `<header class="top"><div><div class="ttl"><b>Christmas Lounge</b><button class="icon hre" data-act="reload" aria-label="Read the latest now" title="Read the latest now">${ico('refresh')}</button></div><span class="sub">${esc(sub)}</span></div>` +
-      `<a class="live ${w ? 'bad' : ''}" href="/more" data-nav title="${esc(w || 'The recorder reads SomaFM\'s song list every 10 minutes')}"><i></i>${w ? (bad ? 'Check Recording' : 'Not Saved Yet') : 'Recording'}</a></header>` +
+      `<a class="live ${w ? 'bad' : offAir() ? 'wait' : ''}" href="/more" data-nav title="${esc(w || (offAir() ? 'SomaFM is off the air. The recorder still reads its song list every 10 minutes and records again when it\'s back.' : 'The recorder reads SomaFM\'s song list every 10 minutes'))}"><i></i>${w ? (bad ? 'Check Recording' : 'Not Saved Yet') : offAir() ? 'Waiting' : 'Recording'}</a></header>` +
       (w ? `<div class="warn ${D.err.save || D.err.state || D.err.plays ? 'err' : ''}" role="status">⚠ ${esc(w)}</div>` : '');
   }
   // The status: a colored dot and its name; on a phone the rows show just the dot (the name stays for screen readers)
@@ -574,6 +574,20 @@
   }
 
   const R = {};
+  // Off the air (Dan, Nov 7): the Now card is about the playlist rather than SomaFM's last song, which could be months
+  // old. The site can't see what YouTube plays, so it names the first song of the current order as where it starts.
+  const offSince = at => Date.now() / 1000 - at > 18 * 3600 ? new Date(at * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }) : time(at);
+  const durText = secs => { const m = Math.round(secs / 60); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
+  function offCard() {
+    const f = D.items[0], total = D.items.reduce((t, x) => t + (x.secs || 0), 0), last = D.doc.shuffle && D.doc.shuffle.last && D.doc.shuffle.last[PLAYLIST_ID];
+    const meta = [D.items.length ? plural(D.items.length, 'song') : '', total ? durText(total) : '', last && last.at ? 'shuffled ' + offSince(last.at / 1000) : ''].filter(Boolean).join(' · ');
+    const starts = f ? `<a class="offstart" href="${ytWatch(f.id)}" target="_blank" rel="noopener"><img src="https://i.ytimg.com/vi/${encodeURIComponent(f.id)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.remove()"><span><small>Starts with</small><b>${esc(f.title)}</b></span></a>`
+      : `<p class="offstart">${D.playlistError ? "The playlist couldn't be read." : 'Reading the playlist…'}</p>`;
+    return `<div class="hero offcard"><div class="hero-top"><small><b class="offair">Off the Air</b> · since ${offSince(lastSongAt())}</small>${castBtn()}</div>
+      <h2>${esc(PLAYLIST_NAME)}</h2><p class="hartist">${meta || 'Your playlist'}</p>${starts}
+      <div class="acts">${heroListenBtn()}<a class="pill" href="/shuffle" data-nav><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.shuffle}</svg>Shuffle</a></div>
+      ${heroListen()}</div>`;
+  }
   R.now = () => {
     const all = rows();
     if (!all.length) return head('SomaFM Christmas Lounge') + `<div class="box">${D.loaded.plays ? 'No plays recorded yet.' : 'Loading the plays…'}</div>`;
@@ -597,12 +611,13 @@
     // Dan, Nov 5: a small picture from the song's video when it's in the playlist (taps through to YouTube): in the top
     // right corner, or on a phone beside the artist, above the play count. Both are written; the CSS shows one.
     const thumb = w => inList(r) ? `<a class="hthumb ${w}" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop tabindex="-1" aria-hidden="true"><img src="https://i.ytimg.com/vi/${encodeURIComponent(r.item.id)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.parentNode.remove()"></a>` : '';
-    const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
+    // Off the air, the last song is just the newest of Just Played
+    const off = offAir(), others = off ? all.slice(0, 7) : all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
-      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now Playing' : 'Last Played ' + time(n.at)}</small>${label}${castBtn()}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>${note ? `<div class="hnote">${esc(note)}</div>` : ''}
+      ${off ? offCard() : `<div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${offAir() ? `<b class="offair">Off the Air</b> · <span class="lw">Last Played </span>${Date.now() / 1000 - n.at > 18 * 3600 ? esc(when(n.at)) : time(n.at)}` : playing ? 'Now Playing' : 'Last Played ' + time(n.at)}</small>${label}${castBtn()}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>${note ? `<div class="hnote">${esc(note)}</div>` : ''}
       <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}YouTube</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}YT Search</a>`}<span class="hcount"><span class="hct">${inList(r) && catOf(r.item.id) ? `<span class="hcat">${esc(CAT[catOf(r.item.id)])}</span>` : ''}<span><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span></span></span> ${chev()}</span></div>
       ${heroListen()}</div>
-      ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
+      ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}`}
       ${tiles}</div>
       <div><h3>Just Played <a href="${esc(tabHref('history'))}" data-nav>See All</a></h3><div class="plays">${PHEAD}${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
   };
@@ -674,7 +689,7 @@
     const pl = D.playlistError ? `<span class="grow err">Couldn't read “${PLAYLIST_NAME}”: ${esc(D.playlistError)}. Songs aren't labeled until it can be read.</span>`
       : D.playlistLoading && !D.items.length ? `<span class="grow">Reading “${PLAYLIST_NAME}”…</span>`
       // On a phone: the name, then "61 songs", "checked 2 min ago" and any unavailable songs, each on a line, muted (.plmeta; Dan, Nov 6)
-      : `<span class="grow"><b>${PLAYLIST_NAME}</b> playlist<span class="plmeta"><span class="nw"><span class="sep1"> · </span>${fmt(D.items.length)} songs</span> <span class="nw"><span class="sep">· </span>checked ${ago(D.playlistAt)}</span>${D.hidden ? ` <span class="nw plhid">(${D.hidden} unavailable left out)</span>` : ''}</span></span>`;
+      : `<span class="grow"><a class="pllink" href="${ytPlaylist()}" target="_blank" rel="noopener" title="Play on YouTube"><b>${PLAYLIST_NAME}</b></a> playlist<span class="plmeta"><span class="nw"><span class="sep1"> · </span>${fmt(D.items.length)} songs</span> <span class="nw"><span class="sep">· </span>checked ${ago(D.playlistAt)}</span>${D.hidden ? ` <span class="nw plhid">(${D.hidden} unavailable left out)</span>` : ''}</span></span>`;
     const gaps = D.plays.filter(p => p[4]).length;
     return head('SomaFM station play history') + `
       <div class="bar-line">${pl}<button class="pill" data-act="refresh">↻ Refresh Playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live Updates</button></div>
@@ -788,7 +803,10 @@
         <div class="kv"><span>Album</span><span class="seg" role="group" aria-label="Album"><button class="${S.listAlbum ? 'on' : ''}" data-act="listAlbum" data-v="1" aria-pressed="${S.listAlbum}">Always</button><button class="${S.listAlbum ? '' : 'on'}" data-act="listAlbum" data-v="" aria-pressed="${!S.listAlbum}">Wide Screens</button></span></div>
         <div class="kv"><span>Notes</span><span class="seg" role="group" aria-label="Notes">${[['one', 'First Line'], ['all', 'All'], ['off', 'Off']].map(([k, l]) => `<button class="${S.listNotes === k ? 'on' : ''}" data-act="listNotes" data-v="${k}" aria-pressed="${S.listNotes === k}">${l}</button>`).join('')}</span></div>
         </div>
-      <h3>Listen</h3><div class="box"><div class="kv"><span>Streaming Player</span><span class="seg" role="group" aria-label="Streaming player">${[['', 'Native'], ['somafm', 'SomaFM Web']].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
+      <h3>Listen</h3><div class="box"><div class="kv btnrow"><span>Listen Button</span><span class="seg" role="group" aria-label="Listen button">${[['', 'Auto'], ['ask', 'Always Ask']].map(([k, l]) => `<button class="${(listenAsk() ? 'ask' : '') === k ? 'on' : ''}" data-act="listenMode" data-v="${k}" aria-pressed="${(listenAsk() ? 'ask' : '') === k}">${l}</button>`).join('')}</span></div>
+        ${listenAsk() ? '' : `<div class="kv btnrow"><label for="offair">Off-Air Detection Interval</label><select class="sel" id="offair">${OFFAIR_MINS.map(([m, l]) => `<option value="${m}"${m === offAirMins() ? ' selected' : ''}>${l}</option>`).join('')}</select></div>`}
+        <div class="snote">${listenAsk() ? 'Listen offers SomaFM and the YouTube playlist each time.' : 'Auto plays SomaFM, or the YouTube playlist when SomaFM has had no new song for this long. The arrow beside Listen offers the other.'}${offAir() ? ` <b>SomaFM is off the air now</b> (last song ${esc(when(lastSongAt()))}).` : ''}</div>
+        <div class="kv"><span>Streaming Player</span><span class="seg" role="group" aria-label="Streaming player">${[['', 'Native'], ['somafm', 'SomaFM Web']].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
         <div class="snote">Native plays the stream directly from this site. The SomaFM Web player is the fallback when direct play is unavailable.</div></div>
       <h3>Your Data</h3><div class="box"><div class="snote" style="margin-top:0">Song details and play history are stored centrally in the Cloudflare site.</div>
         <div class="kv"><span>Read ${D.stateAt ? ago(D.stateAt) : '—'}${D.err.save ? '' : queued || inflight ? ' · saving…' : ''}</span><button class="pill" data-act="reload">Read Again Now</button></div>
@@ -820,6 +838,41 @@
   // SomaFM's pages can't be shown inside another site, so it's a window of its own (Dan, Nov 5).
   const SOMA_PLAYER = `https://somafm.com/player24/station/${CHANNEL}`;
   const viaSoma = () => LS.get('listenVia2', '') === 'somafm';
+  // What Listen does (Dan, Nov 7). Auto: SomaFM, or the YouTube playlist once SomaFM has had no new song for a while (off
+  // the air: the season's over, or an outage; how long is his choice, 4 hours unless he picks another). Always Ask: a
+  // menu with both. With Auto, ▾ beside Listen on the Now card (or a long press on the bar's) gives the other choice.
+  // Kept per device, like the streaming player.
+  const listenAsk = () => LS.get('listenMode', '') === 'ask';
+  const OFFAIR_MINS = [[30, '30 Minutes'], [60, '1 Hour'], [120, '2 Hours'], [240, '4 Hours'], [480, '8 Hours'], [1440, '24 Hours']];
+  const offAirMins = () => { const m = Number(LS.get('offAirMins', 240)); return OFFAIR_MINS.some(x => x[0] === m) ? m : 240; };
+  // The newest song SomaFM has listed, or the recorder has; nothing yet while the page is loading
+  function lastSongAt() { const r = rows(); return Math.max(D.nowAt || 0, r.length ? r[0].at : 0); }
+  function offAir() { if (!D.loaded.plays) return false; const at = lastSongAt(); return at > 0 && Date.now() / 1000 - at > offAirMins() * 60; }
+  const autoYT = () => !listenAsk() && offAir();
+  // The playlist on YouTube, playing from its first song in its order (shuffled or not)
+  const ytPlaylist = () => { const f = D.items[0]; return f ? ytWatch(f.id) : `https://www.youtube.com/playlist?list=${PLAYLIST_ID}`; };
+  function playYouTube() { closeLMenu(); if (player.state !== 'off') listenStop(); window.open(ytPlaylist(), '_blank', 'noopener'); }
+  function playSoma() { closeLMenu(); if (viaSoma()) openSoma(); else listenStart(); }
+  // The small menu with both choices, by the button that opened it
+  function closeLMenu() { const m = $('#lmenu'); if (m) m.hidden = true; }
+  function listenMenu(el) {
+    let m = $('#lmenu');
+    if (m && !m.hidden) { closeLMenu(); return; }
+    if (!m) { m = document.createElement('div'); m.id = 'lmenu'; m.className = 'lmenu'; m.setAttribute('role', 'menu'); document.body.append(m); }
+    const on = player.state !== 'off';
+    m.innerHTML = `<button role="menuitem" data-act="lmSoma"><span class="lmi">${on ? '<span class="eq"><i></i><i></i><i></i></span>' : ico('open')}</span>${on ? 'Stop SomaFM' : viaSoma() ? 'SomaFM Live ↗' : 'SomaFM Live'}</button>` +
+      `<button role="menuitem" data-act="lmYT"><span class="lmi">${ico('yt')}</span>YouTube Playlist</button>`;
+    m.hidden = false;
+    const r = el.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight, bar = ($('.tabs') || { getBoundingClientRect: () => ({ top: innerHeight }) }).getBoundingClientRect().top;
+    const inBar = !!el.closest('.tabs'), below = r.bottom + 6;
+    m.style.top = Math.round(!inBar && below + h <= bar - 8 ? below : Math.max(8, r.top - 6 - h)) + 'px';
+    m.style.left = Math.round(Math.min(Math.max(8, inBar ? r.right - w : r.left), document.documentElement.clientWidth - w - 8)) + 'px';
+    m.querySelector('button').focus({ preventScroll: true });
+  }
+  addEventListener('scroll', closeLMenu, { passive: true });
+  addEventListener('resize', closeLMenu);
+  // A long press (or right click) on the bar's Listen: the menu
+  document.addEventListener('contextmenu', e => { const b = e.target.closest && e.target.closest('.tabs .listen'); if (b) { e.preventDefault(); listenMenu(b); } });
   // The player page on workers.dev, in an invisible frame (player/ in the repo): SomaFM plays its stream to it, where it
   // turns this pages.dev site away (Dan, Nov 5). Until it says it's there, or where it can't load, the site plays itself.
   // On Dan's own domain (xmaslounge.zamulagh.fyi and next., Nov 5) SomaFM plays to the site, so there's no frame there.
@@ -855,6 +908,8 @@
   }
   // In the bar of pages, so it's there on every page
   function listenBtn() {
+    if (player.state === 'off' && autoYT()) return `<button class="listen off ytl" data-act="listen" title="SomaFM is off the air: opens the YouTube playlist (long press for both)"><span class="lic">${ico('yt')}</span>Playlist</button>`;
+    if (player.state === 'off' && listenAsk()) return `<button class="listen off" data-act="listen" aria-haspopup="menu" title="SomaFM or the YouTube playlist"><span class="lic">${ico('open')}</span>Listen</button>`;
     if (viaSoma()) return `<button class="listen off" data-act="listen" title="Opens SomaFM's player (this browser can't play the stream inside the site)"><span class="lic">${ico('open')}</span>Listen ↗</button>`;
     const s = player.state;
     const icon = s === 'off' ? ico('open') : s === 'loading' ? '<span class="spin"></span>' : '<span class="eq"><i></i><i></i><i></i></span>';
@@ -862,7 +917,7 @@
   }
   function paintListen() {
     const b = document.querySelector('.tabs .listen'); if (b) b.outerHTML = listenBtn();
-    const hb = document.getElementById('hlbtn'); if (hb) hb.outerHTML = heroListenBtn();
+    const hb = document.getElementById('hlsplit'); if (hb) hb.outerHTML = heroListenBtn();
     const h = document.getElementById('hlisten'); if (h && !volDrag) h.outerHTML = heroListen();
   }
   // Listen on the Now Playing card too, and while it plays, the volume (Dan, Nov 5). The card grows a row for it; taps
@@ -926,11 +981,16 @@
     session.loadMedia(req).then(() => toast(`Playing on ${castS.name || 'the TV'}.`), e => toast("The Chromecast couldn't play the stream" + (e && e.code ? ` (${e.code})` : '') + '.'));
   }
   // Listen first in the card's row of buttons (Dan, Nov 5); shorter words on a phone
+  // With Auto, ▾ joined to it gives the other choice (a split button; Dan, Nov 7)
   function heroListenBtn() {
-    if (viaSoma()) return `<button class="pill solid" id="hlbtn" data-act="listen" title="Opens SomaFM's player">${ico('open')}<span class="lw">Listen on SomaFM ↗</span><span class="ln">Listen ↗</span></button>`;
-    const s = player.state;
-    if (s === 'off') return `<button class="pill solid" id="hlbtn" data-act="listen" aria-pressed="false">${ico('open')}<span class="lw">Listen Live</span><span class="ln">Listen</span></button>`;
-    return `<button class="pill solid on" id="hlbtn" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span><span class="lw">Connecting</span><span class="ln">Stop</span>' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`;
+    const s = player.state, ask = listenAsk();
+    const main = s !== 'off' ? `<button class="pill solid on" id="hlbtn" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span><span class="lw">Connecting</span><span class="ln">Stop</span>' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`
+      : ask ? `<button class="pill solid" id="hlbtn" data-act="listen" aria-haspopup="menu" title="SomaFM or the YouTube playlist">${ico('open')}<span class="lw">Listen Live</span><span class="ln">Listen</span></button>`
+      : autoYT() ? `<button class="pill solid ytl" id="hlbtn" data-act="listen" title="SomaFM is off the air: opens the YouTube playlist">${ico('yt')}Playlist</button>`
+      : viaSoma() ? `<button class="pill solid" id="hlbtn" data-act="listen" title="Opens SomaFM's player">${ico('open')}<span class="lw">Listen on SomaFM ↗</span><span class="ln">Listen ↗</span></button>`
+      : `<button class="pill solid" id="hlbtn" data-act="listen" aria-pressed="false">${ico('open')}<span class="lw">Listen Live</span><span class="ln">Listen</span></button>`;
+    const caret = ask && s === 'off' ? '' : `<button class="pill solid lcaret${s !== 'off' ? ' on' : ''}" data-act="listenMenu" aria-haspopup="menu" aria-label="Other ways to listen" title="Other ways to listen">${ico('chev')}</button>`;
+    return `<span class="lsplit" id="hlsplit">${main}${caret}</span>`;
   }
   // While it plays, a row under the buttons with the volume
   function heroListen() {
@@ -1150,7 +1210,11 @@
       if (castS.on) { ctx.endCurrentSession(true); toast('Stopped casting.'); }
       else ctx.requestSession().catch(() => {});
     },
-    listen() { if (viaSoma()) openSoma(); else if (player.state === 'off') listenStart(); else listenStop(); },
+    listen(b) { if (player.state !== 'off') listenStop(); else if (listenAsk()) listenMenu(b); else if (autoYT()) playYouTube(); else playSoma(); },
+    listenMenu(b) { listenMenu(b); },
+    lmSoma() { if (player.state !== 'off') { closeLMenu(); listenStop(); } else playSoma(); },
+    lmYT() { playYouTube(); },
+    listenMode(b) { LS.set('listenMode', b.dataset.v === 'ask' ? 'ask' : null); render(); },
     listenSoma() { player.fail = null; openSoma(); render(); },
     listenVia(b) { LS.set('listenVia2', b.dataset.v === 'somafm' ? 'somafm' : null); player.fail = null; render(); },
     row(el) {
@@ -1242,6 +1306,7 @@
     setTimeout(fit, 400);
   }
   document.addEventListener('click', e => {
+    { const lm = $('#lmenu'); if (lm && !lm.hidden && !e.target.closest('#lmenu, [data-act="listenMenu"], [data-act="listen"]')) lm.hidden = true; }
     const nav = e.target.closest('a[data-nav]');
     if (nav && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) { e.preventDefault(); go(nav.getAttribute('href')); return; }
     const el = e.target.closest('[data-act]');
@@ -1254,6 +1319,7 @@
   });
   document.addEventListener('keydown', e => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.pr[data-act="row"], .hero[data-act="row"]')) { e.preventDefault(); ACT.row(e.target); }
+    if (e.key === 'Escape' && $('#lmenu') && !$('#lmenu').hidden) { closeLMenu(); return; }
     if (e.key === 'Escape' && (S.pick || S.noteFor)) { closePanels(); render(); }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.id === 'note-text') { const b = $('[data-act="noteSave"]'); if (b) ACT.noteSave(b); }
   });
@@ -1263,7 +1329,7 @@
     else if (t.id === 'pick-q') { S.pickQ = t.value; const p = ROWS[Number(t.dataset.i)]; t.parentNode.querySelector('.choices-wrap').innerHTML = choicesHtml(p, resultOf(p), Number(t.dataset.i)); }
     else if (t.id === 'note-text') S.noteDraft = t.value;
   });
-  document.addEventListener('change', e => { if (e.target.id === 'restore-file') { const f = e.target.files && e.target.files[0]; if (f) readFile(f); } });
+  document.addEventListener('change', e => { if (e.target.id === 'offair') { LS.set('offAirMins', Number(e.target.value)); render(); return; } if (e.target.id === 'restore-file') { const f = e.target.files && e.target.files[0]; if (f) readFile(f); } });
   document.addEventListener('toggle', e => { if (e.target.id === 'gonebox') S.goneOpen = e.target.open; }, true);
 
   /* ---------- Backup, restore and CSV ---------- */
@@ -1529,6 +1595,7 @@
       if (!Shuffle.matches(Shuffle.idsOf(list), sh.target)) return shufSet('error', 'All the moves were made, but the playlist read back in a different order than planned. Nothing was lost. Open Shuffle again and it will plan the remaining moves.');
       finished(job);
       shufSet('done');
+      loadPlaylist(true).then(() => quietRender());
     } catch (e) { saveRun(true); shufSet('error', `${trouble(e)} The moves were all made, but the new order couldn't be checked. Open Shuffle again to check it.`); }
   }
   function progress(k, n) {
@@ -1625,7 +1692,7 @@
         <div class="snote" id="shprog">Moved ${fmt(k)} of ${fmt(total)}${shStop ? ' — stopping…' : ''}</div><div class="snote">Keep this page open until it finishes. If it's interrupted, Shuffle picks up where it stopped.</div>
         <div class="btns"><button class="big-btn alt" data-act="shStop">Stop</button></div></div>`;
     } else if (v === 'done') {
-      main = `<div class="box">${say(KINDS[sh.kind].done, 'ok')}<div class="snote">The YouTube app may take a few minutes to show the new order.</div><div class="btns"><button class="big-btn alt" data-act="shStart">Shuffle Again</button></div></div>`;
+      main = `<div class="box">${say(KINDS[sh.kind].done, 'ok')}<div class="snote">The YouTube app may take a few minutes to show the new order.</div><div class="btns"><a class="big-btn" href="${sh.target && sh.target[0] ? ytWatch(sh.target[0]) : ytPlaylist()}" target="_blank" rel="noopener">${ico('yt')}Play on YouTube</a><button class="big-btn alt" data-act="shStart">Shuffle Again</button></div></div>`;
     } else {
       main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() || D.keepsSignIn ? 'shStart' : 'shSignIn'}">${validToken() || D.keepsSignIn ? 'Try Again' : 'Sign In Again'}</button></div></div>`;
     }
