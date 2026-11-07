@@ -167,7 +167,7 @@ const overflow = page => page.evaluate(() => {
   let s = await open(browser);
   const now = await s.page.evaluate(() => ({ hero: ((document.querySelector('.hero h2 > span') || {}).textContent || '').replace(/[★☆]$/, ''), tag: (document.querySelector('.hero small') || {}).textContent, st: (document.querySelector('.hero .st') || {}).className, stText: (document.querySelector('.hero .st') || {}).textContent, just: document.querySelectorAll('.plays .pr:not(.ph)').length,
     tiles: [...document.querySelectorAll('.g2 .box b.big')].map(b => b.textContent), tabs: [...document.querySelectorAll('.tabs a')].map(a => a.textContent.trim()).join() }));
-  check('Now: what\'s playing (from the feed), its status, two tiles and the plays just before', now.hero === hist[0][2] && now.tag === 'Now playing' && /^st (have|other|none|gone|disliked)$/.test(now.st) && now.stText.length > 3 && now.just === 7
+  check('Now: what\'s playing (from the feed), its status, two tiles and the plays just before', now.hero === hist[0][2] && now.tag === 'Now Playing' && /^st (have|other|none|gone|disliked)$/.test(now.st) && now.stText.length > 3 && now.just === 7
     && now.tiles.length === 2 && /h$/.test(now.tiles[0]) && now.tiles[1] === '700' && now.tabs === 'Now,History,Stats,Shuffle,More', JSON.stringify(now));
   check('Loads the plays, the document, the playlist (the kept read, within 15 min) and the feed from /api', ['GET /api/state', 'GET /api/plays?channel=christmas&since=0', 'GET /api/feed?channel=christmas'].every(c => api.calls.indexOf(c) >= 0)
     && api.calls.some(c => /^GET \/api\/playlist\?list=.*&within=900$/.test(c)), api.calls.join());
@@ -180,20 +180,20 @@ const overflow = page => page.evaluate(() => {
   await tabTo(s.page, 'History');
   let h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.innerText.replace(/\s+\d[\d,]*$/, '').trim()), more: !!document.querySelector('.more-f'),
     rows: document.querySelectorAll('#plist .pr:not(.ph)').length, gaps: document.querySelectorAll('.gaprow').length, line: document.querySelector('.bar-line .grow').textContent, gone: (document.querySelector('#gonebox summary') || {}).textContent }));
-  check('History: five chips to start (All, Latest, In playlist, Not in playlist, Favorites; short names at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,Latest,In list,Not in list,★' && h.more, JSON.stringify(h));
+  check('History: five chips to start (All, Latest, In playlist, Not in playlist, Favorites; short names at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,Latest,In List,Not in List,★' && h.more, JSON.stringify(h));
   check('History: 50 plays a page, gap rows between plays, the playlist line and the gone-from-playlist notice', h.rows === 50 && h.gaps === 0 && /Xmas Mixed playlist · 61 songs · checked 2 min ago \(1 unavailable left out\)/.test(h.line) && /1 song is gone/.test(h.gone), JSON.stringify(h));
   await s.page.click('.more-f');
   const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length, latest: (document.querySelectorAll('.fpanel .grp')[0].children[1] || {}).dataset.act === 'flatest' }));
-  check('History: All filters opens Status (Latest play only second) / Favorites and categories, with Clear all and Done', panel.heads === 'Status|Favorites and categories' && panel.latest && panel.chips >= 12, JSON.stringify(panel));
-  await s.page.click('.fpanel .chip:has-text("Other version")');
+  check('History: All filters opens Status (Latest play only second) / Favorites and categories, with Clear all and Done', panel.heads === 'Status|Favorites and Categories' && panel.latest && panel.chips >= 12, JSON.stringify(panel));
+  await s.page.click('.fpanel .chip:has-text("Other Version")');
   await s.page.click('.fpanel .chip:has-text("Jazz/Piano")');
   await s.page.click('.fpanel [data-act="fdone"]');
   h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.firstChild.textContent.trim()).join(), badge: (document.querySelector('.more-f .badge') || {}).textContent }));
-  check('History: filters that are on stay among the chips, with "N on", and live in the address', h.url === '/history?status=other&cat=jazz' && /Other version/.test(h.chips) && /Jazz/.test(h.chips) && h.badge === '2 on', JSON.stringify(h));
+  check('History: filters that are on stay among the chips, with "N on", and live in the address', h.url === '/history?status=other&cat=jazz' && /Other Version/.test(h.chips) && /Jazz/.test(h.chips) && h.badge === '2 on', JSON.stringify(h));
   await s.page.click('.more-f'); await s.page.click('[data-act="fclear"]'); await s.page.click('[data-act="fdone"]');
   await s.page.click('.quick .chip[data-v="none"]');
   const none = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph) .m-side .st')].map(x => x.textContent));
-  check('History: Not in playlist shows only those (and songs gone from it)', none.length > 0 && none.every(t => /Not in playlist|Gone from playlist/.test(t)), [...new Set(none)].join());
+  check('History: Not in playlist shows only those (and songs gone from it)', none.length > 0 && none.every(t => /Not in Playlist|Gone from Playlist/.test(t)), [...new Set(none)].join());
   await s.page.fill('#find', 'rotation song 1');
   await s.page.waitForTimeout(200);
   const found = await s.page.evaluate(() => ({ titles: [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .c-song b')].map(b => b.textContent))], focus: document.activeElement.id, url: location.search }));
@@ -205,10 +205,10 @@ const overflow = page => page.evaluate(() => {
   const rowFor = title => s.page.locator('#plist .pr:not(.ph)', { has: s.page.locator('.c-song b', { hasText: new RegExp('^' + title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s☆★✎]*$') }) }).first();
   await rowFor('Rotation Song 2').click();
   let d = await s.page.evaluate(() => { const x = document.querySelector('.pr.open .detail'); return x && { rows: x.querySelectorAll('.row').length, buttons: [...x.querySelectorAll('.row button, .row a')].map(b => b.textContent.trim()), log: x.querySelectorAll('.log li').length }; });
-  check('Row: tapping opens I have it, Dislike and Add a note in one row, and every play of the song', d && d.rows === 1 && d.buttons.join() === '✓ I have it,👎 Dislike,✎ Add a note' && d.log > 1, JSON.stringify(d));
+  check('Row: tapping opens I have it, Dislike and Add a note in one row, and every play of the song', d && d.rows === 1 && d.buttons.join() === '✓ I Have It,👎 Dislike,✎ Add a Note' && d.log > 1, JSON.stringify(d));
   const icons = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph)')].map(r => ({ st: r.querySelector('.m-side .st').textContent, open: !!r.querySelector('.c-go a.open'), search: !!r.querySelector('.c-go a[href*="results?search_query"]'), star: !!r.querySelector('.c-song .star') })));
   check('Rows: an Open icon for songs you have, a Search icon for ones you don\'t (both for another version), a star on songs in the playlist',
-    icons.every(x => x.st === 'In playlist' ? x.open && !x.search && x.star : x.st === 'Not in playlist' ? !x.open && x.search && !x.star : x.st === 'Different mix' || x.st === 'Other version' ? x.open && x.search : true), JSON.stringify(icons.slice(0, 6)));
+    icons.every(x => x.st === 'In Playlist' ? x.open && !x.search && x.star : x.st === 'Not in Playlist' ? !x.open && x.search && !x.star : x.st === 'Different Mix' || x.st === 'Other Version' ? x.open && x.search : true), JSON.stringify(icons.slice(0, 6)));
   await s.page.click('.pr.open [data-act="pick"]');
   const pick = await s.page.evaluate(() => ({ q: document.activeElement.id, n: document.querySelectorAll('.choice').length }));
   await s.page.fill('#pick-q', 'marshmallow');
@@ -221,7 +221,7 @@ const overflow = page => page.evaluate(() => {
   const key = X.markKey('Rotation Artist 2', 'Rotation Song 2');
   let ch = api.changes[0] || {};
   check('Row: choosing links it, sent as one change: the mark with the video, and the row is In playlist', ch.marks && ch.marks[key] && ch.marks[key].v === 'have' && /^[\w-]{11}$/.test(ch.marks[key].id)
-    && api.doc.marks[key] && await rowFor('Rotation Song 2').locator('.m-side .st').textContent() === 'In playlist', JSON.stringify(ch));
+    && api.doc.marks[key] && await rowFor('Rotation Song 2').locator('.m-side .st').textContent() === 'In Playlist', JSON.stringify(ch));
   const wasOpen = await s.page.evaluate(() => !!document.querySelector('.pr.open'));
   await rowFor('Rotation Song 2').locator('.star').click();
   await s.page.waitForTimeout(300);
@@ -248,7 +248,7 @@ const overflow = page => page.evaluate(() => {
   check('Row: Unlink keeps "I have it" without the video', api.doc.marks[key] && api.doc.marks[key].v === 'have' && !api.doc.marks[key].id, JSON.stringify(api.doc.marks[key]));
   await s.page.click('.pr.open [data-act="unmark"]');
   await s.page.waitForTimeout(300);
-  check('Row: Undo clears the mark, remembered as removed (so today\'s site doesn\'t bring it back)', !api.doc.marks[key] && api.doc.removed.marks[key] > 0 && await rowFor('Rotation Song 2').locator('.m-side .st').textContent() === 'Not in playlist');
+  check('Row: Undo clears the mark, remembered as removed (so today\'s site doesn\'t bring it back)', !api.doc.marks[key] && api.doc.removed.marks[key] > 0 && await rowFor('Rotation Song 2').locator('.m-side .st').textContent() === 'Not in Playlist');
   await s.page.click('.pr.open [data-act="dislike"]');
   await s.page.waitForTimeout(300);
   check('Row: Dislike', api.doc.dislikes[key] > 0 && await rowFor('Rotation Song 2').locator('.m-side .st').textContent() === 'Disliked');
@@ -273,13 +273,13 @@ const overflow = page => page.evaluate(() => {
   const total = items.reduce((a, it) => a + it.secs, 0), mins = Math.round(total / 60), want = Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min';
   check('Stats: total playlist time as "9 h 38 min", from the real lengths (tweak 1)', t.big[1] === want + 'total length', JSON.stringify(t.big) + ' want ' + want);
   check('Stats: songs by status, as a share of songs and of plays (tweak 2), leaving In playlist and Disliked to the cards', t.status.length >= 2 && t.status.every(x => !/^(In playlist|Disliked)/.test(x) && /\d+ songs? · \d+%\s*\d+ plays? · \d+%/.test(x)), JSON.stringify(t.status));
-  check('Stats: Songs by status right under the playlist cards', t.heads[0] === 'Your playlist' && t.heads[1] === 'Songs by status' && t.heads[2] === 'Heard so far', t.heads.join('|'));
+  check('Stats: Songs by status right under the playlist cards', t.heads[0] === 'Your Playlist' && t.heads[1] === 'Songs by Status' && t.heads[2] === 'Heard So Far', t.heads.join('|'));
   // "Of the last 100 plays, heard for the first time": left out at 0; otherwise split only at its comma, the figures on one line
   const ft = await s.page.evaluate(() => { const kv = [...document.querySelectorAll('.kv')].find(x => /heard for the first time/.test(x.textContent)); return kv ? { v: kv.querySelector('b').textContent, parts: kv.querySelectorAll('span.nw').length, oneLine: kv.querySelector('b').getClientRects().length === 1 } : null; });
   check('Stats: the first-time share left out at 0, else broken only at the comma', ft === null || (!/^0 /.test(ft.v) && ft.parts === 2 && ft.oneLine), JSON.stringify(ft));
-  check('Stats: every section',['Your playlist', 'Categories', 'Songs by status', 'SomaFM rotation', 'Most played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
+  check('Stats: every section',['Your Playlist', 'Categories', 'Songs by Status', 'SomaFM Rotation', 'Most Played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
   await s.page.click('[data-act="topSort"][data-v="recent"]');
-  check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most recently replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most recently replayed") + .plays .pr:not(.ph)').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
+  check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most Recently Replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most Recently Replayed") + .plays .pr:not(.ph)').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
   check('No script errors (Stats)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
 
@@ -419,14 +419,14 @@ const overflow = page => page.evaluate(() => {
     check('History (412 px): the five first-row chips on one line with four-digit counts, All ▾ on the next', chipRow.n === 5 && chipRow.oneLine && chipRow.moreBelow && chipRow.right <= 412 - 16, JSON.stringify(chipRow));
     await s.page.click('.more-f'); await s.page.waitForTimeout(300);
     const catNames = await s.page.evaluate(() => [...document.querySelectorAll('.fpanel [data-act=fcat]')].map(e => e.innerText.replace(/\s*\d+$/, '').trim()));
-    check('History (412 px): All filters shows Swing, Jazz and Funk for the categories', ['Swing', 'Jazz', 'Funk', 'Classics', 'No category'].every(x => catNames.includes(x)) && !catNames.some(x => /\//.test(x)), JSON.stringify(catNames));
+    check('History (412 px): All filters shows Swing, Jazz and Funk for the categories', ['Swing', 'Jazz', 'Funk', 'Classics', 'No Category'].every(x => catNames.includes(x)) && !catNames.some(x => /\//.test(x)), JSON.stringify(catNames));
     // Stats on the phone: "avg song", Latest replays on the heading's line, Time recorded on two lines
     await tabTo(s.page, 'Stats');
     await s.page.click('[data-act=topSort][data-v=recent]'); await s.page.waitForTimeout(300);
     const st412 = await s.page.evaluate(() => { const h = [...document.querySelectorAll('h3')].find(e => e.querySelector('.seg')), tt = h.firstElementChild.getBoundingClientRect(), sg = h.querySelector('.seg').getBoundingClientRect();
       const avg = [...document.querySelectorAll('.box .k')].find(e => /avg/.test(e.innerText)), rec = document.querySelector('.ph2');
       return { title: h.firstElementChild.innerText, oneLine: Math.abs(tt.top + tt.height / 2 - (sg.top + sg.height / 2)) <= 6 && tt.height < 26, avg: avg && avg.innerText, avgLines: avg && Math.round(avg.getBoundingClientRect().height / parseFloat(getComputedStyle(avg).lineHeight)), rec: rec && rec.innerText.split('\n') }; });
-    check('Stats (412 px): "avg song" on one line, "Latest replays" beside its sort, Time recorded as total then songs an hour', st412.avg === 'avg song' && st412.avgLines === 1 && st412.title === 'Latest replays' && st412.oneLine && st412.rec && st412.rec.length === 2 && / h /.test(st412.rec[0]) && /songs an hour$/.test(st412.rec[1]), JSON.stringify(st412));
+    check('Stats (412 px): "avg song" on one line, "Latest replays" beside its sort, Time recorded as total then songs an hour', st412.avg === 'avg song' && st412.avgLines === 1 && st412.title === 'Latest Replays' && st412.oneLine && st412.rec && st412.rec.length === 2 && / h /.test(st412.rec[0]) && /songs an hour$/.test(st412.rec[1]), JSON.stringify(st412));
     // "until a song comes back" is the measured average between replays (Dan, Nov 6), the same as that row's average
     const back = await s.page.evaluate(() => { const tile = [...document.querySelectorAll('.box')].find(b => /until a song comes back/.test(b.innerText)), row = [...document.querySelectorAll('.kv')].find(k => /Between/.test(k.innerText));
       const m = /(?:(\d+) h )?(\d+) min average/.exec(row.innerText.replace(/\s+/g, ' ')); return { tile: tile.querySelector('b.big').innerText, avgH: m ? ((+m[1] || 0) + +m[2] / 60) : null, note: /measured average time between a song's replays/.test(document.body.innerText) }; });
@@ -689,6 +689,15 @@ const overflow = page => page.evaluate(() => {
       await tabTo(s.page, 'More');
       const sw = await s.page.evaluate(() => [...document.querySelectorAll('.theme i')].map(i => Math.round(i.getBoundingClientRect().width)));
       check('More: every theme tile shows a color preview across it', sw.length === 3 && sw.every(w => w > 60), JSON.stringify(sw));
+      // Dan's wording (Nov 6): Title Case for short labels, and his texts for Song Lists, Streaming Player, Your Data, Backup
+      const mt = await s.page.evaluate(() => document.body.innerText);
+      const want = ['Song Lists', 'Which song attributes to show directly in lists.', 'Streaming Player', 'Native', 'SomaFM Web', 'Native plays the stream directly from this site. The SomaFM Web player is the fallback when direct play is unavailable.',
+        'Your Data', 'Song details and play history are stored centrally in the Cloudflare site.', 'Backup and Restore', 'Download Backup', 'Restore Backup', 'Previews earlier site data before applying changes', 'Wide Screens', 'First Line', 'Read Again Now', 'Privacy Policy'];
+      const gone = ['Open a song for everything about it', "In SomaFM's player", 'Download a backup', 'Restore from a backup'];
+      check('More: Dan’s wording and Title Case', want.every(w => mt.includes(w)) && !gone.some(g => mt.includes(g)), JSON.stringify({ missing: want.filter(w => !mt.includes(w)), still: gone.filter(g => mt.includes(g)) }));
+      const src = fs.readFileSync(path.join(APP, 'app.js'), 'utf8');
+      const shl = ["'Shuffle Playlist'", "'Create New Order'", '>Show Earlier Order<', '>Restore Original Order<', "YT Search</a>"];
+      check('Shuffle’s buttons Shuffle Playlist, Create New Order, Show Earlier Order, Restore Original Order; the Now card’s YT Search', shl.every(x => src.includes(x)), JSON.stringify(shl.filter(x => !src.includes(x))));
       const edge = [];
       for (const vw of [360, 412, 440]) { await s.page.setViewportSize({ width: vw, height: 900 }); await s.page.waitForTimeout(150);
         edge.push(await s.page.evaluate(() => { const l = document.querySelector('.tabs .listen .lic').getBoundingClientRect(), a = document.querySelector('.tabs a svg').getBoundingClientRect(); return { w: innerWidth, gap: Math.round(document.documentElement.clientWidth - l.right), first: Math.round(a.left) }; })); }
@@ -706,7 +715,7 @@ const overflow = page => page.evaluate(() => {
           cats: rows.map(x => x.querySelector('.c-cat').innerText.trim()), song: Math.round(rows[0].querySelector('.c-song').getBoundingClientRect().width),
           lined: rows.every(x => Math.abs(x.querySelector('.c-cat').getBoundingClientRect().left - h.children[3].getBoundingClientRect().left) <= 1) }; });
       const th = await tab();
-      check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|Swing|Classics|Dance|Jazz|Mellow|Funk|)$/.test(c)) && th.cats.includes('') && th.cats.includes('—') && await s.page.evaluate(() => /^↻ Refresh playlist$/.test(document.querySelector('[data-act=refresh]').textContent.trim())) && th.song >= 250 && th.lined, JSON.stringify(th));
+      check('Tablet (600 px): History rows as on a phone plus Category (short names), names over Time, Song, Category', /^Time Song Category$/i.test(th.head) && !th.cols && th.dots.every(w => w <= 1) && th.side && th.cats.every(c => /^(—|Swing|Classics|Dance|Jazz|Mellow|Funk|)$/.test(c)) && th.cats.includes('') && th.cats.includes('—') && await s.page.evaluate(() => /^↻ Refresh Playlist$/.test(document.querySelector('[data-act=refresh]').textContent.trim())) && th.song >= 250 && th.lined, JSON.stringify(th));
       await tabTo(s.page, 'Now');
       const tn = await tab();
       // The Now card's category above its play count, on the tablet (Dan, Nov 6)
@@ -755,7 +764,7 @@ const overflow = page => page.evaluate(() => {
   // Shuffle: the built-in Client ID, Google's sign-in in its own window, and the key reaching this page
   s = await open(browser, { path: '/shuffle' });
   const q = await s.page.evaluate(() => document.body.textContent);
-  check('Shuffle: sign-in, the quota for all devices, and the original order', /Sign in with Google/.test(q) && /Left today \(all your devices\)/.test(q) && /about 10,000 of 10,000/.test(q), q.slice(0, 200));
+  check('Shuffle: sign-in, the quota for all devices, and the original order', /Sign In with Google/.test(q) && /Left today \(all your devices\)/.test(q) && /about 10,000 of 10,000/.test(q), q.slice(0, 200));
   const popup = s.page.waitForEvent('popup', { timeout: 10000 }).catch(() => null);
   await s.page.click('[data-act="shSignIn"]');
   const win = await popup;

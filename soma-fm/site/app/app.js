@@ -16,10 +16,10 @@
   const LIVE_SECONDS = 60, STATE_MINUTES = 2, PLAYLIST_MINUTES = 15;
   const PAGE_SIZES = [25, 50, 100, 250];
   const CATS = [['band', 'Band/Swing', 'Swing'], ['classics', 'Classics', 'Classics'], ['dance', 'Dance', 'Dance'], ['jazz', 'Jazz/Piano', 'Jazz'], ['mellow', 'Mellow', 'Mellow'], ['soul', 'Soul/Funk', 'Funk']];
-  const CATS2 = CATS.concat([['uncat', 'No category', 'None']]);
+  const CATS2 = CATS.concat([['uncat', 'No Category', 'None']]);
   const CAT = {}, CATSH = {}; for (const [k, n, sh] of CATS) { CAT[k] = n; CATSH[k] = sh; }
-  const LABEL = { have: 'In playlist', other: 'Other version', none: 'Not in playlist', gone: 'Gone from playlist', disliked: 'Disliked', unknown: '—' };
-  const STATUS = [['none', 'Not in playlist'], ['other', 'Other version'], ['have', 'In playlist'], ['disliked', 'Disliked']];
+  const LABEL = { have: 'In Playlist', other: 'Other Version', none: 'Not in Playlist', gone: 'Gone from Playlist', disliked: 'Disliked', unknown: '—' };
+  const STATUS = [['none', 'Not in Playlist'], ['other', 'Other Version'], ['have', 'In Playlist'], ['disliked', 'Disliked']];
   const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';
   const UNKNOWN = { status: 'unknown' };
   const THEMES = ['candy', 'evergreen'];   // besides Midnight, the default
@@ -204,7 +204,7 @@
   const inList = r => r.status === 'have' && !!r.item;
   // Open the video you have: not for songs marked "not this one", disliked, or gone
   const canOpen = r => !!r.item && r.status !== 'unknown' && r.status !== 'gone' && r.marked !== 'not' && !r.disliked;
-  const statusText = r => r.status === 'other' && r.reason === 'sameArtistOtherMix' ? 'Different mix' : LABEL[r.status] || '';
+  const statusText = r => r.status === 'other' && r.reason === 'sameArtistOtherMix' ? 'Different Mix' : LABEL[r.status] || '';
 
   // A new document (from the server, or a change made here): only what changed is matched again
   function setDoc(next) {
@@ -456,7 +456,7 @@
   function head(sub) {
     const w = warning(), bad = !!w && !D.err.save;
     return `<header class="top"><div><div class="ttl"><b>Christmas Lounge</b><button class="icon hre" data-act="reload" aria-label="Read the latest now" title="Read the latest now">${ico('refresh')}</button></div><span class="sub">${esc(sub)}</span></div>` +
-      `<a class="live ${w ? 'bad' : ''}" href="/more" data-nav title="${esc(w || 'The recorder reads SomaFM\'s song list every 10 minutes')}"><i></i>${w ? (bad ? 'Check recording' : 'Not saved yet') : 'Recording'}</a></header>` +
+      `<a class="live ${w ? 'bad' : ''}" href="/more" data-nav title="${esc(w || 'The recorder reads SomaFM\'s song list every 10 minutes')}"><i></i>${w ? (bad ? 'Check Recording' : 'Not Saved Yet') : 'Recording'}</a></header>` +
       (w ? `<div class="warn ${D.err.save || D.err.state || D.err.plays ? 'err' : ''}" role="status">⚠ ${esc(w)}</div>` : '');
   }
   // The status: a colored dot and its name; on a phone the rows show just the dot (the name stays for screen readers)
@@ -504,14 +504,14 @@
     const b = (text, act, cls) => `<button class="pill ${cls || ''}" data-act="${act}" data-i="${i}">${text}</button>`;
     const tag = (cls, text) => `<span class="tag ${cls}">${text}</span>`;
     if (r.disliked) return tag('disliked', '👎 Disliked') + b('Undo', 'undislike');
-    if (r.marked === 'have' && r.linkMissing) return tag('have', '✓ In playlist · marked') + b('Link song', 'pick') + b('Undo', 'unmark');
-    if (r.marked === 'have' && r.linked) return tag('have', '✓ In playlist · linked') + b('Unlink', 'unlink');
-    if (r.marked === 'have') return tag('have', '✓ In playlist · marked') + b('Link song', 'pick') + b('Undo', 'unmark');
-    if (r.marked === 'not') return tag('none', '✗ Not in playlist · marked') + b('Undo', 'unmark') + b('👎 Dislike', 'dislike', 'dis');
-    if (r.status === 'have') return tag('have', '✓ In playlist') + b('Wrong video?', 'pick');
-    if (r.status === 'gone') return tag('gone', '⚠ Gone from playlist') + b('✓ I have it', 'pick', 'good');
-    if (r.status === 'other') return tag('other', '≈ ' + statusText(r)) + b('✓ I have it', 'pick', 'good') + b('✗ Not this one', 'markNot', 'bad');
-    if (r.status === 'none') return tag('none', '✗ Not in playlist') + b('✓ I have it', 'pick', 'good') + b('👎 Dislike', 'dislike', 'dis');
+    if (r.marked === 'have' && r.linkMissing) return tag('have', '✓ In Playlist · Marked') + b('Link Song', 'pick') + b('Undo', 'unmark');
+    if (r.marked === 'have' && r.linked) return tag('have', '✓ In Playlist · Linked') + b('Unlink', 'unlink');
+    if (r.marked === 'have') return tag('have', '✓ In Playlist · Marked') + b('Link Song', 'pick') + b('Undo', 'unmark');
+    if (r.marked === 'not') return tag('none', '✗ Not in Playlist · Marked') + b('Undo', 'unmark') + b('👎 Dislike', 'dislike', 'dis');
+    if (r.status === 'have') return tag('have', '✓ In Playlist') + b('Wrong Video?', 'pick');
+    if (r.status === 'gone') return tag('gone', '⚠ Gone from Playlist') + b('✓ I Have It', 'pick', 'good');
+    if (r.status === 'other') return tag('other', '≈ ' + statusText(r)) + b('✓ I Have It', 'pick', 'good') + b('✗ Not This One', 'markNot', 'bad');
+    if (r.status === 'none') return tag('none', '✗ Not in Playlist') + b('✓ I Have It', 'pick', 'good') + b('👎 Dislike', 'dislike', 'dis');
     return '';
   }
   function detail(p, r, i) {
@@ -527,10 +527,10 @@
     const extra = [];
     if (inList(r) && (!r.marked || r.linked)) { const c = catOf(r.item.id); extra.push(`<button class="menubtn ${c ? 'set' : ''}" data-act="catmenu" data-i="${i}" aria-haspopup="listbox">${esc(c ? CAT[c] : 'Category…')} <span class="caret">▾</span></button>`); }
     const note = noteOf(p.key), editing = S.noteFor === p.id;
-    if (!editing && !note) extra.push(`<button class="pill" data-act="note" data-i="${i}">✎ Add a note</button>`);
+    if (!editing && !note) extra.push(`<button class="pill" data-act="note" data-i="${i}">✎ Add a Note</button>`);
     const noteBox = editing
       ? `<textarea id="note-text" maxlength="2000" placeholder="A note about this song" aria-label="Note: ${esc(p.title)}">${esc(S.noteDraft)}</textarea>
-         <div class="row" style="margin-top:8px"><button class="pill primary" data-act="noteSave" data-i="${i}">Save note</button>${note ? `<button class="pill" data-act="noteDelete" data-i="${i}">Delete</button>` : ''}<button class="pill" data-act="noteCancel">Cancel</button></div>`
+         <div class="row" style="margin-top:8px"><button class="pill primary" data-act="noteSave" data-i="${i}">Save Note</button>${note ? `<button class="pill" data-act="noteDelete" data-i="${i}">Delete</button>` : ''}<button class="pill" data-act="noteCancel">Cancel</button></div>`
       : note ? `<div class="notewrap"><button class="icon" data-act="note" data-i="${i}" aria-label="Edit note" title="Edit note">✎</button><div class="note">${esc(note)}</div></div>` : '';
     const picker = S.pick === p.id ? pickerBox(p, r, i) : '';
     return `<div class="detail" data-stop>${meta}<div class="row">${actions(p, r, i)}${extra.join('')}</div>${picker}${noteBox}${playLog(p)}</div>`;
@@ -553,8 +553,8 @@
   // "Which playlist song is it?", opened by I have it, Link song or Wrong video?
   function pickerBox(p, r, i) {
     const fixing = r.status === 'have' && !r.marked;
-    const btns = fixing ? `<button class="pill bad" data-act="pickNot" data-i="${i}">✗ Not in playlist</button>`
-      : `<button class="pill" data-act="pickPlain" data-i="${i}">${r.marked === 'have' ? 'Keep without linking' : 'Mark without linking'}</button>`;
+    const btns = fixing ? `<button class="pill bad" data-act="pickNot" data-i="${i}">✗ Not in Playlist</button>`
+      : `<button class="pill" data-act="pickPlain" data-i="${i}">${r.marked === 'have' ? 'Keep Without Linking' : 'Mark Without Linking'}</button>`;
     return `<div class="picker"><div class="ph">Which playlist song is it?</div>
       <input type="search" id="pick-q" placeholder="Search your playlist" autocomplete="off" value="${esc(S.pickQ || '')}" data-i="${i}" aria-label="Search your playlist">
       <div class="choices-wrap">${choicesHtml(p, r, i)}</div>
@@ -599,12 +599,12 @@
     const thumb = w => inList(r) ? `<a class="hthumb ${w}" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop tabindex="-1" aria-hidden="true"><img src="https://i.ytimg.com/vi/${encodeURIComponent(r.item.id)}/mqdefault.jpg" alt="" loading="lazy" onerror="this.parentNode.remove()"></a>` : '';
     const others = all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
-      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now playing' : 'Last played ' + time(n.at)}</small>${label}${castBtn()}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>${note ? `<div class="hnote">${esc(note)}</div>` : ''}
-      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}YouTube</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}Search</a>`}<span class="hcount"><span class="hct">${inList(r) && catOf(r.item.id) ? `<span class="hcat">${esc(CAT[catOf(r.item.id)])}</span>` : ''}<span><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span></span></span> ${chev()}</span></div>
+      <div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${playing ? 'Now Playing' : 'Last Played ' + time(n.at)}</small>${label}${castBtn()}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>${note ? `<div class="hnote">${esc(note)}</div>` : ''}
+      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}YouTube</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}YT Search</a>`}<span class="hcount"><span class="hct">${inList(r) && catOf(r.item.id) ? `<span class="hcat">${esc(CAT[catOf(r.item.id)])}</span>` : ''}<span><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span></span></span> ${chev()}</span></div>
       ${heroListen()}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}
       ${tiles}</div>
-      <div><h3>Just played <a href="${esc(tabHref('history'))}" data-nav>See all</a></h3><div class="plays">${PHEAD}${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
+      <div><h3>Just Played <a href="${esc(tabHref('history'))}" data-nav>See All</a></h3><div class="plays">${PHEAD}${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
   };
 
   // History's rows after the filters, and the counts on the chips (counted before the status, category and favorite filters)
@@ -636,7 +636,7 @@
       fav: sh => `<button class="${z(favN, S.favOnly)}" aria-pressed="${S.favOnly}" data-act="ffav" aria-label="Favorites ${fmt(favN)}">★${sh ? '<span class="wide"> Favorites</span>' : ' Favorites'} <span class="n">${fmt(favN)}</span></button>`,
       // sh: the short name on phones (Swing, Jazz, Funk; Dan, Nov 6)
       cat: (k, l, sh) => `<button class="${z(catN(k), S.cats.has(k))}" aria-pressed="${S.cats.has(k)}" data-act="fcat" data-v="${k}" aria-label="${l} ${fmt(catN(k))}">${sh && sh !== l ? `<span class="lw">${l}</span><span class="ln">${sh}</span>` : l} <span class="n">${fmt(catN(k))}</span></button>`,
-      latest: () => `<button class="chip" aria-pressed="${S.latest}" data-act="flatest" title="One row per song, at its most recent play" aria-label="Latest play only"><span class="wide">Latest play only</span><span class="narrow">Latest</span></button>`,
+      latest: () => `<button class="chip" aria-pressed="${S.latest}" data-act="flatest" title="One row per song, at its most recent play" aria-label="Latest Play Only"><span class="wide">Latest Play Only</span><span class="narrow">Latest</span></button>`,
     };
     // In All filters, the ones with nothing in them go to the end of their group (the order is kept otherwise)
     const zeroLast = list => list.filter(x => x.n || x.on).concat(list.filter(x => !x.n && !x.on)).map(x => x.html).join('');
@@ -651,17 +651,17 @@
         const sts = STATUS.map(([k, l]) => ({ n: count(k), on: S.status.has(k), html: C.st(k, l) }));
         const fc = [{ n: favN, on: S.favOnly, html: C.fav() }].concat(CATS2.map(([k, l, sh]) => ({ n: catN(k), on: S.cats.has(k), html: C.cat(k, l, k === 'uncat' ? '' : sh) })));
         filters = `<div class="fpanel" role="group" aria-label="All filters"><h5>Status</h5><div class="grp">${C.all()}${C.latest()}${zeroLast(sts)}</div>
-          <h5>Favorites and categories</h5><div class="grp">${zeroLast(fc)}</div>
-          <div class="end"><button class="pill" ${active ? '' : 'disabled'} data-act="fclear">Clear all</button><button class="pill primary" data-act="fdone">Done</button></div></div>`;
+          <h5>Favorites and Categories</h5><div class="grp">${zeroLast(fc)}</div>
+          <div class="end"><button class="pill" ${active ? '' : 'disabled'} data-act="fclear">Clear All</button><button class="pill primary" data-act="fdone">Done</button></div></div>`;
       } else {
         // A few to start with (All, Latest, In playlist, Not in playlist, Favorites), plus any other filter that's on.
         // Not in playlist is left out while there are none (unless it's on).
-        const q = [C.all(), C.latest(), C.st('have', 'In playlist', 'In list')];
-        if (count('none') || S.status.has('none')) q.push(C.st('none', 'Not in playlist', 'Not in list'));
+        const q = [C.all(), C.latest(), C.st('have', 'In Playlist', 'In List')];
+        if (count('none') || S.status.has('none')) q.push(C.st('none', 'Not in Playlist', 'Not in List'));
         q.push(C.fav(true));
         for (const [k, l] of STATUS) if (k !== 'have' && k !== 'none' && S.status.has(k)) q.push(C.st(k, l));
         for (const [k, , sh] of CATS2) if (S.cats.has(k)) q.push(C.cat(k, sh));
-        filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false" aria-label="All filters"><span class="wide">All filters</span><span class="narrow fic">${ico('filter')}</span>${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button>${find}</div>`;
+        filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false" aria-label="All filters"><span class="wide">All Filters</span><span class="narrow fic">${ico('filter')}</span>${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button>${find}</div>`;
         findIn = true;
       }
     }
@@ -677,13 +677,13 @@
       : `<span class="grow"><b>${PLAYLIST_NAME}</b> playlist<span class="plmeta"><span class="nw"><span class="sep1"> · </span>${fmt(D.items.length)} songs</span> <span class="nw"><span class="sep">· </span>checked ${ago(D.playlistAt)}</span>${D.hidden ? ` <span class="nw plhid">(${D.hidden} unavailable left out)</span>` : ''}</span></span>`;
     const gaps = D.plays.filter(p => p[4]).length;
     return head('SomaFM station play history') + `
-      <div class="bar-line">${pl}<button class="pill" data-act="refresh">↻ Refresh playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live updates</button></div>
+      <div class="bar-line">${pl}<button class="pill" data-act="refresh">↻ Refresh Playlist</button><button class="toggle" aria-pressed="${liveOn}" data-act="live"><i></i>Live Updates</button></div>
       ${D.archiveNote ? `<div class="warn">⚠ ${esc(D.archiveNote)}</div>` : ''}${goneBox}${filters}
       ${findIn ? '' : find}
       <div id="plist">${playsList(page, list)}</div>
       <div class="pager"><button class="pill" ${S.page ? '' : 'disabled'} data-act="newer">‹ Newer</button>
         <span id="ppos">${list.length ? `${fmt(S.page * S.per + 1)}–${fmt(S.page * S.per + page.length)} of ${fmt(list.length)}` : ''}</span>
-        <span class="per">Per page <button class="menubtn set" data-act="permenu" aria-haspopup="listbox">${S.per} <span class="caret">▾</span></button></span>
+        <span class="per">Per Page <button class="menubtn set" data-act="permenu" aria-haspopup="listbox">${S.per} <span class="caret">▾</span></button></span>
         <button class="pill" ${S.page < pages - 1 ? '' : 'disabled'} data-act="older">Older ›</button></div>
       <div class="foot">${D.plays.length ? `Recording since ${esc(when(D.plays[D.plays.length - 1][0]))} · ${fmt(D.plays.length)} plays · ${plural(gaps, 'gap')}` : D.loaded.plays ? 'No plays recorded yet.' : 'Loading the plays…'}</div>`;
   };
@@ -705,12 +705,12 @@
     const catCount = {}, none = [], seen = new Set();
     for (const it of D.items) { if (seen.has(it.id)) continue; seen.add(it.id); const c = catOf(it.id); if (c) catCount[c] = (catCount[c] || 0) + 1; else none.push(it); }
     let left;
-    if (!ok) left = `<h3>Your playlist</h3><div class="box">${D.playlistError ? `Couldn't read the playlist: ${esc(D.playlistError)}` : 'Reading the playlist…'}</div>`;
+    if (!ok) left = `<h3>Your Playlist</h3><div class="box">${D.playlistError ? `Couldn't read the playlist: ${esc(D.playlistError)}` : 'Reading the playlist…'}</div>`;
     else {
       const heard = P.heard, notHeard = P.notHeard;
-      left = `<h3>Your playlist</h3><div class="g3 wide-mid"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmin(P.total)}</b><span class="k">total length</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k"><span class="lw">average song</span><span class="ln">avg song</span></span></div></div>
-      <h3>Songs by status</h3>${inOut(t)}${statusBox(t)}
-      <h3>Heard so far</h3><div class="box"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
+      left = `<h3>Your Playlist</h3><div class="g3 wide-mid"><div class="box"><b class="big">${fmt(P.songs)}</b><span class="k">songs</span></div><div class="box"><b class="big">${hmin(P.total)}</b><span class="k">total length</span></div><div class="box"><b class="big">${History.formatClock(P.avg)}</b><span class="k"><span class="lw">average song</span><span class="ln">avg song</span></span></div></div>
+      <h3>Songs by Status</h3>${inOut(t)}${statusBox(t)}
+      <h3>Heard So Far</h3><div class="box"><div class="kv"><span>Heard on SomaFM so far</span><b>${fmt(heard)} · ${pct(heard, P.songs)}</b></div><div class="meter" role="progressbar" aria-label="Playlist songs heard" aria-valuemin="0" aria-valuemax="${P.songs}" aria-valuenow="${heard}"><i style="width:${P.songs ? heard / P.songs * 100 : 0}%"></i></div>
         ${notHeard.length ? `<details class="sub"><summary>Not heard yet: ${fmt(notHeard.length)}</summary><ul>${notHeard.map(it => `<li><span class="nh">${esc(it.title)}</span><span class="acts">${starBtn(it.id, it.title)}<a class="pill" href="${ytWatch(it.id)}" target="_blank" rel="noopener">Open</a></span></li>`).join('')}</ul></details>` : '<div class="kv"><span>Not heard yet</span><b>0</b></div>'}
         <div class="kv"><span>Favorites</span><b>${fmt(favN)}</b></div>
         ${P.longest ? `<div class="kv"><span>Longest</span><span class="r">${chunks(`<b>${History.formatClock(P.longest.secs)}</b> · `, P.longest.title)}</span></div><div class="kv"><span>Shortest</span><span class="r">${chunks(`<b>${History.formatClock(P.shortest.secs)}</b> · `, P.shortest.title)}</span></div>` : ''}
@@ -721,12 +721,12 @@
 `;
     }
     const firsts = t.recent ? Math.round(t.recentFirsts / t.recent * 100) : 0;
-    const right = !t.plays ? '<h3>SomaFM rotation</h3><div class="box">No plays recorded yet.</div>' : `<h3>SomaFM rotation</h3><div class="g2"><div class="box"><b class="big">${t.repeatIntervals ? esc(backText(t.avgRepeatSecs)) : '—'}</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.unique)}</b><span class="k">different songs played</span></div></div>
+    const right = !t.plays ? '<h3>SomaFM Rotation</h3><div class="box">No plays recorded yet.</div>' : `<h3>SomaFM Rotation</h3><div class="g2"><div class="box"><b class="big">${t.repeatIntervals ? esc(backText(t.avgRepeatSecs)) : '—'}</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.unique)}</b><span class="k">different songs played</span></div></div>
       <div class="box" style="margin-top:12px"><div class="kv"><span>Songs played more than once</span><b>${fmt(t.repeated)}</b></div><div class="kv"><span>Plays per song</span><b>${t.avgPlays.toFixed(1)}</b></div>
         ${t.repeatIntervals ? `<div class="kv"><span><span class="lw">Between a song's replays</span><span class="ln">Between replays</span></span><span class="r lines"><span>${numsBold(Stats.formatSpan(t.avgRepeatSecs))} average</span><span>${numsBold(Stats.formatSpan(t.medianRepeatSecs))} median</span></span></div>` : ''}
         ${t.recentFirsts ? `<div class="kv"><span><span class="nw">Of the last ${fmt(t.recent)} plays,</span> <span class="nw">heard for the first time</span></span><b class="nw">${fmt(t.recentFirsts)} · ${firsts}%</b></div>` : ''}
         <div class="snote">${t.repeatIntervals ? `Comes back is the measured average time between a song's replays (${fmt(t.repeatIntervals)} replays). ` : ''}As the first-time share drops toward zero, you've seen nearly all of the rotation.</div></div>
-      <h3><span>${S.topSort === 'recent' ? '<span class="lw">Most recently replayed</span><span class="ln">Latest replays</span>' : 'Most played'}</span> <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
+      <h3><span>${S.topSort === 'recent' ? '<span class="lw">Most Recently Replayed</span><span class="ln">Latest Replays</span>' : 'Most Played'}</span> <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most Plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
       <div class="plays">${top.length ? PHEAD + top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty left">No songs have repeated yet.</div>'}</div>
       ${ok && missing.length ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${PHEAD}${missing.map(p => playRow(p, 'miss:', false)).join('')}</div>` : ''}
       <h3>Recording</h3><div class="box"><div class="kv"><span>Since</span><b>${esc(day(since))} ${esc(time(since))}</b></div><div class="kv"><span>Plays saved</span><b>${fmt(t.plays)}</b></div>
@@ -784,24 +784,24 @@
     const msg = m => m ? `<div class="msg ${m.cls || ''}" style="padding:0 14px 12px">${esc(m.text)}</div>` : '';
     return head('Settings and your data') + `<div class="split"><div><h3>Theme</h3><div class="themes">${T.map(([k, l, g]) => `<button class="theme ${th === k ? 'on' : ''}" data-act="theme" data-v="${k}" aria-pressed="${th === k}"><i style="background:${g}"></i>${l}</button>`).join('')}</div>
       <p class="hint">Remembered on this device.</p>
-      <h3>Song lists</h3><div class="box"><div class="snote" style="margin-top:0">What each song shows without opening it.</div>
-        <div class="kv"><span>Album</span><span class="seg" role="group" aria-label="Album"><button class="${S.listAlbum ? 'on' : ''}" data-act="listAlbum" data-v="1" aria-pressed="${S.listAlbum}">Always</button><button class="${S.listAlbum ? '' : 'on'}" data-act="listAlbum" data-v="" aria-pressed="${!S.listAlbum}">Wide screens</button></span></div>
-        <div class="kv"><span>Notes</span><span class="seg" role="group" aria-label="Notes">${[['one', 'First line'], ['all', 'All'], ['off', 'Off']].map(([k, l]) => `<button class="${S.listNotes === k ? 'on' : ''}" data-act="listNotes" data-v="${k}" aria-pressed="${S.listNotes === k}">${l}</button>`).join('')}</span></div>
-        <div class="snote">Remembered on this device. Open a song for everything about it.</div></div>
-      <h3>Listen</h3><div class="box"><div class="kv"><span>Plays</span><span class="seg" role="group" aria-label="Listen plays">${[['', 'Here'], ['somafm', "In SomaFM's player"]].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
-        <div class="snote">Here plays the stream inside the site. If a browser can't, Listen opens SomaFM's own player instead. Remembered on this device.</div></div>
-      <h3>Your data</h3><div class="box"><div class="snote" style="margin-top:0">Kept in one place on your Cloudflare account: every device shows the same, and each change is saved as you make it.</div>
-        <div class="kv"><span>Read ${D.stateAt ? ago(D.stateAt) : '—'}${D.err.save ? '' : queued || inflight ? ' · saving…' : ''}</span><button class="pill" data-act="reload">Read again now</button></div>
+      <h3>Song Lists</h3><div class="box"><div class="snote" style="margin-top:0">Which song attributes to show directly in lists.</div>
+        <div class="kv"><span>Album</span><span class="seg" role="group" aria-label="Album"><button class="${S.listAlbum ? 'on' : ''}" data-act="listAlbum" data-v="1" aria-pressed="${S.listAlbum}">Always</button><button class="${S.listAlbum ? '' : 'on'}" data-act="listAlbum" data-v="" aria-pressed="${!S.listAlbum}">Wide Screens</button></span></div>
+        <div class="kv"><span>Notes</span><span class="seg" role="group" aria-label="Notes">${[['one', 'First Line'], ['all', 'All'], ['off', 'Off']].map(([k, l]) => `<button class="${S.listNotes === k ? 'on' : ''}" data-act="listNotes" data-v="${k}" aria-pressed="${S.listNotes === k}">${l}</button>`).join('')}</span></div>
+        </div>
+      <h3>Listen</h3><div class="box"><div class="kv"><span>Streaming Player</span><span class="seg" role="group" aria-label="Streaming player">${[['', 'Native'], ['somafm', 'SomaFM Web']].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
+        <div class="snote">Native plays the stream directly from this site. The SomaFM Web player is the fallback when direct play is unavailable.</div></div>
+      <h3>Your Data</h3><div class="box"><div class="snote" style="margin-top:0">Song details and play history are stored centrally in the Cloudflare site.</div>
+        <div class="kv"><span>Read ${D.stateAt ? ago(D.stateAt) : '—'}${D.err.save ? '' : queued || inflight ? ' · saving…' : ''}</span><button class="pill" data-act="reload">Read Again Now</button></div>
         ${w ? `<div class="msg err">⚠ ${esc(w)}</div>` : ''}${rec ? `<div class="snote">${rec}</div>` : ''}
         <div class="snote">The recorder reads SomaFM's list every 10 minutes around the clock, so no device needs to stay open.</div></div></div>
-      <div><h3>Backup and restore</h3><div class="list"><div class="item"><div class="tx"><b>Download a backup</b><small>Plays, marks, favorites, categories, notes, remembered songs and the original order</small></div><div class="acts"><button class="pill" data-act="backupDown">Download</button><button class="pill" data-act="backupCopy">Copy</button></div></div>
+      <div><h3>Backup and Restore</h3><div class="list"><div class="item"><div class="tx"><b>Download Backup</b><small>Plays, marks, favorites, categories, notes, remembered songs and the original order</small></div><div class="acts"><button class="pill" data-act="backupDown">Download</button><button class="pill" data-act="backupCopy">Copy</button></div></div>
       ${msg(S.backupMsg)}
-      <div class="item"><div class="tx"><b>Restore from a backup</b><small>From today's site or an earlier backup; you see what it has before anything changes</small></div><div class="acts"><button class="pill" data-act="restorePick">Choose file…</button><button class="pill" data-act="restorePaste">Paste…</button></div></div>
+      <div class="item"><div class="tx"><b>Restore Backup</b><small>Previews earlier site data before applying changes</small></div><div class="acts"><button class="pill" data-act="restorePick">Choose File…</button><button class="pill" data-act="restorePaste">Paste…</button></div></div>
       <input type="file" id="restore-file" accept=".json,application/json,text/plain" hidden>
-      ${S.restorePaste ? `<div class="restore"><textarea id="restore-text" spellcheck="false" placeholder="Paste the copied backup here" aria-label="Copied backup"></textarea><div><button class="pill" data-act="restoreRead">Read pasted backup</button></div></div>` : ''}
+      ${S.restorePaste ? `<div class="restore"><textarea id="restore-text" spellcheck="false" placeholder="Paste the copied backup here" aria-label="Copied backup"></textarea><div><button class="pill" data-act="restoreRead">Read Pasted Backup</button></div></div>` : ''}
       ${restore}${msg(S.restoreMsg)}</div>
       <h3>Export</h3><div class="list"><div class="item"><div class="tx"><b>Plays as CSV</b><small>For a spreadsheet: date, time, artist, title, album, status</small></div><div class="acts"><button class="pill" data-act="csvDown">Download</button><button class="pill" data-act="csvCopy">Copy</button></div></div></div>
-      <p class="hint" style="margin-top:16px"><a href="/privacy/">Privacy policy</a></p></div></div>`;
+      <p class="hint" style="margin-top:16px"><a href="/privacy/">Privacy Policy</a></p></div></div>`;
   };
 
   // Redraws wait while you're choosing a song, writing a note, or a menu is open
@@ -929,7 +929,7 @@
   function heroListenBtn() {
     if (viaSoma()) return `<button class="pill solid" id="hlbtn" data-act="listen" title="Opens SomaFM's player">${ico('open')}<span class="lw">Listen on SomaFM ↗</span><span class="ln">Listen ↗</span></button>`;
     const s = player.state;
-    if (s === 'off') return `<button class="pill solid" id="hlbtn" data-act="listen" aria-pressed="false">${ico('open')}<span class="lw">Listen live</span><span class="ln">Listen</span></button>`;
+    if (s === 'off') return `<button class="pill solid" id="hlbtn" data-act="listen" aria-pressed="false">${ico('open')}<span class="lw">Listen Live</span><span class="ln">Listen</span></button>`;
     return `<button class="pill solid on" id="hlbtn" data-act="listen" aria-pressed="true">${s === 'loading' ? '<span class="spin"></span><span class="lw">Connecting</span><span class="ln">Stop</span>' : '<span class="eq"><i></i><i></i><i></i></span>Stop'}</button>`;
   }
   // While it plays, a row under the buttons with the volume
@@ -1001,7 +1001,7 @@
     const f = player.fail;
     if (!f) return '';
     return `<div class="warn listen-fail" role="status">⚠ This browser can't play SomaFM's stream inside the site (${esc(time(Math.floor(f.at / 1000)))}). SomaFM turns it away here, so from now on Listen opens SomaFM's own player.
-      <div class="acts"><button class="pill primary" data-act="listenSoma">Open SomaFM's player</button></div>
+      <div class="acts"><button class="pill primary" data-act="listenSoma">Open SomaFM's Player</button></div>
       <details><summary>Details</summary><pre>${esc(f.log.concat(f.can, f.ua).join('\n'))}</pre></details></div>`;
   }
   // A live stream isn't paused but let go, so starting again plays what's on now
@@ -1135,7 +1135,7 @@
   }
   function catMenu(btn, id, title) {
     const cur = catOf(id), opts = CATS.map(c => [c[0], c[1]]);
-    if (cur) opts.push(['', 'No category', 'clear']);
+    if (cur) opts.push(['', 'No Category', 'clear']);
     openMenu(btn, 'Category: ' + title, opts, cur, k => { setCat(id, k); render(); });
   }
 
@@ -1323,9 +1323,9 @@
   // move, so a run cut short is finished next time. The quota count, the order before the last change, what the last
   // run used, and the original order are in the synced document, so every device shows the same.
   const KINDS = {
-    shuffle: { head: 'A new order', go: 'Shuffle the playlist', run: 'Shuffling your playlist…', name: 'A shuffle', done: 'Done. Your playlist is in the new order, and reading it back confirmed it.' },
-    undo: { head: 'The order before the last shuffle', go: 'Put back this order', run: 'Putting back the earlier order…', name: 'Putting back the earlier order', done: 'Done. The earlier order is back, and reading the playlist confirmed it.' },
-    original: { head: 'The original order', go: 'Put back the original order', run: 'Putting back the original order…', name: 'Putting back the original order', done: 'Done. The original order is back, and reading the playlist confirmed it.' },
+    shuffle: { head: 'A New Order', go: 'Shuffle Playlist', run: 'Shuffling your playlist…', name: 'A shuffle', done: 'Done. Your playlist is in the new order, and reading it back confirmed it.' },
+    undo: { head: 'The Order Before the Last Shuffle', go: 'Restore This Order', run: 'Putting back the earlier order…', name: 'Putting back the earlier order', done: 'Done. The earlier order is back, and reading the playlist confirmed it.' },
+    original: { head: 'The Original Order', go: 'Restore Original Order', run: 'Putting back the original order…', name: 'Putting back the original order', done: 'Done. The original order is back, and reading the playlist confirmed it.' },
   };
   const API_WAITS = [2000, 5000, 15000, 30000], READBACK_WAITS = [5000, 15000];
   const rand = n => { const lim = Math.floor(0x100000000 / n) * n, b = new Uint32Array(1); do { crypto.getRandomValues(b); } while (b[0] >= lim); return b[0] % n; };
@@ -1562,7 +1562,7 @@
     shDownload() { downloadOriginal(); },
     shGo(el) {
       if (!sh.moves || !sh.moves.length) return;
-      if (!armed) { el.textContent = 'Tap again to start'; armed = setTimeout(() => { armed = null; if (el.isConnected) el.textContent = sh.resumeOf ? 'Finish it' : KINDS[sh.kind].go; }, 5000); return; }
+      if (!armed) { el.textContent = 'Tap again to start'; armed = setTimeout(() => { armed = null; if (el.isConnected) el.textContent = sh.resumeOf ? 'Finish It' : KINDS[sh.kind].go; }, 5000); return; }
       clearTimeout(armed); armed = null; runShuffle();
     },
     shStop() { shStop = true; const t = $('#shprog'); if (t) t.textContent += ' — stopping…'; },
@@ -1572,7 +1572,7 @@
     const until = r >= 60 ? `${Math.floor(r / 60)} h ${r % 60} min` : `${r} min`;
     const what = run ? (run.kind === 'shuffle' ? 'Last shuffle' : KINDS[run.kind] ? KINDS[run.kind].name : 'Last run') : '';
     // The bar shows what's left (full at the start of the day), so a fresh day doesn't look like an empty, broken bar (Dan, Nov 6)
-    return `<div class="box"><h4>Quota today</h4><div class="meter" role="progressbar" aria-label="Quota left today" aria-valuemin="0" aria-valuemax="${Shuffle.DAILY_UNITS}" aria-valuenow="${left}"><i style="width:${Math.min(100, left / Shuffle.DAILY_UNITS * 100)}%"></i></div>
+    return `<div class="box"><h4>Quota Today</h4><div class="meter" role="progressbar" aria-label="Quota left today" aria-valuemin="0" aria-valuemax="${Shuffle.DAILY_UNITS}" aria-valuenow="${left}"><i style="width:${Math.min(100, left / Shuffle.DAILY_UNITS * 100)}%"></i></div>
       <div class="kv"><span>Left today<span class="lw"> (all your devices)</span></span><b>about ${fmt(left)} of ${fmt(Shuffle.DAILY_UNITS)}</b></div><div class="kv"><span>Resets</span><b class="lines"><span>in ${until}</span><span>midnight Pacific (${esc(quotaReset())})</span></b></div>
       ${run ? `<div class="kv"><span>${esc(what)}</span><b>${esc(when(run.at / 1000))}</b></div><div class="kv"><span>It used</span><b>about ${fmt(run.units)} units · ${plural(run.moves, 'move')}${run.complete ? '' : ' · stopped partway'}</b></div>` : ''}
       ${last ? `<div class="kv"><span>Order last changed</span><b>${esc(when(last.at / 1000))}</b></div>` : ''}
@@ -1585,9 +1585,9 @@
     let main = '';
     if (v === 'signin' || v === 'idle') {
       main = `<div class="box"><h4>Shuffle ${PLAYLIST_NAME}${n ? ` (${fmt(n)} songs)` : ''}</h4>${say(m, 'err')}<span class="k">Sign in with the Google account that owns ${PLAYLIST_NAME}.${D.keepsSignIn ? ' It stays signed in on all your devices until you sign out.' : ''}</span>
-        <div class="btns"><button class="big-btn" data-act="shSignIn">Sign in with Google</button></div></div>`;
+        <div class="btns"><button class="big-btn" data-act="shSignIn">Sign In with Google</button></div></div>`;
     } else if (v === 'waiting') {
-      main = `<div class="box"><h4>Signing in</h4><div class="sline">Finish signing in in the Google window…</div><div class="btns"><button class="big-btn alt" data-act="shCancelWait">Cancel</button></div></div>`;
+      main = `<div class="box"><h4>Signing In</h4><div class="sline">Finish signing in in the Google window…</div><div class="btns"><button class="big-btn alt" data-act="shCancelWait">Cancel</button></div></div>`;
     } else if (v === 'loading') {
       main = `<div class="box"><div class="sline">${esc(m || 'Working…')}</div></div>`;
     } else if (v === 'ready') {
@@ -1606,7 +1606,7 @@
           'Songs by the same artist, from the same album or posted by the same channel are kept apart. ' + (sc.runs.length ? `Most in a row from one category: ${sc.runs.join(', ')}. ` : '') + 'The rest is random.' +
           (sh.favIds.size ? '' : ' Tap ☆ on a song to make it a favorite.');
       }
-      const label = sh.resumeOf ? 'Finish it' : K.go;
+      const label = sh.resumeOf ? 'Finish It' : K.go;
       main = `<div class="box">${say(sh.note)}<h4>${sh.resumeOf ? 'Unfinished' : esc(K.head)}</h4>
         <span class="k">${sh.resumeOf ? `${esc(K.name)} started ${esc(when(sh.resumeOf / 1000))} didn't finish. Finishing takes ${plural(mv, 'more move')}, about ${fmt(u)} quota units.`
           : `${fmt(total)} songs. Putting them in this order takes ${plural(mv, 'move')}, about ${fmt(u)} quota units.`}</span>
@@ -1615,9 +1615,9 @@
         <ol class="shlist">${lines.join('')}</ol>${total > 12 ? `<div class="snote">…and ${fmt(total - 12)} more.</div>` : ''}
         ${spread ? `<div class="snote">${esc(spread)}</div>` : ''}${mv ? '' : '<div class="snote">The playlist is already in this order.</div>'}
         <div class="btns"><button class="big-btn" data-act="shGo" ${mv ? '' : 'disabled'}>${esc(label)}</button>
-        ${sh.resumeOf ? '<button class="big-btn alt" data-act="shNewInstead">Start a new shuffle instead</button>' : `<button class="big-btn alt" data-act="shNew">${sh.kind === 'shuffle' ? 'Plan a new order' : 'Back to a new shuffle'}</button>`}
-        ${!sh.resumeOf && sh.kind === 'shuffle' && lastOrder() && lastOrder().before && Shuffle.sameSongs(sh.current, lastOrder().before) && !Shuffle.matches(sh.current, lastOrder().before) ? '<button class="big-btn alt" data-act="shEarlier">Show the earlier order</button>' : ''}
-        ${!sh.resumeOf && sh.kind !== 'original' && D.doc.original ? '<button class="big-btn alt" data-act="shOriginal">Put back the original order</button>' : ''}</div>
+        ${sh.resumeOf ? '<button class="big-btn alt" data-act="shNewInstead">Start a New Shuffle Instead</button>' : `<button class="big-btn alt" data-act="shNew">${sh.kind === 'shuffle' ? 'Create New Order' : 'Back to a New Shuffle'}</button>`}
+        ${!sh.resumeOf && sh.kind === 'shuffle' && lastOrder() && lastOrder().before && Shuffle.sameSongs(sh.current, lastOrder().before) && !Shuffle.matches(sh.current, lastOrder().before) ? '<button class="big-btn alt" data-act="shEarlier">Show Earlier Order</button>' : ''}
+        ${!sh.resumeOf && sh.kind !== 'original' && D.doc.original ? '<button class="big-btn alt" data-act="shOriginal">Restore Original Order</button>' : ''}</div>
         <div class="snote">Signed in as ${esc(sh.channel)}.</div></div>`;
     } else if (v === 'running') {
       const total = sh.moves.length, k = sh.done || 0;
@@ -1625,14 +1625,14 @@
         <div class="snote" id="shprog">Moved ${fmt(k)} of ${fmt(total)}${shStop ? ' — stopping…' : ''}</div><div class="snote">Keep this page open until it finishes. If it's interrupted, Shuffle picks up where it stopped.</div>
         <div class="btns"><button class="big-btn alt" data-act="shStop">Stop</button></div></div>`;
     } else if (v === 'done') {
-      main = `<div class="box">${say(KINDS[sh.kind].done, 'ok')}<div class="snote">The YouTube app may take a few minutes to show the new order.</div><div class="btns"><button class="big-btn alt" data-act="shStart">Shuffle again</button></div></div>`;
+      main = `<div class="box">${say(KINDS[sh.kind].done, 'ok')}<div class="snote">The YouTube app may take a few minutes to show the new order.</div><div class="btns"><button class="big-btn alt" data-act="shStart">Shuffle Again</button></div></div>`;
     } else {
-      main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() || D.keepsSignIn ? 'shStart' : 'shSignIn'}">${validToken() || D.keepsSignIn ? 'Try again' : 'Sign in again'}</button></div></div>`;
+      main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() || D.keepsSignIn ? 'shStart' : 'shSignIn'}">${validToken() || D.keepsSignIn ? 'Try Again' : 'Sign In Again'}</button></div></div>`;
     }
     const o = D.doc.original;
     const extra = `<div class="box" style="margin-top:12px">${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv stack"><span>Original order</span><span class="r">Not saved yet: it is kept when you first open a shuffle.</span></div>'}
       ${sh.savedNow ? '<div class="snote">Saved just now from the playlist as it is.</div>' : ''}
-      ${(validToken() || (D.keepsSignIn && sh.channel)) && v !== 'running' && v !== 'signin' ? `<div class="kv btnrow"><span>Signed in with Google${D.keepsSignIn ? ' on all your devices' : ''}</span><span><button class="pill" data-act="shSignOut">Sign out</button></span></div>` : ''}</div>`;
+      ${(validToken() || (D.keepsSignIn && sh.channel)) && v !== 'running' && v !== 'signin' ? `<div class="kv btnrow"><span>Signed in with Google${D.keepsSignIn ? ' on all your devices' : ''}</span><span><button class="pill" data-act="shSignOut">Sign Out</button></span></div>` : ''}</div>`;
     return head('Reorder your YouTube playlist') + `<div class="split"><div>${main}${extra}</div><div>${quotaBox()}<p class="foot" style="text-align:left">Play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order.</p></div></div>`;
   }
 
