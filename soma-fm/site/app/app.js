@@ -578,7 +578,7 @@
   // from Stats, each pair for ROT_SECS, round and round. All pairs are written into one grid cell, so the cards keep the
   // height of the tallest and nothing below them moves; only the pair showing is visible (and read by screen readers).
   // A pointer over them, or keyboard focus in them, holds the pair; a tap on a dot shows that pair. Each card opens Stats.
-  const ROT_SECS = 10;
+  const ROT_SECS = 30;   // Dan, Nov 7 (10 s at first)
   let rotAt = 0, rotHeld = false, rotN = 0, rotLast = Date.now();
   function nowTiles(t) {
     const P = t.playlist, ok = !D.playlistError && D.items.length;
