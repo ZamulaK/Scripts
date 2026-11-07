@@ -804,7 +804,7 @@
         <div class="kv"><span>Notes</span><span class="seg" role="group" aria-label="Notes">${[['one', 'First Line'], ['all', 'All'], ['off', 'Off']].map(([k, l]) => `<button class="${S.listNotes === k ? 'on' : ''}" data-act="listNotes" data-v="${k}" aria-pressed="${S.listNotes === k}">${l}</button>`).join('')}</span></div>
         </div>
       <h3>Listen</h3><div class="box"><div class="kv btnrow"><span>Listen Button</span><span class="seg" role="group" aria-label="Listen button">${[['', 'Auto'], ['ask', 'Always Ask']].map(([k, l]) => `<button class="${(listenAsk() ? 'ask' : '') === k ? 'on' : ''}" data-act="listenMode" data-v="${k}" aria-pressed="${(listenAsk() ? 'ask' : '') === k}">${l}</button>`).join('')}</span></div>
-        ${listenAsk() ? '' : `<div class="kv btnrow"><label for="offair">Off-Air Detection Interval</label><select class="sel" id="offair">${OFFAIR_MINS.map(([m, l]) => `<option value="${m}"${m === offAirMins() ? ' selected' : ''}>${l}</option>`).join('')}</select></div>`}
+        ${listenAsk() ? '' : `<div class="kv btnrow"><span>Off-Air Detection Interval</span><button class="menubtn set" id="offair" data-act="offairmenu" aria-haspopup="listbox">${OFFAIR_MINS.find(x => x[0] === offAirMins())[1]} <span class="caret">▾</span></button></div>`}
         <div class="snote">${listenAsk() ? 'Listen offers SomaFM and the YouTube playlist each time.' : 'Auto plays SomaFM, or the YouTube playlist when SomaFM has had no new song for this long. The arrow beside Listen offers the other.'}${offAir() ? ` <b>SomaFM is off the air now</b> (last song ${esc(when(lastSongAt()))}).` : ''}</div>
         <div class="kv"><span>Streaming Player</span><span class="seg" role="group" aria-label="Streaming player">${[['', 'Native'], ['somafm', 'SomaFM Web']].map(([k, l]) => `<button class="${(viaSoma() ? 'somafm' : '') === k ? 'on' : ''}" data-act="listenVia" data-v="${k}" aria-pressed="${(viaSoma() ? 'somafm' : '') === k}">${l}</button>`).join('')}</span></div>
         <div class="snote">Native plays the stream directly from this site. The SomaFM Web player is the fallback when direct play is unavailable.</div></div>
@@ -871,8 +871,8 @@
   }
   addEventListener('scroll', closeLMenu, { passive: true });
   addEventListener('resize', closeLMenu);
-  // A long press (or right click) on the bar's Listen: the menu
-  document.addEventListener('contextmenu', e => { const b = e.target.closest && e.target.closest('.tabs .listen'); if (b) { e.preventDefault(); listenMenu(b); } });
+  // A long press (or right click) on Listen, in the bar or on the Now card: the menu
+  document.addEventListener('contextmenu', e => { const b = e.target.closest && e.target.closest('.tabs .listen, #hlbtn'); if (b) { e.preventDefault(); listenMenu(b); } });
   // The player page on workers.dev, in an invisible frame (player/ in the repo): SomaFM plays its stream to it, where it
   // turns this pages.dev site away (Dan, Nov 5). Until it says it's there, or where it can't load, the site plays itself.
   // On Dan's own domain (xmaslounge.zamulagh.fyi and next., Nov 5) SomaFM plays to the site, so there's no frame there.
@@ -906,9 +906,14 @@
     if (!w) toast("The browser blocked SomaFM's player. Allow pop-ups for this site, or try again.");
     else toast("SomaFM's player is open. Press ▶ there to start.");
   }
-  // In the bar of pages, so it's there on every page
+  // In the bar of pages, so it's there on every page. With Auto, a ▾ joined to it gives the other choice, as on the Now
+  // card (Dan, Nov 7: the long press alone wasn't something you'd find)
   function listenBtn() {
-    if (player.state === 'off' && autoYT()) return `<button class="listen off ytl" data-act="listen" title="SomaFM is off the air: opens the YouTube playlist (long press for both)"><span class="lic">${ico('yt')}</span>Playlist</button>`;
+    const caret = listenAsk() && player.state === 'off' ? '' : `<button class="lcar" data-act="listenMenu" aria-haspopup="menu" aria-label="Other ways to listen" title="Other ways to listen">${ico('chev')}</button>`;
+    return `<span class="lgrp${caret ? ' split' : ''}">${listenMain()}${caret}</span>`;
+  }
+  function listenMain() {
+    if (player.state === 'off' && autoYT()) return `<button class="listen off ytl" data-act="listen" title="SomaFM is off the air: opens the YouTube playlist"><span class="lic">${ico('yt')}</span>Playlist</button>`;
     if (player.state === 'off' && listenAsk()) return `<button class="listen off" data-act="listen" aria-haspopup="menu" title="SomaFM or the YouTube playlist"><span class="lic">${ico('open')}</span>Listen</button>`;
     if (viaSoma()) return `<button class="listen off" data-act="listen" title="Opens SomaFM's player (this browser can't play the stream inside the site)"><span class="lic">${ico('open')}</span>Listen ↗</button>`;
     const s = player.state;
@@ -916,7 +921,7 @@
     return `<button class="listen ${s}" data-act="listen" aria-pressed="${s !== 'off'}" title="${s === 'off' ? 'Listen to the station' : 'Stop listening'}"><span class="lic">${icon}</span>${s === 'off' ? 'Listen' : 'Stop'}</button>`;
   }
   function paintListen() {
-    const b = document.querySelector('.tabs .listen'); if (b) b.outerHTML = listenBtn();
+    const b = document.querySelector('.tabs .lgrp'); if (b) b.outerHTML = listenBtn();
     const hb = document.getElementById('hlsplit'); if (hb) hb.outerHTML = heroListenBtn();
     const h = document.getElementById('hlisten'); if (h && !volDrag) h.outerHTML = heroListen();
   }
@@ -1272,6 +1277,7 @@
     fdone() { S.allFilters = false; render(); },
     newer() { if (S.page) { S.page--; writeAddress(); render(); scrollTo(0, 0); } },
     older() { S.page++; writeAddress(); render(); scrollTo(0, 0); },
+    offairmenu(el) { openMenu(el, 'Off-air detection interval', OFFAIR_MINS, offAirMins(), m => { LS.set('offAirMins', m); render(); }); },
     permenu(el) { openMenu(el, 'Plays per page', PAGE_SIZES.map(n => [n, String(n)]), S.per, n => { S.per = n; LS.set('per', n); S.page = 0; writeAddress(); render(); }); },
     refresh() { return busy(async () => { D.playlistLoading = true; render(); await loadPlaylist(true); render(); }); },
     live() { liveOn = !liveOn; LS.set('live', liveOn); schedule(); if (liveOn) tick(true); render(); },
@@ -1329,7 +1335,7 @@
     else if (t.id === 'pick-q') { S.pickQ = t.value; const p = ROWS[Number(t.dataset.i)]; t.parentNode.querySelector('.choices-wrap').innerHTML = choicesHtml(p, resultOf(p), Number(t.dataset.i)); }
     else if (t.id === 'note-text') S.noteDraft = t.value;
   });
-  document.addEventListener('change', e => { if (e.target.id === 'offair') { LS.set('offAirMins', Number(e.target.value)); render(); return; } if (e.target.id === 'restore-file') { const f = e.target.files && e.target.files[0]; if (f) readFile(f); } });
+  document.addEventListener('change', e => { if (e.target.id === 'restore-file') { const f = e.target.files && e.target.files[0]; if (f) readFile(f); } });
   document.addEventListener('toggle', e => { if (e.target.id === 'gonebox') S.goneOpen = e.target.open; }, true);
 
   /* ---------- Backup, restore and CSV ---------- */
@@ -1697,7 +1703,7 @@
       main = `<div class="box">${say(m, 'err')}<div class="btns"><button class="big-btn" data-act="${validToken() || D.keepsSignIn ? 'shStart' : 'shSignIn'}">${validToken() || D.keepsSignIn ? 'Try Again' : 'Sign In Again'}</button></div></div>`;
     }
     const o = D.doc.original;
-    const extra = `<div class="box" style="margin-top:12px">${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv stack"><span>Original order</span><span class="r">Not saved yet: it is kept when you first open a shuffle.</span></div>'}
+    const extra = `<div class="box" style="margin-top:12px"><div class="kv btnrow"><span>${PLAYLIST_NAME} in its current order</span><span><a class="pill" href="${ytPlaylist()}" target="_blank" rel="noopener">${ico('yt')}Play on YouTube</a></span></div>${o ? `<div class="kv btnrow"><span>Original order, saved ${esc(when(o.at / 1000))} (${fmt(o.songs.length)} songs)</span><span><button class="pill" data-act="shDownload">Download (CSV)</button></span></div>` : '<div class="kv stack"><span>Original order</span><span class="r">Not saved yet: it is kept when you first open a shuffle.</span></div>'}
       ${sh.savedNow ? '<div class="snote">Saved just now from the playlist as it is.</div>' : ''}
       ${(validToken() || (D.keepsSignIn && sh.channel)) && v !== 'running' && v !== 'signin' ? `<div class="kv btnrow"><span>Signed in with Google${D.keepsSignIn ? ' on all your devices' : ''}</span><span><button class="pill" data-act="shSignOut">Sign Out</button></span></div>` : ''}</div>`;
     return head('Reorder your YouTube playlist') + `<div class="split"><div>${main}${extra}</div><div>${quotaBox()}<p class="foot" style="text-align:left">Play the playlist with YouTube's shuffle off. Its sort setting in YouTube must stay on Manual, or YouTube shows it in another order.</p></div></div>`;

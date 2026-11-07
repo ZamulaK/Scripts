@@ -534,7 +534,6 @@ button,.pill,.chip,.icon,.more-f,.tabs a,.toggle,.seg button,.menubtn,.hcount{-w
 .lmenu .eq i{width:3px;height:100%;background:currentColor;border-radius:1px}
 .lmenu .eq i:nth-child(1){height:60%}.lmenu .eq i:nth-child(3){height:80%}
 .hero-top .offair{font-weight:800}
-.sel{font:inherit;font-size:14px;font-weight:600;color:var(--ink);background:color-mix(in srgb,var(--accent) 20%,var(--card));border:0;border-radius:10px;padding:8px 10px;min-height:36px;cursor:pointer;flex:none}
 .pllink{color:inherit;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px}
 a.big-btn{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;box-sizing:border-box}
 a.big-btn svg{width:24px;height:24px}
@@ -551,3 +550,14 @@ a.big-btn svg{width:24px;height:24px}
 .offstart b{font-size:15px;line-height:1.3;overflow-wrap:anywhere}
 .offcard .acts .pill svg{width:16px;height:16px}
 .live.wait i{background:var(--muted);box-shadow:0 0 0 4px color-mix(in srgb,var(--muted) 22%,transparent)}
+/* The bar's Listen with its ▾ (Auto): one split pill, the label under the main part (Dan, Nov 7) */
+.tabs .lgrp{display:flex;align-items:flex-start}
+.tabs .lgrp.split .listen{padding-right:0}
+.tabs .lgrp.split .listen .lic{width:44px;border-radius:16px 4px 4px 16px}
+.tabs .lcar{width:22px;height:32px;margin-left:2px;padding:0;border:0;border-radius:4px 16px 16px 4px;background:var(--chip);color:var(--accent);display:grid;place-items:center;cursor:pointer}
+.tabs .lcar svg{width:14px;height:14px}
+.tabs .lgrp:has(.listen.on, .listen.loading) .lcar{background:var(--accent);color:var(--on)}
+.tabs .lcar:active{filter:brightness(1.18)}
+@media (max-width:399px){.tabs .lgrp.split .listen .lic{width:34px}.tabs .lcar{width:18px}}
+@media (min-width:400px) and (max-width:439px){.tabs .lgrp.split .listen .lic{width:40px}}
+.box .kv .pill svg{width:20px;height:20px}
