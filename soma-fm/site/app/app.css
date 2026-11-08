@@ -552,14 +552,16 @@ a.big-btn svg{width:24px;height:24px}
 .live.wait i{background:var(--muted);box-shadow:0 0 0 4px color-mix(in srgb,var(--muted) 22%,transparent)}
 /* The bar's Listen with its ▾ (Auto): one split pill, the label under the main part (Dan, Nov 7) */
 .tabs .lgrp{display:flex;align-items:flex-start}
-.tabs .lgrp.split .listen{padding-right:0}
-.tabs .lgrp.split .listen .lic{width:44px;border-radius:16px 4px 4px 16px}
+.tabs .lgrp.two .listen{padding-right:0}
+/* The pill keeps to the right edge of its button, so the ▾ sits 2 px from it even when the label is wider (360 px) */
+.tabs .lgrp.two .listen .lic{align-self:flex-end}
+.tabs .lgrp.two .listen .lic{width:44px;border-radius:16px 4px 4px 16px}
 .tabs .lcar{width:22px;height:32px;margin-left:2px;padding:0;border:0;border-radius:4px 16px 16px 4px;background:var(--chip);color:var(--accent);display:grid;place-items:center;cursor:pointer}
 .tabs .lcar svg{width:14px;height:14px}
 .tabs .lgrp:has(.listen.on, .listen.loading) .lcar{background:var(--accent);color:var(--on)}
 .tabs .lcar:active{filter:brightness(1.18)}
-@media (max-width:399px){.tabs .lgrp.split .listen .lic{width:34px}.tabs .lcar{width:18px}}
-@media (min-width:400px) and (max-width:439px){.tabs .lgrp.split .listen .lic{width:40px}}
+@media (max-width:399px){.tabs .lgrp.two .listen .lic{width:34px}.tabs .lcar{width:18px}}
+@media (min-width:400px) and (max-width:439px){.tabs .lgrp.two .listen .lic{width:40px}}
 .box .kv .pill svg{width:20px;height:20px}
 /* The cards under the Now card take turns (Dan, Nov 7): every pair in one grid cell (the tallest sets the height), the
    one showing fades in; dots under them show which and pick one */

@@ -958,7 +958,7 @@
   // card (Dan, Nov 7: the long press alone wasn't something you'd find)
   function listenBtn() {
     const caret = listenAsk() && player.state === 'off' ? '' : `<button class="lcar" data-act="listenMenu" aria-haspopup="menu" aria-label="Other ways to listen" title="Other ways to listen">${ico('chev')}</button>`;
-    return `<span class="lgrp${caret ? ' split' : ''}">${listenMain()}${caret}</span>`;
+    return `<span class="lgrp${caret ? ' two' : ''}">${listenMain()}${caret}</span>`;
   }
   function listenMain() {
     if (player.state === 'off' && autoYT()) return `<button class="listen off ytl" data-act="listen" title="SomaFM is off the air: opens the YouTube playlist"><span class="lic">${ico('yt')}</span>Playlist</button>`;

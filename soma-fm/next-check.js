@@ -877,6 +877,13 @@ const overflow = page => page.evaluate(() => {
     await s.page.click('[data-act="lmYT"]'); await s.page.waitForTimeout(150);
     const o1 = await s.page.evaluate(() => ({ opened: window.__opened.map(x => x[0]), menu: document.querySelector('#lmenu').hidden }));
     check('Listen, on the air: ▾ joined to Listen on the Now card (in the row at 360 px); its menu has SomaFM Live and YouTube Playlist, which opens the playlist from its first song', a1.split && a1.top === 'Now Playing' && a1.bar === 'Listen' && a1.right <= a1.edge && m1.join() === 'SomaFM Live,YouTube Playlist' && o1.opened[0] === first && o1.menu, JSON.stringify({ a1, m1, o1 }));
+    // The bar's ▾ sits right against Listen at every width (Dan, Nov 7: on a wide screen the page's two-column .split
+    // class used to add a 20 px gap between them)
+    const gaps = [];
+    for (const w of [360, 1000]) { await s.page.setViewportSize({ width: w, height: 800 }); await s.page.waitForTimeout(100);
+      gaps.push(await s.page.evaluate(() => Math.round(document.querySelector('.tabs .lcar').getBoundingClientRect().left - document.querySelector('.tabs .listen .lic').getBoundingClientRect().right))); }
+    await s.page.setViewportSize({ width: 360, height: 800 }); await s.page.waitForTimeout(100);
+    check('Listen in the bar: the ▾ sits 2 px from the Listen pill at 360 and 1000 px', gaps.every(g => g === 2), JSON.stringify(gaps));
     await s.page.click('.tabs .lcar'); await s.page.waitForTimeout(150);
     const m1b = await s.page.evaluate(() => ({ n: document.querySelectorAll('#lmenu:not([hidden]) button').length }));
     await s.page.mouse.click(5, 300); await s.page.waitForTimeout(100);
