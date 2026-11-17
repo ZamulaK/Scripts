@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Marriott NUA Selections Viewer
 // @namespace    danbrum.marriott.nua
-// @version      3.11.2
+// @version      3.13.2
 // @description  Shows the Nightly Upgrade Award room choices attached to reservations, on the upgrade page and on the reservation list.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/marriott-nua-viewer
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/marriott-nua-viewer/marriott-nua-viewer.user.js
@@ -18,13 +18,16 @@
 
   const IMAGE_BASE = 'https://cache.marriott.com';
   const ACCENT = '#AF4D1F'; // Accent color for status, choice pills, count badge, and link hover
-  // NUA request statuses that mean the awards are no longer tied up in the stay. These stays are left out of the
-  // header counts and shown greyed at the bottom of the list. Compared case-insensitively; add others as they turn up.
   // TESTING ONLY: pretend Marriott reported a status for a reservation, without changing anything on Marriott's side.
   // Example: const TEST_STATUS_OVERRIDES = { '89019033': 'Withdrawn' };  Set back to {} when done.
   // Overridden stays show "(Test)" after the status so it is obvious the value is not real.
   const TEST_STATUS_OVERRIDES = {};
-  const INACTIVE_STATUSES = ['withdrawn', 'cancelled', 'canceled', 'declined', 'denied', 'rejected', 'expired', 'returned', 'released'];
+  // NUA request statuses that mean the awards are no longer tied up in the stay. These stays are left out of the
+  // header counts. Compared case-insensitively; add others as they turn up.
+  const INACTIVE_STATUSES = ['withdrawn', 'removed', 'cancelled', 'canceled', 'declined', 'denied', 'rejected', 'expired', 'returned', 'released'];
+  // All pages: false hides inactive stays (removed, withdrawn, ...) entirely, along with the panel when nothing else is left;
+  // true shows them dimmed. Awards added again later bring the stay back, since its status changes.
+  const SHOW_INACTIVE_STAYS = false;
   // Header summary style: 'pill' = one labeled pill ("7 Awards | 3 Stays"); 'subtitle' = awards circle plus a grey line under the title.
   const HEADER_STYLE = 'pill';
   const PANEL_ID = 'nua-viewer-panel';
@@ -214,6 +217,7 @@
   function isTestStatus(r) { return !!(r.confirmationNumber && Object.prototype.hasOwnProperty.call(TEST_STATUS_OVERRIDES, r.confirmationNumber)); }
   function statusOf(r) { return isTestStatus(r) ? TEST_STATUS_OVERRIDES[r.confirmationNumber] : r.status; }
   function isInactive(r) { const st = statusOf(r); return !isEmpty(st) && INACTIVE_STATUSES.includes(String(st).trim().toLowerCase()); }
+  function hiddenInactive(r) { return !SHOW_INACTIVE_STAYS && isInactive(r); }
   function hasNua(r) { return Number(r.tokens) > 0 || (r.rooms && r.rooms.length > 0) || !isEmpty(statusOf(r)); }
 
   // ---------- Request template ----------
@@ -250,22 +254,23 @@
     return node;
   }
 
-  function buildMigrationHeader(original, propertyId, crsSystem) {
+  function buildMigrationHeader(original, propertyId, crsSystem, isDtt) {
     let obj = {};
     try { obj = JSON.parse(atob(original || '')) || {}; } catch {}
     if (propertyId) obj.propertyId = propertyId;
     if (crsSystem) obj.crsSystem = crsSystem;
+    obj.isDtt = !!isDtt;
     return btoa(JSON.stringify(obj));
   }
 
-  async function fetchNuaFor(tpl, confirmationNumber, propertyId, crsSystem) {
+  async function fetchNuaFor(tpl, confirmationNumber, propertyId, crsSystem, isDtt) {
     const map = new Map([[tpl.confirmationNumber, confirmationNumber]]);
     let body;
     try { body = JSON.stringify(replaceValues(JSON.parse(tpl.body), map)); }
     catch { body = tpl.body.split(tpl.confirmationNumber).join(confirmationNumber); }
 
     const headers = { ...tpl.headers, 'x-request-id': 'phoenix_account-' + uuid() };
-    if (headers['uxl-migration-status']) headers['uxl-migration-status'] = buildMigrationHeader(headers['uxl-migration-status'], propertyId, crsSystem);
+    if (headers['uxl-migration-status']) headers['uxl-migration-status'] = buildMigrationHeader(headers['uxl-migration-status'], propertyId, crsSystem, isDtt);
 
     const resp = await origFetch(tpl.url, { method: tpl.method, headers, body, credentials: 'include' });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -288,19 +293,32 @@
     detailRunning = true;
     try {
       const tpl = loadTemplate();
-      const pending = [...found.values()].filter(r => r.confirmationNumber && (hasNua(r) || r.forceDetail) && !r.detailLoaded && !queried.has(r.confirmationNumber));
+      const pending = [...found.values()].filter(r => r.confirmationNumber && (hasNua(r) || r.forceDetail) && !hiddenInactive(r) && !r.detailLoaded && !queried.has(r.confirmationNumber));
       if (pending.length) setStatus(`Loading Room Selections For ${pending.length} Reservation${pending.length === 1 ? '' : 's'}…`);
       for (const r of pending) {
         queried.add(r.confirmationNumber);
-        const attempts = [r.crsSystem || 'DSP', r.crsSystem === 'MARSHA' ? 'DSP' : 'MARSHA'].filter((v, i, a) => a.indexOf(v) === i);
+        // Reservations in Marriott's newer system (ACRS, letters-and-numbers confirmation numbers) are only found when the
+        // header says isDtt: true; older ones answer either way. Try the likely combination first and fall back to the rest.
+        const legacy = [r.crsSystem || 'DSP', r.crsSystem === 'MARSHA' ? 'DSP' : 'MARSHA']
+          .filter((v, i, a) => a.indexOf(v) === i).map(crs => ({ crs, dtt: false }));
+        const dtt = [{ crs: 'ACRS', dtt: true }, { crs: r.crsSystem && r.crsSystem !== 'ACRS' ? r.crsSystem : 'DSP', dtt: true }];
+        const isNewSystem = r.crsSystem === 'ACRS' || /[A-Z]/i.test(String(r.confirmationNumber));
+        const attempts = isNewSystem ? [...dtt, ...legacy] : [...legacy, ...dtt];
         let ok = false;
-        for (const crs of attempts) {
+        for (const a of attempts) {
+          const tag = a.crs + (a.dtt ? '+dtt' : '');
           try {
-            const json = await fetchNuaFor(tpl, r.confirmationNumber, r.propertyId, crs);
-            if (json && json.errors && !json.data) { LOG('Query error for', r.confirmationNumber, crs, json.errors); continue; }
-            ok = ingest(json, 'replay:' + r.confirmationNumber + ':' + crs, r.confirmationNumber, r.propertyId);
-            if (ok) break;
-          } catch (e) { LOG('Replay failed for', r.confirmationNumber, crs, e); }
+            const json = await fetchNuaFor(tpl, r.confirmationNumber, r.propertyId, a.crs, a.dtt);
+            if (json && json.errors && !json.data) { LOG('Query error for', r.confirmationNumber, tag, json.errors); continue; }
+            const refused = json?.data?.commerce?.order?.orderByConfirmationNumber?.errors;
+            if (refused) { LOG('Marriott refused', r.confirmationNumber, tag, refused.map(e => e.code).join(', ')); continue; }
+            ok = ingest(json, 'replay:' + r.confirmationNumber + ':' + tag, r.confirmationNumber, r.propertyId);
+            if (ok) {
+              const rec = found.get(r.confirmationNumber);
+              if (rec) rec.detailLoaded = true;
+              break;
+            }
+          } catch (e) { LOG('Replay failed for', r.confirmationNumber, tag, e); }
         }
         if (!ok) {
           LOG('No room details returned for', r.confirmationNumber);
@@ -525,10 +543,15 @@
     const body = panel.querySelector('.nua-body');
     let recs = [...found.values()];
     if (IS_SUMMARY_PAGE) {
-      recs = recs.filter(hasNua).sort((a, b) => (isInactive(a) - isInactive(b)) || String(a.startDate).localeCompare(String(b.startDate)));
-      // The list hides the panel when nothing is active; the detail page shows its one stay whatever the status.
+      recs = recs.filter(r => hasNua(r) && !hiddenInactive(r)).sort((a, b) => (isInactive(a) - isInactive(b)) || String(a.startDate).localeCompare(String(b.startDate)));
+      // The list hides the panel when nothing is active; the detail page shows its one stay unless it is hidden above.
       const visible = IS_DETAIL_PAGE ? recs.length > 0 : recs.some(r => !isInactive(r));
       panel.style.display = visible ? '' : 'none';
+    } else {
+      // Request award page: hide the panel when its stay's awards were removed; otherwise show it as before.
+      const all = recs;
+      recs = recs.filter(r => !hiddenInactive(r));
+      panel.style.display = all.length && !recs.length ? 'none' : '';
     }
     {
       // Header summary (all pages): total awards in use and the number of stays they are attached to.
