@@ -193,7 +193,7 @@ const overflow = page => page.evaluate(() => {
   await s.page.click('.more-f'); await s.page.click('[data-act="fclear"]'); await s.page.click('[data-act="fdone"]');
   await s.page.click('.quick .chip[data-v="none"]');
   const none = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph) .m-side .st')].map(x => x.textContent));
-  check('History: Not in playlist shows only those (and songs gone from it)', none.length > 0 && none.every(t => /Not in Playlist|Gone from Playlist/.test(t)), [...new Set(none)].join());
+  check('History: Not in playlist shows only those (and songs gone from it, and disliked ones)', none.length > 0 && none.every(t => /Not in Playlist|Gone from Playlist|Disliked/.test(t)), [...new Set(none)].join());
   await s.page.fill('#find', 'rotation song 1');
   await s.page.waitForTimeout(200);
   const found = await s.page.evaluate(() => ({ titles: [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .c-song b')].map(b => b.textContent))], focus: document.activeElement.id, url: location.search }));
@@ -243,6 +243,13 @@ const overflow = page => page.evaluate(() => {
   await s.page.click('.pr.open .notewrap .icon');
   check('Row: the edit icon opens the note to edit', await s.page.evaluate(() => document.activeElement.id === 'note-text' && document.activeElement.value === 'Found it on YouTube'));
   await s.page.click('[data-act="noteCancel"]');
+  // The search matches notes too (Dan, Nov 24); the filters after it are put back as they were
+  const qWas = await s.page.inputValue('#find');
+  await s.page.fill('#find', 'found it on'); await s.page.waitForTimeout(200);
+  const byNote = await s.page.evaluate(() => [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .c-song b')].map(b => b.textContent))]);
+  check('History: the search matches your notes too', byNote.length === 1 && /^Rotation Song 2/.test(byNote[0]), JSON.stringify(byNote));
+  await s.page.fill('#find', qWas); await s.page.waitForTimeout(200);
+  if (!(await s.page.$('.pr.open'))) await rowFor('Rotation Song 2').locator('.c-time').click();
   await s.page.click('.pr.open [data-act="unlink"]');
   await s.page.waitForTimeout(300);
   check('Row: Unlink keeps "I have it" without the video', api.doc.marks[key] && api.doc.marks[key].v === 'have' && !api.doc.marks[key].id, JSON.stringify(api.doc.marks[key]));
@@ -411,7 +418,7 @@ const overflow = page => page.evaluate(() => {
     // Dan's Pixel 8 Pro (412 px), where All ▾ had a line to itself: the box beside it with the whole hint
     s = await open(browser, { width: 412, path: '/history' });
     const f3 = await fl();
-    check('History (412 px): the search box beside All ▾, the whole hint where it fits', (f3.w >= 300 ? f3.ph === 'Search: song, artist, or album' : f3.w < 240 ? f3.ph === 'Search…' : true) && f3.inRow && f3.sameLine && f3.right <= 412 && f3.page <= 412, JSON.stringify(f3));
+    check('History (412 px): the search box beside All ▾, the whole hint where it fits', (f3.w >= 300 ? f3.ph === 'Search: song, artist, album, or note' : f3.w < 240 ? f3.ph === 'Search…' : true) && f3.inRow && f3.sameLine && f3.right <= 412 && f3.page <= 412, JSON.stringify(f3));
     // Tighter chips (Dan, Nov 6): with four-digit counts, All, Latest, In list, Not in list and ★ still share the first line,
     // All ▾ alone on the next (with the search); in All filters, the short category names on a phone
     const chipRow = await s.page.evaluate(() => { const v = ['1,388', '1,016', '372', '24']; [...document.querySelectorAll('.quick .chip .n')].forEach((n, i) => n.textContent = v[i]);
@@ -597,15 +604,17 @@ const overflow = page => page.evaluate(() => {
     check('Shuffle (360 px): fits the window, Download in sight, the reset time\'s "(…)" kept whole, the short sign-in line', !shOver.length && sh360.dl && sh360.par && sh360.text === 'Sign in with the Google account that owns Xmas Mixed.', JSON.stringify({ shOver, sh360 }));
     await s.ctx.close();
     delete api.doc.original;
-    // Not in playlist is left off the first row while there are none: every such song disliked
+    // Every song you don't have disliked (Dan's real list, Nov 24): Not in playlist counts them and stays on the first row
     const saved = JSON.parse(JSON.stringify(api.doc));
     for (const p of hist) { const k = X.markKey(p[1], p[2]); const st = X.check(p[1], p[2], items).status; if (st === 'other') api.doc.marks[k] = { v: 'have', at: Date.now() }; else if (st !== 'have') api.doc.dislikes[k] = Date.now(); }
     delete api.doc.archive.goneVideo1;   // a song gone from the playlist counts as not in it too
     s = await open(browser, { path: '/history' });
-    const nz = await s.page.evaluate(() => ({ quick: [...document.querySelectorAll('.quick .chip')].map(c => c.dataset.v || c.dataset.act).join(), none: (document.querySelector('.quick [data-v="none"]') || {}).outerHTML }));
-    await s.page.click('.more-f');
-    const nzPanel = await s.page.evaluate(() => { const c = document.querySelector('.fpanel [data-v="none"]'); return c && { zero: c.classList.contains('zero'), last: c === [...c.parentElement.children].pop() || c.nextElementSibling.classList.contains('zero') }; });
-    check('Filters: Not in playlist left off the first row with none in it, dim at the end in All filters', !nz.none && nzPanel && nzPanel.zero && nzPanel.last, JSON.stringify({ nz, nzPanel }));
+    const nz = await s.page.evaluate(() => { const c = document.querySelector('.quick [data-v="none"]'); return c && { n: c.querySelector('.n').textContent, zero: c.classList.contains('zero') }; });
+    const wantN = hist.filter(p => X.check(p[1], p[2], items).status === 'none').length;
+    await s.page.click('.quick [data-v="none"]'); await s.page.waitForTimeout(200);
+    const nzRows = await s.page.evaluate(() => [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .m-side .st')].map(x => x.textContent))]);
+    check('Filters: with every song you don’t have disliked, Not in List stays on the first row counting them, and shows them', nz && !nz.zero && nz.n === String(wantN) && wantN > 0 && nzRows.join() === 'Disliked', JSON.stringify({ nz, wantN, nzRows }));
+    await s.page.click('.quick [data-v="none"]'); await s.page.waitForTimeout(200);
     await tabTo(s.page, 'Stats');
     const sb = await s.page.evaluate(() => ({ rows: [...document.querySelectorAll('.kv.stat')].map(x => x.textContent).join('|') || 0, cards: document.querySelectorAll('.box.io').length }));
     check('Stats: no Songs by status box when nothing is an other version or not in the playlist (the cards stay)', sb.rows === 0 && sb.cards === 2, JSON.stringify(sb));
@@ -756,7 +765,7 @@ const overflow = page => page.evaluate(() => {
       const top = await s.page.evaluate(() => { const q = document.querySelector('.quick'), kids = [...q.children].filter(k => !k.classList.contains('find')); return { ph: document.querySelector('#find').placeholder, lines: new Set(kids.map(k => Math.round(k.getBoundingClientRect().top))).size, last: kids[kids.length - 1].innerText.trim(), icon: !!(kids[kids.length - 1].querySelector('.fic svg') && kids[kids.length - 1].querySelector('.fic').offsetWidth), w: q.clientWidth, ws: kids.map(k => Math.round(k.getBoundingClientRect().width)).join('+') }; });
       const line = await s.page.evaluate(() => { const g = document.querySelector('.bar-line .grow'), c = [...g.querySelectorAll('.nw')].pop(); return c.getClientRects().length; });
       check('600 px: "checked … ago" moves to the next line whole, never split', line === 1, String(line));
-      check('600 px: the first row of filters fits on one line, ending in the filter icon ▾ (Dan, Nov 6: not "All", which the first chip says)', top.lines === 1 && top.last.replace(/\s+/g, ' ').trim() === '▾' && top.icon && top.ph === 'Search: song, artist, or album', JSON.stringify(top));
+      check('600 px: the first row of filters fits on one line, ending in the filter icon ▾ (Dan, Nov 6: not "All", which the first chip says)', top.lines === 1 && top.last.replace(/\s+/g, ' ').trim() === '▾' && top.icon && top.ph === 'Search: song, artist, album, or note', JSON.stringify(top));
     }
     check(`No script errors (${width} px)`, s.errors.length === 0, s.errors.join(' | '));
     await s.ctx.close();

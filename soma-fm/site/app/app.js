@@ -202,6 +202,10 @@
   const catOf = id => (id && D.doc.categories[id] && CAT[D.doc.categories[id].c] ? D.doc.categories[id].c : '');
   const noteOf = key => (D.doc.notes[key] && typeof D.doc.notes[key].t === 'string' ? D.doc.notes[key].t : '');
   const inList = r => r.status === 'have' && !!r.item;
+  // Not in Playlist (the filter): songs you don't have, gone ones, and disliked ones, which are never in it (a dislike
+  // only applies to a song you don't have). Disliked used to be left out, so with every such song disliked the chip
+  // counted 0 and hid (Dan, Nov 24)
+  const notInList = r => r.status === 'none' || r.status === 'gone' || r.status === 'disliked';
   // Open the video you have: not for songs marked "not this one", disliked, or gone
   const canOpen = r => !!r.item && r.status !== 'unknown' && r.status !== 'gone' && r.marked !== 'not' && !r.disliked;
   const statusText = r => r.status === 'other' && r.reason === 'sameArtistOtherMix' ? 'Different Mix' : LABEL[r.status] || '';
@@ -675,10 +679,11 @@
     let list = rows().map(s => ({ s, r: statusOf(s.key, s.artist, s.title) }));
     if (S.latest) { const seen = new Set(); list = list.filter(x => { if (seen.has(x.s.key)) return false; seen.add(x.s.key); return true; }); }
     const all = list, known = !D.playlistError && D.items.length;
-    if (known && S.status.size) list = list.filter(x => S.status.has(x.r.status) || (x.r.status === 'gone' && S.status.has('none')));
+    if (known && S.status.size) list = list.filter(x => S.status.has(x.r.status) || (S.status.has('none') && notInList(x.r)));
     if (known && S.cats.size) list = list.filter(x => inList(x.r) && S.cats.has(catOf(x.r.item.id) || 'uncat'));
     if (known && S.favOnly) list = list.filter(x => inList(x.r) && isFav(x.r.item.id));
-    if (S.q) { const q = fold(S.q).trim(); if (q) list = list.filter(x => fold(x.s.title + ' ' + x.s.artist + ' ' + x.s.album).indexOf(q) >= 0); }
+    // The search matches the song, artist and album, and your note on the song (Dan, Nov 24)
+    if (S.q) { const q = fold(S.q).trim(); if (q) list = list.filter(x => fold(x.s.title + ' ' + x.s.artist + ' ' + x.s.album + ' ' + noteOf(x.s.key)).indexOf(q) >= 0); }
     return { all, list };
   }
   R.history = () => {
@@ -686,7 +691,7 @@
     const pages = Math.max(1, Math.ceil(list.length / S.per));
     if (S.page > pages - 1) S.page = pages - 1;
     const page = list.slice(S.page * S.per, (S.page + 1) * S.per);
-    const count = k => all.filter(x => x.r.status === k || (k === 'none' && x.r.status === 'gone')).length;
+    const count = k => all.filter(x => k === 'none' ? notInList(x.r) : x.r.status === k).length;
     const listed = all.filter(x => inList(x.r));
     const catN = k => listed.filter(x => (catOf(x.r.item.id) || 'uncat') === k).length;
     const favN = listed.filter(x => isFav(x.r.item.id)).length;
@@ -706,7 +711,7 @@
     const active = S.status.size + S.cats.size + (S.favOnly ? 1 : 0) + (S.latest ? 1 : 0);
     // The search box; with the few filters showing, it goes in their row, so on a phone it shares the line with All ▾ (Dan, Nov 5)
     // The hint becomes "Search…" when the box is too narrow for it (fitHint)
-    const find = `<div class="find"><input type="search" id="find" placeholder="${HINT}" value="${esc(S.q)}" aria-label="Search plays: song, artist, or album"></div>`;
+    const find = `<div class="find"><input type="search" id="find" placeholder="${HINT}" value="${esc(S.q)}" aria-label="Search plays: song, artist, album, or note"></div>`;
     let filters = '', findIn = false;
     if (D.items.length && !D.playlistError) {
       if (S.allFilters) {
@@ -1166,7 +1171,7 @@
   }
   // History's search box: on a phone it shares the line with All ▾ (Dan, Nov 5), so where that leaves it too narrow
   // for the whole hint, the hint is just "Search…"
-  const HINT = 'Search: song, artist, or album';
+  const HINT = 'Search: song, artist, album, or note';
   let hintCanvas = null;
   function fitHint() {
     const e = document.getElementById('find');
