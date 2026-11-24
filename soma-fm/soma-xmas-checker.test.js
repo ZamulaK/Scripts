@@ -656,6 +656,17 @@ function statsChecks() {
     est.repeatsSpanningGap === 3 && est.gapRepeatsCounted === 0 && est.repeatIntervals > 0);
   check('no replays yet: no estimate', S.compute([[100, 'A', 'a', ''], [0, 'B', 'b', '']], items, () => ({ status: 'none' })).rateRepeatSecs === 0);
   check('most recently replayed: repeats only, newest replay first', st.recentRepeats.length === 2 && st.recentRepeats[0].title === 'Christmas Is Here' && st.recentRepeats[1].title === 'Mystery Song');
+  // A month of rotation: 5 songs every 8.5 h, 2 every 10 h, 1 every 20 h, 1 every 40 h, and one odd early repeat (2 h)
+  const rot = [], per = [[8.5, 5], [10, 2], [20, 1], [40, 1]];
+  let sn = 0;
+  for (let q = 0; q < per.length; q++) for (let c = 0; c < per[q][1]; c++, sn++) for (let t = sn * 600; t < 30 * 86400; t += per[q][0] * HR) rot.push([t, 'R' + sn, 'Rot ' + sn, '']);
+  { let last = 0; for (const x of rot) if (x[1] === 'R0' && x[0] > last) last = x[0]; rot.push([last + 2 * HR, 'R0', 'Rot 0', '']); }
+  rot.sort((a, b) => b[0] - a[0]);
+  const rs = S.compute(rot, items, () => ({ status: 'none' }));
+  const tierN = []; for (let q = 0; q < rs.repeatTiers.length; q++) tierN.push(rs.repeatTiers[q].songs.length);
+  check('shortest wait before a repeat: 8.5 h, the one early repeat counted as an exception', rs.minRepeatSecs === 8.5 * HR && rs.minRepeatExceptions === 1);
+  check('songs by how often they come back: under 9 h, 9-12, 12-18, 18-36, over 36', tierN.join() === '5,2,0,1,1' && rs.repeatTiers[0].to === 9 && rs.repeatTiers[4].from === 36 && rs.repeatTiers[4].to === 0);
+  check('too few replays: no shortest wait, no tiers', st.minRepeatSecs === 0 && st.repeatTiers.length === 0);
   const stt = S.songTimes(plays, M.markKey('Kaskade', 'Christmas Is Here'));
   check('one song\'s times come back oldest first, with gap markers', stt.times.length === 2 && stt.times[0] === T && stt.times[1] === T + 1000 && stt.gapTimes.length === 1 && stt.gapTimes[0] === T + 600);
   const log = S.playLog([0, 600, 1500, 2000], [1500]);   // a gap was flagged on the play at 1500

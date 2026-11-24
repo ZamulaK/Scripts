@@ -287,6 +287,11 @@ const overflow = page => page.evaluate(() => {
   check('Stats: every section',['Your Playlist', 'Categories', 'Songs by Status', 'SomaFM Rotation', 'Most Played', "Most played that you don't have (", 'Recording'].every(x => t.heads.some(hh => hh.indexOf(x) === 0)), t.heads.join('|'));
   await s.page.click('[data-act="topSort"][data-v="recent"]');
   check('Stats: Most played sorts by latest too, and its rows open like History', await s.page.evaluate(() => /Most Recently Replayed/.test(document.body.textContent)) && (await s.page.locator('h3:has-text("Most Recently Replayed") + .plays .pr:not(.ph)').first().click(), await s.page.evaluate(() => !!document.querySelector('.pr.open .detail .log'))));
+  // How often songs repeat, and the soonest one comes back (Dan, Nov 24)
+  const tier = await s.page.evaluate(() => { const t = document.querySelector('table.rtier'); return t && { head: [...t.querySelectorAll('thead th')].map(x => x.textContent).join('|'), rows: [...t.querySelectorAll('tbody th')].map(x => x.textContent).join('|'),
+    songs: [...t.querySelectorAll('tbody tr')].reduce((a, r) => a + Number(r.querySelector('td').textContent), 0), soon: ([...document.querySelectorAll('.kv')].find(k => /Soonest a song comes back/.test(k.textContent)) || {}).textContent, over: t.getBoundingClientRect().right > t.parentElement.getBoundingClientRect().right }; });
+  const want3 = new Set(); { const c = {}; for (const p of hist) { const k = X.markKey(p[1], p[2]); c[k] = (c[k] || 0) + 1; } for (const k in c) if (c[k] >= 3) want3.add(k); }
+  check('Stats: How Often Songs Repeat, a table of the songs played 3 times or more by how often they come back, with yours, disliked and favorites; and the soonest a song comes back', tier && tier.head === 'Repeats|Songs|Yours|Disliked|★Favorites' && tier.rows === 'Under 9 h|9–12 h|12–18 h|18–36 h|Over 36 h' && tier.songs <= want3.size && tier.songs > 0 && /[0-9]/.test(tier.soon || '') && !tier.over, JSON.stringify({ tier, want: want3.size }));
   check('No script errors (Stats)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
 

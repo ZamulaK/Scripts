@@ -354,6 +354,8 @@ reloaded; the likely cause was a request frozen mid-flight keeping `ticking` set
 
 **History: Not in List counts disliked songs; search reads notes (Nov 24, live):** a dislike only applies to a song not in the playlist, and Dan dislikes every song he decides not to add, so the Not in Playlist filter (quick chip "Not in List") counted 0 and hid. It now takes none + gone + disliked (`notInList`); the Disliked chip in All Filters is still there for just those. The search box also matches the song's note (`noteOf`); hint "Search: song, artist, album, or note".
 
+**Repeats: the soonest a song comes back, and how often each song does (Nov 24, next):** from 11,800 plays, SomaFM never repeats a song within about 8 h (one exception), and the songs it plays most are mostly Dan's. `Stats.compute` (userscript 3.27.0) adds `minRepeatSecs` (the replay at the 0.1% point, never the very shortest; `minRepeatExceptions` = replays more than a tenth under it) and `repeatTiers` (songs with 2+ counted replays by their median replay: under 9 h, 9-12, 12-18, 18-36, over 36), both only with 200+ replays. Site: a Now card pair (Song Repeats "8 h" / Plays per Song yours vs disliked) after In Your Playlist; on Stats a "Soonest a song comes back" line in the rotation box and a How Often Songs Repeat table (Songs, Yours, Disliked, ★) with plays per song.
+
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
 

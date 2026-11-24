@@ -38,6 +38,10 @@
   const plural = (n, one, many) => fmt(n) + ' ' + (n === 1 ? one : (many || one + 's'));
   // 34320 -> "9 h 32 min", the units smaller (Dan, Nov 4; was "9:32" with "(h:mm)" under it)
   const hmin = secs => { const m = Math.round(secs / 60); return `${Math.floor(m / 60)}<small class="u"> h</small> ${m % 60}<small class="u"> min</small>`; };
+  // The soonest a song comes back: whole hours once it's 3 h or more ("8 h")
+  const soonText = secs => secs >= 3 * 3600 ? Math.round(secs / 3600) + ' h' : Stats.formatSpan(secs);
+  // Plays per song in your playlist and disliked, or null without both
+  const perSong = t => { const h = t.breakdown.have, d = t.breakdown.disliked; return h && d && h.songs && d.songs ? { have: h.plays / h.songs, dis: d.plays / d.songs } : null; };
   const backText = secs => secs < 3600 ? Stats.formatSpan(secs) : (secs / 3600).toFixed(1) + ' h';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const ytWatch = id => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}&list=${PLAYLIST_ID}`;
@@ -598,6 +602,10 @@
       const h = t.labeledSongs && t.breakdown.have;
       if (h) pairs.push([card('In Your Playlist', [[pct(h.songs, t.labeledSongs), ['of the songs SomaFM played', 'of songs played']]]),
         card('In Your Playlist', [[pct(h.plays, t.labeledPlays), ['of all plays', 'of plays']]])]);
+      // The soonest a song comes back, and your songs played more than the disliked ones (Dan, Nov 24)
+      const ps = perSong(t);
+      if (t.minRepeatSecs && ps) pairs.push([card('Song Repeats', [[esc(soonText(t.minRepeatSecs)), ['the soonest a song comes back', 'soonest a song returns']]]),
+        card('Plays per Song', [[ps.have.toFixed(0), ['in your playlist', 'yours']], [ps.dis.toFixed(0), 'disliked']])]);
     }
     if (t.plays) {
       const firsts = t.recent ? Math.round(t.recentFirsts / t.recent * 100) + '%' : '—';
@@ -792,8 +800,10 @@
     const right = !t.plays ? '<h3>SomaFM Rotation</h3><div class="box">No plays recorded yet.</div>' : `<h3>SomaFM Rotation</h3><div class="g2"><div class="box"><b class="big">${t.repeatIntervals ? esc(backText(t.avgRepeatSecs)) : '—'}</b><span class="k">until a song comes back, on average</span></div><div class="box"><b class="big">${fmt(t.unique)}</b><span class="k">different songs played</span></div></div>
       <div class="box" style="margin-top:12px"><div class="kv"><span>Songs played more than once</span><b>${fmt(t.repeated)}</b></div><div class="kv"><span>Plays per song</span><b>${t.avgPlays.toFixed(1)}</b></div>
         ${t.repeatIntervals ? `<div class="kv"><span><span class="lw">Between a song's replays</span><span class="ln">Between replays</span></span><span class="r lines"><span>${numsBold(Stats.formatSpan(t.avgRepeatSecs))} average</span><span>${numsBold(Stats.formatSpan(t.medianRepeatSecs))} median</span></span></div>` : ''}
+        ${t.minRepeatSecs ? `<div class="kv"><span>Soonest a song comes back</span><span class="r lines"><span><b>${esc(soonText(t.minRepeatSecs))}</b></span>${t.minRepeatExceptions ? `<span><small>${plural(t.minRepeatExceptions, 'exception')}</small></span>` : ''}</span></div>` : ''}
         ${t.recentFirsts ? `<div class="kv"><span><span class="nw">Of the last ${fmt(t.recent)} plays,</span> <span class="nw">heard for the first time</span></span><b class="nw">${fmt(t.recentFirsts)} · ${firsts}%</b></div>` : ''}
         <div class="snote">${t.repeatIntervals ? `Comes back is the measured average time between a song's replays (${fmt(t.repeatIntervals)} replays). ` : ''}As the first-time share drops toward zero, you've seen nearly all of the rotation.</div></div>
+      ${tierBox(t, ok)}
       <h3><span>${S.topSort === 'recent' ? '<span class="lw">Most Recently Replayed</span><span class="ln">Latest Replays</span>' : 'Most Played'}</span> <span class="seg" role="group" aria-label="Sort"><button class="${S.topSort !== 'recent' ? 'on' : ''}" data-act="topSort" data-v="plays" aria-pressed="${S.topSort !== 'recent'}">Most Plays</button><button class="${S.topSort === 'recent' ? 'on' : ''}" data-act="topSort" data-v="recent" aria-pressed="${S.topSort === 'recent'}">Latest</button></span></h3>
       <div class="plays">${top.length ? PHEAD + top.map(p => playRow(p, 'top:', false)).join('') : '<div class="empty left">No songs have repeated yet.</div>'}</div>
       ${ok && missing.length ? `<h3>Most played that you don't have (${plural(t.missingSongs, 'song')})</h3><div class="plays">${PHEAD}${missing.map(p => playRow(p, 'miss:', false)).join('')}</div>` : ''}
@@ -801,6 +811,19 @@
         <div class="kv"><span>Time recorded</span><b class="ph2"><span>${esc(Stats.formatSpan(t.coveredSecs))}</span>${t.perHour ? `<span><span class="lw"> · </span>${t.perHour.toFixed(1)} songs an hour</span>` : ''}</b></div><div class="kv"><span>Gaps (station or recorder down)</span><b>${fmt(t.gaps)}</b></div></div>`;
     return head(since ? 'Since ' + day(since) : 'Your playlist and SomaFM\'s rotation') + `<div class="split"><div>${left}</div><div>${right}</div></div>`;
   };
+  // The songs by how often SomaFM plays them, with how many are yours, disliked and favorites (Dan, Nov 24: the songs it
+  // plays most are mostly yours; the rare ones mostly disliked)
+  function tierBox(t, ok) {
+    if (!t.repeatTiers || !t.repeatTiers.length) return '';
+    const label = x => !x.from ? `Under ${x.to} h` : !x.to ? `Over ${x.from} h` : `${x.from}–${x.to} h`;
+    const row = x => { const yours = x.songs.filter(s => inList(s.r)); const n = v => `<td>${fmt(v)}</td>`;
+      return `<tr><th scope="row">${label(x)}</th>${n(x.songs.length)}${ok ? n(yours.length) + n(x.songs.filter(s => s.r.status === 'disliked').length) + n(yours.filter(s => isFav(s.r.item.id)).length) : ''}</tr>`; };
+    const ps = ok && perSong(t);
+    return `<h3>How Often Songs Repeat</h3><div class="box"><table class="rtier"><thead><tr><th scope="col">Repeats</th><th scope="col">Songs</th>${ok ? '<th scope="col">Yours</th><th scope="col">Disliked</th><th scope="col"><span aria-hidden="true">★</span><span class="sr">Favorites</span></th>' : ''}</tr></thead>
+      <tbody>${t.repeatTiers.map(row).join('')}</tbody></table>
+      ${ps ? `<div class="kv"><span>Plays per song</span><span class="r lines"><span><b>${ps.have.toFixed(0)}</b> in your playlist</span><span><b>${ps.dis.toFixed(0)}</b> disliked</span></span></div>` : ''}
+      <div class="snote">Each song by its usual (median) time between plays; songs played fewer than 3 times aren't counted.</div></div>`;
+  }
   // In your playlist and disliked, as two cards: of the different songs played, and of all plays (Dan, Nov 4).
   // Other versions and songs simply not in the playlist aren't shown here (Songs by status has them).
   function inOut(t) {

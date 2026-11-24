@@ -578,3 +578,10 @@ a.big-btn svg{width:24px;height:24px}
 .rotdots button{width:22px;height:22px;padding:0;border:0;background:none;cursor:pointer;display:grid;place-items:center}
 .rotdots button::before{content:"";width:6px;height:6px;border-radius:50%;background:color-mix(in srgb,var(--muted) 55%,transparent);transition:width .3s,background .3s}
 .rotdots button.on::before{width:16px;border-radius:3px;background:var(--accent)}
+/* How Often Songs Repeat (Stats; Dan, Nov 24): a small table, the figures right-aligned */
+.rtier{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.rtier th,.rtier td{padding:8px 0 8px 18px;text-align:right;border-top:1px solid var(--line);font-weight:400;width:1%;white-space:nowrap;color:var(--ink)}
+.rtier thead th{border-top:0;padding-top:0;font-size:12px;font-weight:600;color:var(--muted);vertical-align:bottom}
+.rtier th:first-child{text-align:left;padding-left:0;width:auto}
+.rtier tbody td{font-weight:700}
+.rtier + .kv{border-top:1px solid var(--line)}

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SomaFM → Xmas Mixed checker
 // @namespace    https://somafm.com/
-// @version      3.26.0
+// @version      3.27.0
 // @description  Checks SomaFM's song history against your YouTube playlist, records every play with stats, and can shuffle the playlist itself.
 // @homepageURL  https://github.com/ZamulaK/Scripts/tree/main/soma-fm
 // @updateURL    https://raw.githubusercontent.com/ZamulaK/Scripts/main/soma-fm/soma-xmas-checker.user.js
@@ -776,6 +776,7 @@ const Backup = (() => {
 /* ---------- Stats panel numbers (pure; tested by soma-xmas-checker.test.js) ---------- */
 const Stats = (() => {
   const { markKey, keep } = Matcher;
+  const REPEAT_MIN = 200, TIER_HOURS = [9, 12, 18, 36];
   const median = arr => { if (!arr.length) return 0; const a = arr.slice().sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
 
   // plays: newest first [at, artist, title, album, afterGap]; items: current playlist;
@@ -804,10 +805,30 @@ const Stats = (() => {
     const repeatGaps = [];
     let repeatsSpanningGap = 0, gapRepeatsCounted = 0;
     for (let i = 0; i < list.length; i++) {
-      const iv = intervals(list[i].times, gapTimes);
+      const iv = intervals(list[i].times, gapTimes), own = [];
       for (let k = 0; k < iv.length; k++) {
         if (iv[k].spansGap) repeatsSpanningGap++;
-        if (iv[k].counted) { repeatGaps.push(iv[k].since); if (iv[k].spansGap) gapRepeatsCounted++; }
+        if (iv[k].counted) { repeatGaps.push(iv[k].since); own.push(iv[k].since); if (iv[k].spansGap) gapRepeatsCounted++; }
+      }
+      list[i].repeatSecs = own.length >= 2 ? median(own) : 0;   // how often this song comes back (needs 2 replays)
+    }
+    // The shortest wait before a song comes back (Dan, Nov 24: SomaFM never repeats a song within about 8 hours).
+    // Read at the 0.1% point of the replays (never the very shortest), so one odd early repeat doesn't set it; the replays well under it (by more
+    // than a tenth) are counted as exceptions. Only once there are enough replays to say (REPEAT_MIN).
+    const sortedGaps = repeatGaps.slice().sort((a, b) => a - b);
+    let minRepeatSecs = 0, minRepeatExceptions = 0;
+    if (sortedGaps.length >= REPEAT_MIN) {
+      minRepeatSecs = sortedGaps[Math.max(1, Math.ceil(sortedGaps.length * 0.001))];
+      for (let i = 0; i < sortedGaps.length && sortedGaps[i] < minRepeatSecs * 0.9; i++) minRepeatExceptions++;
+    }
+    // The songs by how often they come back (their median replay): every 9 h or less, 9-12, 12-18, 18-36, over 36
+    const repeatTiers = [];
+    if (sortedGaps.length >= REPEAT_MIN) {
+      for (let b = 0; b <= TIER_HOURS.length; b++) repeatTiers.push({ from: b ? TIER_HOURS[b - 1] : 0, to: b < TIER_HOURS.length ? TIER_HOURS[b] : 0, songs: [] });
+      for (let i = 0; i < list.length; i++) {
+        const h = list[i].repeatSecs / 3600; if (!h) continue;
+        let b = 0; while (b < TIER_HOURS.length && h >= TIER_HOURS[b]) b++;
+        repeatTiers[b].songs.push(list[i]);
       }
     }
     let repeatSum = 0;
@@ -854,7 +875,7 @@ const Stats = (() => {
       perHour: covered ? n / (covered / 3600) : 0,
       unique: list.length, repeated, repeatPlays: n - list.length, avgPlays: list.length ? n / list.length : 0,
       medianRepeatSecs: median(repeatGaps), avgRepeatSecs: repeatGaps.length ? repeatSum / repeatGaps.length : 0,
-      rateRepeatSecs, repeatIntervals: repeatGaps.length, repeatsSpanningGap, gapRepeatsCounted, recent, recentFirsts: firsts, gapTimes,
+      rateRepeatSecs, repeatIntervals: repeatGaps.length, minRepeatSecs, minRepeatExceptions, repeatTiers, repeatsSpanningGap, gapRepeatsCounted, recent, recentFirsts: firsts, gapTimes,
       top: list.slice().sort(byCount).slice(0, 10),
       topMissing: missing.sort(byCount).slice(0, 10), missingSongs: missing.length,
       recentRepeats: keep(list, s => s.count > 1).sort((a, b) => b.last - a.last || b.count - a.count).slice(0, 10),
