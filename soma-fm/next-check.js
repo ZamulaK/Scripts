@@ -180,7 +180,7 @@ const overflow = page => page.evaluate(() => {
   await tabTo(s.page, 'History');
   let h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.innerText.replace(/\s+\d[\d,]*$/, '').trim()), more: !!document.querySelector('.more-f'),
     rows: document.querySelectorAll('#plist .pr:not(.ph)').length, gaps: document.querySelectorAll('.gaprow').length, line: document.querySelector('.bar-line .grow').textContent, gone: (document.querySelector('#gonebox summary') || {}).textContent }));
-  check('History: five chips to start (All, Latest, In playlist, Not in playlist, Favorites; short names at 600 px) and All filters', h.url === '/history' && h.chips.join() === 'All,Latest,In List,Not in List,★' && h.more, JSON.stringify(h));
+  check('History: four chips to start (All, Latest, In List, Favorites; Not in List waits in All Filters, Nov 24) and All filters', h.url === '/history' && h.chips.join() === 'All,Latest,In List,★' && h.more, JSON.stringify(h));
   check('History: 50 plays a page, gap rows between plays, the playlist line and the gone-from-playlist notice', h.rows === 50 && h.gaps === 0 && /Xmas Mixed playlist · 61 songs · checked 2 min ago \(1 unavailable left out\)/.test(h.line) && /1 song is gone/.test(h.gone), JSON.stringify(h));
   await s.page.click('.more-f');
   const panel = await s.page.evaluate(() => ({ heads: [...document.querySelectorAll('.fpanel h5')].map(x => x.textContent).join('|'), chips: document.querySelectorAll('.fpanel .chip').length, latest: (document.querySelectorAll('.fpanel .grp')[0].children[1] || {}).dataset.act === 'flatest' }));
@@ -191,7 +191,7 @@ const overflow = page => page.evaluate(() => {
   h = await s.page.evaluate(() => ({ url: location.pathname + location.search, chips: [...document.querySelectorAll('.quick .chip')].map(c => c.firstChild.textContent.trim()).join(), badge: (document.querySelector('.more-f .badge') || {}).textContent }));
   check('History: filters that are on stay among the chips, with "N on", and live in the address', h.url === '/history?status=other&cat=jazz' && /Other Version/.test(h.chips) && /Jazz/.test(h.chips) && h.badge === '2 on', JSON.stringify(h));
   await s.page.click('.more-f'); await s.page.click('[data-act="fclear"]'); await s.page.click('[data-act="fdone"]');
-  await s.page.click('.quick .chip[data-v="none"]');
+  await s.page.click('.more-f'); await s.page.click('.fpanel .chip[data-v="none"]'); await s.page.click('[data-act="fdone"]');
   const none = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph) .m-side .st')].map(x => x.textContent));
   check('History: Not in playlist shows only those (and songs gone from it, and disliked ones)', none.length > 0 && none.every(t => /Not in Playlist|Gone from Playlist|Disliked/.test(t)), [...new Set(none)].join());
   await s.page.fill('#find', 'rotation song 1');
@@ -407,7 +407,7 @@ const overflow = page => page.evaluate(() => {
     const fl = () => s.page.evaluate(() => { const f = document.querySelector('#find'), m = document.querySelector('.more-f'), r = f.getBoundingClientRect();
       return { ph: f.placeholder, inRow: !!f.closest('.quick'), sameLine: !!m && Math.abs((r.top + r.bottom) / 2 - (m.getBoundingClientRect().top + m.getBoundingClientRect().bottom) / 2) <= 3, w: Math.round(r.width), right: Math.round(r.right), page: document.documentElement.scrollWidth }; });
     const f1 = await fl();
-    check('History (360 px, a full second row): the search box beside All ▾, the hint shortened to "Search…" to fit', f1.ph === 'Search…' && f1.inRow && f1.sameLine && f1.w >= 60 && f1.right <= 360 && f1.page <= 360, JSON.stringify(f1));
+    check('History (360 px): the search box in the filter row, beside All ▾ or (since Nov 24, with four chips and ▾ on the first line) on a line of its own, its hint fitting', (f1.sameLine ? f1.ph === 'Search…' : f1.w >= 300) && f1.inRow && f1.w >= 60 && f1.right <= 360 && f1.page <= 360, JSON.stringify(f1));
     await s.page.fill('#find', 'rotation song 1');
     await s.page.waitForTimeout(300);
     const typed = await s.page.evaluate(() => ({ focus: document.activeElement && document.activeElement.id, rows: document.querySelectorAll('#plist .pr').length, first: (document.querySelector('#plist .pr[data-act]') || {}).textContent || '' }));
@@ -435,7 +435,7 @@ const overflow = page => page.evaluate(() => {
     const chipRow = await s.page.evaluate(() => { const v = ['1,388', '1,016', '372', '24']; [...document.querySelectorAll('.quick .chip .n')].forEach((n, i) => n.textContent = v[i]);
       const k = [...document.querySelectorAll('.quick .chip')], m = document.querySelector('.quick .more-f'), t = k.map(e => Math.round(e.getBoundingClientRect().top));
       return { n: k.length, oneLine: t.every(x => x === t[0]), moreBelow: m.getBoundingClientRect().top > t[0] + 10, right: Math.round(k[k.length - 1].getBoundingClientRect().right) }; });
-    check('History (412 px): the five first-row chips on one line with four-digit counts, All ▾ on the next', chipRow.n === 5 && chipRow.oneLine && chipRow.moreBelow && chipRow.right <= 412 - 16, JSON.stringify(chipRow));
+    check('History (412 px): the four first-row chips on one line with four-digit counts (Not in List in All Filters since Nov 24), All ▾ beside them', chipRow.n === 4 && chipRow.oneLine && !chipRow.moreBelow && chipRow.right <= 412 - 16, JSON.stringify(chipRow));
     await s.page.click('.more-f'); await s.page.waitForTimeout(300);
     const catNames = await s.page.evaluate(() => [...document.querySelectorAll('.fpanel [data-act=fcat]')].map(e => e.innerText.replace(/\s*\d+$/, '').trim()));
     check('History (412 px): All filters shows Swing, Jazz and Funk for the categories', ['Swing', 'Jazz', 'Funk', 'Classics', 'No Category'].every(x => catNames.includes(x)) && !catNames.some(x => /\//.test(x)), JSON.stringify(catNames));
@@ -620,19 +620,21 @@ const overflow = page => page.evaluate(() => {
     for (const p of hist) { const k = X.markKey(p[1], p[2]); const st = X.check(p[1], p[2], items).status; if (st === 'other') api.doc.marks[k] = { v: 'have', at: Date.now() }; else if (st !== 'have') api.doc.dislikes[k] = Date.now(); }
     delete api.doc.archive.goneVideo1;   // a song gone from the playlist counts as not in it too
     s = await open(browser, { path: '/history' });
-    const nz = await s.page.evaluate(() => { const c = document.querySelector('.quick [data-v="none"]'); return c && { n: c.querySelector('.n').textContent, zero: c.classList.contains('zero') }; });
+    const noneFirst = await s.page.$('.quick [data-v="none"]');
+    await s.page.click('.more-f');
+    const nz = await s.page.evaluate(() => { const c = document.querySelector('.fpanel [data-v="none"]'); return c && { n: c.querySelector('.n').textContent, zero: c.classList.contains('zero') }; });
     const wantN = hist.filter(p => X.check(p[1], p[2], items).status === 'none').length;
-    await s.page.click('.quick [data-v="none"]'); await s.page.waitForTimeout(200);
+    await s.page.click('.fpanel [data-v="none"]'); await s.page.click('[data-act="fdone"]'); await s.page.waitForTimeout(200);
     const nzRows = await s.page.evaluate(() => [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .m-side .st')].map(x => x.textContent))]);
-    check('Filters: with every song you don’t have disliked, Not in List stays on the first row counting them, and shows them', nz && !nz.zero && nz.n === String(wantN) && wantN > 0 && nzRows.join() === 'Disliked', JSON.stringify({ nz, wantN, nzRows }));
-    await s.page.click('.quick [data-v="none"]'); await s.page.waitForTimeout(200);
+    check('Filters: with every song you don’t have disliked, Not in List (in All Filters only) counts them and shows them', !noneFirst && nz && !nz.zero && nz.n === String(wantN) && wantN > 0 && nzRows.join() === 'Disliked', JSON.stringify({ nz, wantN, nzRows }));
+    await s.page.click('.quick [data-v="none"]'); await s.page.waitForTimeout(200);   // on, it's among the chips; off again
     // Disliked on the first row from a tablet up, in Dan's order (Nov 24); on a phone it waits in All Filters
     const quickOrder = pg => pg.evaluate(() => [...document.querySelectorAll('.quick .chip')].filter(c => c.offsetWidth).map(c => c.dataset.v || c.dataset.act).join());
     const q600 = await quickOrder(s.page);
     await s.page.setViewportSize({ width: 360, height: 1000 }); await s.page.waitForTimeout(200);
     const q360 = await quickOrder(s.page);
     await s.page.setViewportSize({ width: 600, height: 1000 }); await s.page.waitForTimeout(200);
-    check('History: Disliked on the first row at 600 px (All, Latest, In List, Disliked, Not in List, ★), not at 360', q600 === 'all,flatest,have,disliked,none,ffav' && q360 === 'all,flatest,have,none,ffav', JSON.stringify({ q600, q360 }));
+    check('History: Disliked on the first row at 600 px (All, Latest, In List, Disliked, ★), not at 360', q600 === 'all,flatest,have,disliked,ffav' && q360 === 'all,flatest,have,ffav', JSON.stringify({ q600, q360 }));
     // A category for a song not in the playlist: kept by the song's key, counted in History, not in Stats (Nov 24)
     const mellowStats = async () => { await tabTo(s.page, 'Stats'); const v = await s.page.evaluate(() => { const k = [...document.querySelectorAll('.kv')].find(x => /^Mellow/.test(x.textContent.trim())); return k && k.querySelector('b').textContent; }); await tabTo(s.page, 'History'); return v; };
     const mellow0 = await mellowStats();

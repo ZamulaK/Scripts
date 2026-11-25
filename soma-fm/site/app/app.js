@@ -748,15 +748,14 @@
           <h5>Favorites and Categories</h5><div class="grp">${zeroLast(fc)}</div>
           <div class="end"><button class="pill" ${active ? '' : 'disabled'} data-act="fclear">Clear All</button><button class="pill primary" data-act="fdone">Done</button></div></div>`;
       } else {
-        // A few to start with (All, Latest, In List, Disliked on a tablet or wider, Not in List, Favorites), plus any other
-        // filter that's on, the statuses in their order. Disliked and Not in List are left out while there are none
-        // (unless on); Other Version only when on.
+        // A few to start with (All, Latest, In List, Disliked on a tablet or wider, Favorites), plus any other filter
+        // that's on, the statuses in their order. Disliked is left out while there are none (unless on); Not in List and
+        // Other Version only when on (Dan, Nov 24: Disliked usually covers Not in List).
         const q = [C.all(), C.latest()];
         for (const [k, l] of STATUS) {
           const on = S.status.has(k);
           if (k === 'have' || on) q.push(C.st(k, l));
           else if (k === 'disliked' && count(k)) q.push(C.st(k, l, true));
-          else if (k === 'none' && count(k)) q.push(C.st(k, l));
         }
         q.push(C.fav(true));
         for (const [k, , sh] of CATS2) if (S.cats.has(k)) q.push(C.cat(k, sh));
