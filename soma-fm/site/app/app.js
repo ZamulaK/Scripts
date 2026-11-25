@@ -698,27 +698,29 @@
       <div><h3>Just Played <a href="${esc(tabHref('history'))}" data-nav>See All</a></h3><div class="plays">${PHEAD}${others.map(p => playRow(p, 'now:', false)).join('')}</div></div></div>`;
   };
 
-  // History's rows after the filters, and the counts on the chips (counted before the status, category and favorite filters)
+  // History's rows after the filters, and the counts on the chips: status and favorite counts are taken before the status,
+  // category and favorite filters; category counts follow the status and favorite chips (Dan, Nov 25)
   function historyRows() {
     let list = rows().map(s => ({ s, r: statusOf(s.key, s.artist, s.title) }));
     if (S.latest) { const seen = new Set(); list = list.filter(x => { if (seen.has(x.s.key)) return false; seen.add(x.s.key); return true; }); }
     const all = list, known = !D.playlistError && D.items.length;
     if (known && S.status.size) list = list.filter(x => S.status.has(x.r.status) || (S.status.has('none') && notInList(x.r)));
+    if (known && S.favOnly) list = list.filter(x => inList(x.r) && isFav(x.r.item.id));
+    const forCats = list;
     // Categories: songs not in the playlist count too (Dan, Nov 24; In List narrows to the playlist's)
     if (known && S.cats.size) list = list.filter(x => S.cats.has(catOf(catKeyOf(x.r, x.s.key)) || 'uncat'));
-    if (known && S.favOnly) list = list.filter(x => inList(x.r) && isFav(x.r.item.id));
     // The search matches the song, artist and album, and your note on the song (Dan, Nov 24)
     if (S.q) { const q = fold(S.q).trim(); if (q) list = list.filter(x => fold(x.s.title + ' ' + x.s.artist + ' ' + x.s.album + ' ' + noteOf(x.s.key)).indexOf(q) >= 0); }
-    return { all, list };
+    return { all, forCats, list };
   }
   R.history = () => {
-    const { all, list } = historyRows();
+    const { all, forCats, list } = historyRows();
     const pages = Math.max(1, Math.ceil(list.length / S.per));
     if (S.page > pages - 1) S.page = pages - 1;
     const page = list.slice(S.page * S.per, (S.page + 1) * S.per);
     const count = k => all.filter(x => k === 'none' ? notInList(x.r) : x.r.status === k).length;
     const listed = all.filter(x => inList(x.r));
-    const catN = k => all.filter(x => (catOf(catKeyOf(x.r, x.s.key)) || 'uncat') === k).length;
+    const catN = k => forCats.filter(x => (catOf(catKeyOf(x.r, x.s.key)) || 'uncat') === k).length;
     const favN = listed.filter(x => isFav(x.r.item.id)).length;
     // A chip with nothing in it (and not on) is drawn dim, with its 0 in red (Dan, Nov 4)
     const z = (n, on) => n || on ? 'chip' : 'chip zero';

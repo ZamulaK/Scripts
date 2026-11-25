@@ -649,6 +649,19 @@ const overflow = page => page.evaluate(() => {
     const mel = await s.page.evaluate(() => [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .c-song b')].map(b => b.textContent.replace(/[\s☆★✎]+$/, '')))]);
     const mellow1 = await mellowStats();
     check('Category for a song not in the playlist: kept by the song, found by its category filter, left out of Stats', disKey && api.doc.categories[disKey].c === 'mellow' && mel.indexOf(disTitle) >= 0 && mellow0 === mellow1, JSON.stringify({ disKey, disTitle, mel: mel.length, mellow0, mellow1 }));
+    // The category counts follow the status and favorite chips (Dan, Nov 25); the status counts don't follow the categories
+    {
+      const chipN = sel => s.page.evaluate(q => { const e = document.querySelector(q); return e ? +e.querySelector('.n').textContent.replace(/,/g, '') : -1; }, sel);
+      const rowsN = () => s.page.evaluate(() => document.querySelectorAll('#plist .pr:not(.ph)').length);
+      await s.page.click('.more-f'); await s.page.waitForTimeout(200);
+      const melAll = await chipN('.fpanel [data-act="fcat"][data-v="mellow"]'), disAll = await chipN('.fpanel [data-act="fstatus"][data-v="disliked"]');
+      await s.page.click('.fpanel [data-act="fstatus"][data-v="disliked"]'); await s.page.waitForTimeout(200);
+      const melDis = await chipN('.fpanel [data-act="fcat"][data-v="mellow"]'), disDis = await chipN('.fpanel [data-act="fstatus"][data-v="disliked"]'), shown = await rowsN();
+      await s.page.click('.fpanel [data-act="fstatus"][data-v="disliked"]'); await s.page.click('.fpanel [data-act="fstatus"][data-v="have"]'); await s.page.waitForTimeout(200);
+      const melHave = await chipN('.fpanel [data-act="fcat"][data-v="mellow"]');
+      await s.page.click('.fpanel [data-act="fstatus"][data-v="have"]'); await s.page.click('.fpanel [data-act="fcat"][data-v="mellow"]'); await s.page.click('[data-act="fdone"]'); await s.page.waitForTimeout(200);
+      check('History: the category counts follow the status chips (Mellow with Disliked on = the rows shown), the status counts stay', melAll > melDis && melDis > 0 && melDis === shown && melHave + melDis <= melAll && disDis === disAll, JSON.stringify({ melAll, melDis, shown, melHave, disAll, disDis }));
+    }
     await tabTo(s.page, 'Stats');
     const sb = await s.page.evaluate(() => ({ rows: [...document.querySelectorAll('.kv.stat')].map(x => x.textContent).join('|') || 0, cards: document.querySelectorAll('.box.io').length }));
     check('Stats: no Songs by status box when nothing is an other version or not in the playlist (the cards stay)', sb.rows === 0 && sb.cards === 2, JSON.stringify(sb));

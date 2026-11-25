@@ -358,6 +358,8 @@ reloaded; the likely cause was a request frozen mid-flight keeping `ticking` set
 
 **History chips, categories off the playlist, the table as cards, a blue Recording dot (Nov 24, live):** the status filters are always In List, Disliked, Not in List, Other Version (short names everywhere; All Filters keeps that order, empty or not). The first row shows Disliked from 600 px (`.chip.up`, hidden below); Not in List only in All Filters (or when on), since Disliked usually covers it; 600-899 px use tighter chips, and when the row is full the filter ▾ starts the next line with the search beside it, as on a phone. A song not in the playlist (or an unlinked "I have it") can have a category, kept under its song key in `categories` (`catKeyOf`); History's category filters and counts include them, Stats counts only the playlist's videos. The Now cards show How Often Songs Repeat: Song Repeats with Back Within 9 h, then two tiers a pair, then Plays per Song (yours/disliked, favorites/all songs). The header's Recording dot is blue (`--rec`), since green means in your playlist.
 
+**History: category counts follow the status and favorite chips (Nov 25, live):** `historyRows` returns `forCats` (rows after Latest, status and ★, before the categories and search); the category chips count from it, so with Disliked on, Mellow shows how many disliked plays are Mellow. The status and ★ counts still come from `all` (before those filters).
+
 **Status (before the build):** designed and approved. Dan: "this design is good enough to start building the full site". This is his
 only personal tech project at the moment, so it gets full attention. Expect a few tweaks along the way.
 
