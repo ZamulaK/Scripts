@@ -585,3 +585,22 @@ a.big-btn svg{width:24px;height:24px}
 .rtier th:first-child{text-align:left;padding-left:0;width:auto}
 .rtier tbody td{font-weight:700}
 .rtier + .kv{border-top:1px solid var(--line)}
+/* History's first row: Disliked only on a tablet or wider (Dan, Nov 24) */
+@media (max-width:599px){.quick .chip.up{display:none}}
+/* With Disliked on the first row from 600 px (Dan, Nov 24), the phone's tighter chips up to 899 px, so the row still fits
+   on one line on his tablet */
+@media (min-width:600px) and (max-width:899px){
+  .quick{gap:5px}
+  .quick .chip{padding:0 7px;font-size:12.5px;gap:4px;letter-spacing:-.01em}
+  .quick .chip .n{font-size:11.5px}
+  .quick .more-f{padding:0 8px;gap:4px}
+}
+/* The tier cards' second line: yours, then disliked moving to the next line whole */
+.rtile .k strong{font-weight:800;color:var(--ink)}
+/* …and when the row is full (as with Disliked on it), the filter ▾ starts the next line with the search beside it, as on a phone */
+@media (min-width:600px) and (max-width:899px){.quick .find{flex:1 1 240px;min-width:0;margin:0}.quick .find input{padding:5px 12px;border-radius:999px}}
+/* The Recording dot in blue (Dan, Nov 24): green means "in your playlist" everywhere else */
+:root{--rec:#6ab0ff}
+.live i{background:var(--rec);box-shadow:0 0 0 4px color-mix(in srgb,var(--rec) 25%,transparent)}
+.live.bad i{background:var(--warn);box-shadow:0 0 0 4px color-mix(in srgb,var(--warn) 25%,transparent)}
+.live.wait i{background:var(--muted);box-shadow:0 0 0 4px color-mix(in srgb,var(--muted) 22%,transparent)}

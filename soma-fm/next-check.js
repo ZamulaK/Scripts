@@ -205,7 +205,7 @@ const overflow = page => page.evaluate(() => {
   const rowFor = title => s.page.locator('#plist .pr:not(.ph)', { has: s.page.locator('.c-song b', { hasText: new RegExp('^' + title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s☆★✎]*$') }) }).first();
   await rowFor('Rotation Song 2').click();
   let d = await s.page.evaluate(() => { const x = document.querySelector('.pr.open .detail'); return x && { rows: x.querySelectorAll('.row').length, buttons: [...x.querySelectorAll('.row button, .row a')].map(b => b.textContent.trim()), log: x.querySelectorAll('.log li').length }; });
-  check('Row: tapping opens I have it, Dislike and Add a note in one row, and every play of the song', d && d.rows === 1 && d.buttons.join() === '✓ I Have It,👎 Dislike,✎ Add a Note' && d.log > 1, JSON.stringify(d));
+  check('Row: tapping opens I have it, Dislike, Category (songs not in the playlist too, Nov 24) and Add a note in one row, and every play of the song', d && d.rows === 1 && d.buttons.join() === '✓ I Have It,👎 Dislike,Category… ▾,✎ Add a Note' && d.log > 1, JSON.stringify(d));
   const icons = await s.page.evaluate(() => [...document.querySelectorAll('#plist .pr:not(.ph)')].map(r => ({ st: r.querySelector('.m-side .st').textContent, open: !!r.querySelector('.c-go a.open'), search: !!r.querySelector('.c-go a[href*="results?search_query"]'), star: !!r.querySelector('.c-song .star') })));
   check('Rows: an Open icon for songs you have, a Search icon for ones you don\'t (both for another version), a star on songs in the playlist',
     icons.every(x => x.st === 'In Playlist' ? x.open && !x.search && x.star : x.st === 'Not in Playlist' ? !x.open && x.search && !x.star : x.st === 'Different Mix' || x.st === 'Other Version' ? x.open && x.search : true), JSON.stringify(icons.slice(0, 6)));
@@ -292,6 +292,11 @@ const overflow = page => page.evaluate(() => {
     songs: [...t.querySelectorAll('tbody tr')].reduce((a, r) => a + Number(r.querySelector('td').textContent), 0), soon: ([...document.querySelectorAll('.kv')].find(k => /Soonest a song comes back/.test(k.textContent)) || {}).textContent, over: t.getBoundingClientRect().right > t.parentElement.getBoundingClientRect().right }; });
   const want3 = new Set(); { const c = {}; for (const p of hist) { const k = X.markKey(p[1], p[2]); c[k] = (c[k] || 0) + 1; } for (const k in c) if (c[k] >= 3) want3.add(k); }
   check('Stats: How Often Songs Repeat, a table of the songs played 3 times or more by how often they come back, with yours, disliked and favorites; and the soonest a song comes back', tier && tier.head === 'Repeats|Songs|Yours|Disliked|★Favorites' && tier.rows === 'Under 9 h|9–12 h|12–18 h|18–36 h|Over 36 h' && tier.songs <= want3.size && tier.songs > 0 && /[0-9]/.test(tier.soon || '') && !tier.over, JSON.stringify({ tier, want: want3.size }));
+  await tabTo(s.page, 'Now');
+  const kicks = await s.page.evaluate(() => [...document.querySelectorAll('.rotp')].map(p => [...p.querySelectorAll('.kick')].map(k => k.textContent).join('/')));
+  const tierTotal = await s.page.evaluate(() => [...document.querySelectorAll('.rotp .rtile')].filter(c => /^Back /.test(c.querySelector('.kick').textContent)).reduce((a, c) => a + Number(c.querySelector('b.big').textContent.replace(/,/g, '')), 0));
+  check('Now: the repeats table as cards (Nov 24): Song Repeats with Back Within 9 h, then two tiers a pair, then plays per song when there are disliked songs', kicks.indexOf('Song Repeats/Back Within 9 h') >= 0 && kicks.indexOf('Back in 9–12 h/Back in 12–18 h') >= 0 && kicks.indexOf('Back in 18–36 h/Back After 36 h') >= 0 && tierTotal === tier.songs, JSON.stringify({ kicks, tierTotal }));
+  await tabTo(s.page, 'Stats');
   check('No script errors (Stats)', s.errors.length === 0, s.errors.join(' | '));
   await s.ctx.close();
 
@@ -362,7 +367,8 @@ const overflow = page => page.evaluate(() => {
     await opened.locator('.c-time').click();
     await s.page.click('.more-f');
     const grp = await s.page.evaluate(() => [...document.querySelectorAll('.fpanel .grp')].map(g => [...g.querySelectorAll('.chip')].map(c => c.classList.contains('zero') ? 0 : 1).join('')));
-    check('All filters: Latest second, and filters with nothing in them dim at the end of their group', grp.length === 2 && grp.join('').indexOf('0') >= 0 && grp.every(g => /^1*0*$/.test(g)), JSON.stringify(grp));
+    const stOrder = await s.page.evaluate(() => [...document.querySelectorAll('.fpanel .grp')[0].querySelectorAll('.chip')].map(c => c.dataset.v || c.dataset.act).join() + '|' + [...document.querySelectorAll('.fpanel .grp')[0].querySelectorAll('.chip')].map(c => { const x = c.cloneNode(true); x.querySelectorAll('.n, .narrow').forEach(e => e.remove()); return x.textContent.trim(); }).join());
+    check('All filters: the statuses always in Dan’s order with the short names (Nov 24), and favorites and categories with nothing in them dim at the end of their group', grp.length === 2 && stOrder === 'all,flatest,have,disliked,none,other|All,Latest Play Only,In List,Disliked,Not in List,Other Version' && grp[1].indexOf('0') >= 0 && /^1*0*$/.test(grp[1]), JSON.stringify({ grp, stOrder }));
     await s.page.click('[data-act="fdone"]');
     // More → Song lists: the whole note, none, and the album on a phone
     await tabTo(s.page, 'More');
@@ -620,6 +626,27 @@ const overflow = page => page.evaluate(() => {
     const nzRows = await s.page.evaluate(() => [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .m-side .st')].map(x => x.textContent))]);
     check('Filters: with every song you don’t have disliked, Not in List stays on the first row counting them, and shows them', nz && !nz.zero && nz.n === String(wantN) && wantN > 0 && nzRows.join() === 'Disliked', JSON.stringify({ nz, wantN, nzRows }));
     await s.page.click('.quick [data-v="none"]'); await s.page.waitForTimeout(200);
+    // Disliked on the first row from a tablet up, in Dan's order (Nov 24); on a phone it waits in All Filters
+    const quickOrder = pg => pg.evaluate(() => [...document.querySelectorAll('.quick .chip')].filter(c => c.offsetWidth).map(c => c.dataset.v || c.dataset.act).join());
+    const q600 = await quickOrder(s.page);
+    await s.page.setViewportSize({ width: 360, height: 1000 }); await s.page.waitForTimeout(200);
+    const q360 = await quickOrder(s.page);
+    await s.page.setViewportSize({ width: 600, height: 1000 }); await s.page.waitForTimeout(200);
+    check('History: Disliked on the first row at 600 px (All, Latest, In List, Disliked, Not in List, ★), not at 360', q600 === 'all,flatest,have,disliked,none,ffav' && q360 === 'all,flatest,have,none,ffav', JSON.stringify({ q600, q360 }));
+    // A category for a song not in the playlist: kept by the song's key, counted in History, not in Stats (Nov 24)
+    const mellowStats = async () => { await tabTo(s.page, 'Stats'); const v = await s.page.evaluate(() => { const k = [...document.querySelectorAll('.kv')].find(x => /^Mellow/.test(x.textContent.trim())); return k && k.querySelector('b').textContent; }); await tabTo(s.page, 'History'); return v; };
+    const mellow0 = await mellowStats();
+    const dis = s.page.locator('#plist .pr:not(.ph)', { has: s.page.locator('.m-side .st', { hasText: /^Disliked$/ }) }).first();
+    const disTitle = (await dis.locator('.c-song b').textContent()).replace(/[\s☆★✎]+$/, '');
+    await dis.locator('.c-time').click();
+    await s.page.click('.pr.open [data-act="catmenu"]');
+    await s.page.click('.menu button:has-text("Mellow")');
+    await s.page.waitForTimeout(300);
+    const disKey = Object.keys(api.doc.categories).find(k => k.indexOf('|') > 0);
+    await s.page.click('.more-f'); await s.page.click('.fpanel [data-act="fcat"][data-v="mellow"]'); await s.page.click('[data-act="fdone"]'); await s.page.waitForTimeout(200);
+    const mel = await s.page.evaluate(() => [...new Set([...document.querySelectorAll('#plist .pr:not(.ph) .c-song b')].map(b => b.textContent.replace(/[\s☆★✎]+$/, '')))]);
+    const mellow1 = await mellowStats();
+    check('Category for a song not in the playlist: kept by the song, found by its category filter, left out of Stats', disKey && api.doc.categories[disKey].c === 'mellow' && mel.indexOf(disTitle) >= 0 && mellow0 === mellow1, JSON.stringify({ disKey, disTitle, mel: mel.length, mellow0, mellow1 }));
     await tabTo(s.page, 'Stats');
     const sb = await s.page.evaluate(() => ({ rows: [...document.querySelectorAll('.kv.stat')].map(x => x.textContent).join('|') || 0, cards: document.querySelectorAll('.box.io').length }));
     check('Stats: no Songs by status box when nothing is an other version or not in the playlist (the cards stay)', sb.rows === 0 && sb.cards === 2, JSON.stringify(sb));

@@ -19,7 +19,8 @@
   const CATS2 = CATS.concat([['uncat', 'No Category', 'None']]);
   const CAT = {}, CATSH = {}; for (const [k, n, sh] of CATS) { CAT[k] = n; CATSH[k] = sh; }
   const LABEL = { have: 'In Playlist', other: 'Other Version', none: 'Not in Playlist', gone: 'Gone from Playlist', disliked: 'Disliked', unknown: '—' };
-  const STATUS = [['none', 'Not in Playlist'], ['other', 'Other Version'], ['have', 'In Playlist'], ['disliked', 'Disliked']];
+  // The status filters, always in this order and with the short names (Dan, Nov 24)
+  const STATUS = [['have', 'In List'], ['disliked', 'Disliked'], ['none', 'Not in List'], ['other', 'Other Version']];
   const YT_SCOPE = 'https://www.googleapis.com/auth/youtube';
   const UNKNOWN = { status: 'unknown' };
   const THEMES = ['candy', 'evergreen'];   // besides Midnight, the default
@@ -204,6 +205,9 @@
   }
   const isFav = id => !!(id && D.doc.favorites[id] && D.doc.favorites[id].on);
   const catOf = id => (id && D.doc.categories[id] && CAT[D.doc.categories[id].c] ? D.doc.categories[id].c : '');
+  // Where a song's category is kept: its playlist video, or for a song not in the playlist (or an unlinked "I have it"),
+  // the song itself, by its key (Dan, Nov 24). Stats counts only the playlist's videos.
+  const catKeyOf = (r, key) => r.status === 'unknown' ? '' : inList(r) && (!r.marked || r.linked) ? r.item.id : key;
   const noteOf = key => (D.doc.notes[key] && typeof D.doc.notes[key].t === 'string' ? D.doc.notes[key].t : '');
   const inList = r => r.status === 'have' && !!r.item;
   // Not in Playlist (the filter): songs you don't have, gone ones, and disliked ones, which are never in it (a dislike
@@ -476,7 +480,7 @@
   const rowId = (p, ctx) => (ctx || '') + p.key + '@' + p.at;
   function playRow(p, ctx, isNow) {
     const id = rowId(p, ctx), open = S.open === id, r = statusOf(p.key, p.artist, p.title), i = rid(Object.assign({ id }, p));
-    const fav = inList(r) && isFav(r.item.id), note = noteOf(p.key), n = counts.get(p.key) || 0;
+    const fav = inList(r) && isFav(r.item.id), note = noteOf(p.key), n = counts.get(p.key) || 0, rc = catOf(catKeyOf(r, p.key));
     const star = inList(r) ? `<button class="star" data-act="fav" data-i="${i}" aria-pressed="${fav}" aria-label="${fav ? 'Remove from favorites' : 'Add to favorites'}: ${esc(p.title)}" title="${fav ? 'Favorite. Tap to remove.' : 'Add to favorites'}">${fav ? '★' : '☆'}</button>` : '';
     // The note itself shows under the song when More → Song lists says so; otherwise a ✎ beside the name says there is one
     const lnote = note && S.listNotes !== 'off' ? `<div class="lnote ${S.listNotes}">${esc(S.listNotes === 'one' ? note.split('\n')[0] : note)}</div>` : '';
@@ -488,7 +492,7 @@
       <div class="c-time"><span class="t12">${time(p.at)}</span><span class="t24">${time24(p.at)}</span><small>${short(p.at)}</small>${isNow ? '<span class="now-tag">NOW</span>' : ''}</div>
       <div class="c-song"><div class="t"><b>${title}</b></div><div class="by">${esc(p.artist)}${len ? ` · ${len.measured ? '~' : ''}${History.formatClock(len.secs)}` : ''}</div>${p.album ? `<div class="alb">${esc(p.album)}</div>` : ''}${lnote}</div>
       <div class="c-status">${st(r)}</div>
-      <div class="c-cat">${!inList(r) ? '<span class="na" title="Not in your playlist: no category">—</span>' : catOf(r.item.id) ? `<span class="cf">${esc(CAT[catOf(r.item.id)])}</span><span class="cs">${esc(CATSH[catOf(r.item.id)])}</span>` : ''}</div>
+      <div class="c-cat">${rc ? `<span class="cf">${esc(CAT[rc])}</span><span class="cs">${esc(CATSH[rc])}</span>` : !inList(r) ? '<span class="na" title="Not in your playlist">—</span>' : ''}</div>
       <div class="c-plays">${fmt(n)}×</div>
       <div class="c-go">${quickLinks(p, r)}</div>
       <div class="c-act">${chev()}</div>
@@ -533,7 +537,8 @@
     } else if (r.status === 'unknown') meta = `<div class="meta">${D.playlistError ? "The playlist couldn't be read, so songs aren't labeled." : 'Reading the playlist…'}</div>`;
     if (p.album) meta += `<div class="meta">Album: <b>${esc(p.album)}</b></div>`;
     const extra = [];
-    if (inList(r) && (!r.marked || r.linked)) { const c = catOf(r.item.id); extra.push(`<button class="menubtn ${c ? 'set' : ''}" data-act="catmenu" data-i="${i}" aria-haspopup="listbox">${esc(c ? CAT[c] : 'Category…')} <span class="caret">▾</span></button>`); }
+    const ck = catKeyOf(r, p.key);
+    if (ck) { const c = catOf(ck); extra.push(`<button class="menubtn ${c ? 'set' : ''}" data-act="catmenu" data-i="${i}" aria-haspopup="listbox">${esc(c ? CAT[c] : 'Category…')} <span class="caret">▾</span></button>`); }
     const note = noteOf(p.key), editing = S.noteFor === p.id;
     if (!editing && !note) extra.push(`<button class="pill" data-act="note" data-i="${i}">✎ Add a Note</button>`);
     const noteBox = editing
@@ -602,10 +607,21 @@
       const h = t.labeledSongs && t.breakdown.have;
       if (h) pairs.push([card('In Your Playlist', [[pct(h.songs, t.labeledSongs), ['of the songs SomaFM played', 'of songs played']]]),
         card('In Your Playlist', [[pct(h.plays, t.labeledPlays), ['of all plays', 'of plays']]])]);
-      // The soonest a song comes back, and your songs played more than the disliked ones (Dan, Nov 24)
+      // The soonest a song comes back, then How Often Songs Repeat a row a card, then plays per song: yours against
+      // disliked, favorites against all (Dan, Nov 24: "fine if it spans several cards")
       const ps = perSong(t);
-      if (t.minRepeatSecs && ps) pairs.push([card('Song Repeats', [[esc(soonText(t.minRepeatSecs)), ['the soonest a song comes back', 'soonest a song returns']]]),
-        card('Plays per Song', [[ps.have.toFixed(0), ['in your playlist', 'yours']], [ps.dis.toFixed(0), 'disliked']])]);
+      if (t.minRepeatSecs && t.repeatTiers.length) {
+        const back = x => !x.from ? `Back Within ${x.to} h` : !x.to ? `Back After ${x.from} h` : `Back in ${x.from}–${x.to} h`;
+        const tierCard = x => { const yours = x.songs.filter(s => inList(s.r)).length, dis = x.songs.filter(s => s.r.status === 'disliked').length;
+          return card(back(x), [[fmt(x.songs.length), x.songs.length === 1 ? 'song' : 'songs'], [fmt(yours), `yours · <span class="nw"><strong>${fmt(dis)}</strong> disliked</span>`]]); };
+        const cards = [card('Song Repeats', [[esc(soonText(t.minRepeatSecs)), ['the soonest a song comes back', 'soonest a song returns']]])].concat(t.repeatTiers.map(tierCard));
+        for (let k = 0; k + 1 < cards.length; k += 2) pairs.push([cards[k], cards[k + 1]]);
+        let favP = 0, favS = 0;
+        for (const [k, row] of latestRow) { const r = statusOf(k, row.artist, row.title); if (inList(r) && isFav(r.item.id)) { favS++; favP += counts.get(k) || 0; } }
+        // (six cards: the soonest and the five rows, three pairs)
+        if (ps) pairs.push([card('Plays per Song', [[ps.have.toFixed(0), ['in your playlist', 'yours']], [ps.dis.toFixed(0), 'disliked']]),
+          card('Plays per Song', [[favS ? (favP / favS).toFixed(0) : '—', 'favorites'], [t.avgPlays.toFixed(0), 'all songs']])]);
+      }
     }
     if (t.plays) {
       const firsts = t.recent ? Math.round(t.recentFirsts / t.recent * 100) + '%' : '—';
@@ -675,7 +691,7 @@
     const off = offAir(), others = off ? all.slice(0, 7) : all.slice(0, 8).filter(p => p !== n).slice(0, 7);
     return head('SomaFM Christmas Lounge') + listenFailBox() + `<div class="split"><div>
       ${off ? offCard() : `<div class="hero ${open ? 'open' : ''}" data-act="row" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${thumb('ta')}<div class="hero-top"><small>${offAir() ? `<b class="offair">Off the Air</b> · <span class="lw">Last Played </span>${Date.now() / 1000 - n.at > 18 * 3600 ? esc(when(n.at)) : time(n.at)}` : playing ? 'Now Playing' : 'Last Played ' + time(n.at)}</small>${label}${castBtn()}</div><h2>${starred(n.title, fav)}</h2><div class="hmain${n.album ? ' two' : ''}"><div class="hwho"><p class="hartist">${esc(n.artist)}</p>${n.album ? `<p class="halbum">${esc(n.album)}</p>` : ''}</div>${thumb('tb')}</div>${note ? `<div class="hnote">${esc(note)}</div>` : ''}
-      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}YouTube</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}YT Search</a>`}<span class="hcount"><span class="hct">${inList(r) && catOf(r.item.id) ? `<span class="hcat">${esc(CAT[catOf(r.item.id)])}</span>` : ''}<span><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span></span></span> ${chev()}</span></div>
+      <div class="acts">${heroListenBtn()}${canOpen(r) ? `<a class="pill yt" href="${ytWatch(r.item.id)}" target="_blank" rel="noopener" data-stop title="Open on YouTube" aria-label="Open on YouTube">${ico('yt')}YouTube</a>` : `<a class="pill solid" href="${ytSearch(M.searchQuery(n.artist, n.title))}" target="_blank" rel="noopener" data-stop aria-label="Search YouTube">${ico('search')}YT Search</a>`}<span class="hcount"><span class="hct">${catOf(catKeyOf(r, n.key)) ? `<span class="hcat">${esc(CAT[catOf(catKeyOf(r, n.key))])}</span>` : ''}<span><span class="lw">${plural(plays, 'play')}</span><span class="ln">${fmt(plays)}×</span></span></span> ${chev()}</span></div>
       ${heroListen()}</div>
       ${open ? `<div class="hero-detail">${detail(ROWS[i], r, i)}</div>` : ''}`}
       ${tiles}</div>
@@ -688,7 +704,8 @@
     if (S.latest) { const seen = new Set(); list = list.filter(x => { if (seen.has(x.s.key)) return false; seen.add(x.s.key); return true; }); }
     const all = list, known = !D.playlistError && D.items.length;
     if (known && S.status.size) list = list.filter(x => S.status.has(x.r.status) || (S.status.has('none') && notInList(x.r)));
-    if (known && S.cats.size) list = list.filter(x => inList(x.r) && S.cats.has(catOf(x.r.item.id) || 'uncat'));
+    // Categories: songs not in the playlist count too (Dan, Nov 24; In List narrows to the playlist's)
+    if (known && S.cats.size) list = list.filter(x => S.cats.has(catOf(catKeyOf(x.r, x.s.key)) || 'uncat'));
     if (known && S.favOnly) list = list.filter(x => inList(x.r) && isFav(x.r.item.id));
     // The search matches the song, artist and album, and your note on the song (Dan, Nov 24)
     if (S.q) { const q = fold(S.q).trim(); if (q) list = list.filter(x => fold(x.s.title + ' ' + x.s.artist + ' ' + x.s.album + ' ' + noteOf(x.s.key)).indexOf(q) >= 0); }
@@ -701,20 +718,20 @@
     const page = list.slice(S.page * S.per, (S.page + 1) * S.per);
     const count = k => all.filter(x => k === 'none' ? notInList(x.r) : x.r.status === k).length;
     const listed = all.filter(x => inList(x.r));
-    const catN = k => listed.filter(x => (catOf(x.r.item.id) || 'uncat') === k).length;
+    const catN = k => all.filter(x => (catOf(catKeyOf(x.r, x.s.key)) || 'uncat') === k).length;
     const favN = listed.filter(x => isFav(x.r.item.id)).length;
     // A chip with nothing in it (and not on) is drawn dim, with its 0 in red (Dan, Nov 4)
     const z = (n, on) => n || on ? 'chip' : 'chip zero';
     const C = {
       all: () => `<button class="chip" aria-pressed="${!S.status.size}" data-act="fstatus" data-v="all">All <span class="n">${fmt(all.length)}</span></button>`,
-      // sh: a shorter name below 900 px, on the first row (the names today's site uses on the tablet)
-      st: (k, l, sh) => `<button class="${z(count(k), S.status.has(k))}" aria-pressed="${S.status.has(k)}" data-act="fstatus" data-v="${k}" aria-label="${l} ${fmt(count(k))}">${sh ? `<span class="wide">${l}</span><span class="narrow">${sh}</span>` : l} <span class="n">${fmt(count(k))}</span></button>`,
+      // up: on the first row only on a tablet or wider (Disliked; Dan, Nov 24)
+      st: (k, l, up) => `<button class="${z(count(k), S.status.has(k))}${up ? ' up' : ''}" aria-pressed="${S.status.has(k)}" data-act="fstatus" data-v="${k}" aria-label="${l} ${fmt(count(k))}">${l} <span class="n">${fmt(count(k))}</span></button>`,
       fav: sh => `<button class="${z(favN, S.favOnly)}" aria-pressed="${S.favOnly}" data-act="ffav" aria-label="Favorites ${fmt(favN)}">★${sh ? '<span class="wide"> Favorites</span>' : ' Favorites'} <span class="n">${fmt(favN)}</span></button>`,
       // sh: the short name on phones (Swing, Jazz, Funk; Dan, Nov 6)
       cat: (k, l, sh) => `<button class="${z(catN(k), S.cats.has(k))}" aria-pressed="${S.cats.has(k)}" data-act="fcat" data-v="${k}" aria-label="${l} ${fmt(catN(k))}">${sh && sh !== l ? `<span class="lw">${l}</span><span class="ln">${sh}</span>` : l} <span class="n">${fmt(catN(k))}</span></button>`,
       latest: () => `<button class="chip" aria-pressed="${S.latest}" data-act="flatest" title="One row per song, at its most recent play" aria-label="Latest Play Only"><span class="wide">Latest Play Only</span><span class="narrow">Latest</span></button>`,
     };
-    // In All filters, the ones with nothing in them go to the end of their group (the order is kept otherwise)
+    // In All filters, favorites and categories with nothing in them go to the end of their group (the order is kept otherwise)
     const zeroLast = list => list.filter(x => x.n || x.on).concat(list.filter(x => !x.n && !x.on)).map(x => x.html).join('');
     const active = S.status.size + S.cats.size + (S.favOnly ? 1 : 0) + (S.latest ? 1 : 0);
     // The search box; with the few filters showing, it goes in their row, so on a phone it shares the line with All ▾ (Dan, Nov 5)
@@ -724,18 +741,24 @@
     if (D.items.length && !D.playlistError) {
       if (S.allFilters) {
         // Latest is always the second chip (Dan, Nov 4)
-        const sts = STATUS.map(([k, l]) => ({ n: count(k), on: S.status.has(k), html: C.st(k, l) }));
+        // The statuses keep their order, empty or not (Dan, Nov 24)
+        const sts = STATUS.map(([k, l]) => C.st(k, l)).join('');
         const fc = [{ n: favN, on: S.favOnly, html: C.fav() }].concat(CATS2.map(([k, l, sh]) => ({ n: catN(k), on: S.cats.has(k), html: C.cat(k, l, k === 'uncat' ? '' : sh) })));
-        filters = `<div class="fpanel" role="group" aria-label="All filters"><h5>Status</h5><div class="grp">${C.all()}${C.latest()}${zeroLast(sts)}</div>
+        filters = `<div class="fpanel" role="group" aria-label="All filters"><h5>Status</h5><div class="grp">${C.all()}${C.latest()}${sts}</div>
           <h5>Favorites and Categories</h5><div class="grp">${zeroLast(fc)}</div>
           <div class="end"><button class="pill" ${active ? '' : 'disabled'} data-act="fclear">Clear All</button><button class="pill primary" data-act="fdone">Done</button></div></div>`;
       } else {
-        // A few to start with (All, Latest, In playlist, Not in playlist, Favorites), plus any other filter that's on.
-        // Not in playlist is left out while there are none (unless it's on).
-        const q = [C.all(), C.latest(), C.st('have', 'In Playlist', 'In List')];
-        if (count('none') || S.status.has('none')) q.push(C.st('none', 'Not in Playlist', 'Not in List'));
+        // A few to start with (All, Latest, In List, Disliked on a tablet or wider, Not in List, Favorites), plus any other
+        // filter that's on, the statuses in their order. Disliked and Not in List are left out while there are none
+        // (unless on); Other Version only when on.
+        const q = [C.all(), C.latest()];
+        for (const [k, l] of STATUS) {
+          const on = S.status.has(k);
+          if (k === 'have' || on) q.push(C.st(k, l));
+          else if (k === 'disliked' && count(k)) q.push(C.st(k, l, true));
+          else if (k === 'none' && count(k)) q.push(C.st(k, l));
+        }
         q.push(C.fav(true));
-        for (const [k, l] of STATUS) if (k !== 'have' && k !== 'none' && S.status.has(k)) q.push(C.st(k, l));
         for (const [k, , sh] of CATS2) if (S.cats.has(k)) q.push(C.cat(k, sh));
         filters = `<div class="quick" role="group" aria-label="Filters">${q.join('')}<button class="more-f" data-act="fopen" aria-expanded="false" aria-label="All filters"><span class="wide">All Filters</span><span class="narrow fic">${ico('filter')}</span>${active ? ` <span class="badge">${active} on</span>` : ''} ▾</button>${find}</div>`;
         findIn = true;
@@ -1332,7 +1355,7 @@
     fav(el) { const r = resultOf(rowOf(el)); if (inList(r)) favWithUndo(r.item.id, el); },
     star(el) { favWithUndo(el.dataset.v, el); },
     toastUndo() { const u = toastUndo; toastUndo = null; $('#toast').hidden = true; clearTimeout(toastTimer); if (u) u(); },
-    catmenu(el) { const p = rowOf(el), r = resultOf(p); if (inList(r)) catMenu(el, r.item.id, p.title); },
+    catmenu(el) { const p = rowOf(el), id = catKeyOf(resultOf(p), p.key); if (id) catMenu(el, id, p.title); },
     catmenuId(el) { catMenu(el, el.dataset.v, el.dataset.name || ''); },
     note(el) { const p = rowOf(el); S.open = p.id; S.noteFor = p.id; S.pick = null; S.noteDraft = noteOf(p.key); render(); focusNote(); },
     
